@@ -21,6 +21,32 @@ Copy `.env.example` to `.env.local` when you want real accounts or a real model.
 
 ---
 
+## Deploying
+
+The app needs **no environment variables to run**, so it deploys as-is:
+
+```bash
+npm i -g vercel
+vercel login
+vercel --prod
+```
+
+Anyone opening the URL lands on the demo player and can explore the whole
+product loop immediately.
+
+One thing to know about demo mode in a serverless environment: the demo store
+lives in memory (`lib/db/demo-store.ts`). Reads are always correct and always
+identical, because the dataset is regenerated deterministically from a fixed
+seed. Writes — recording a drill result, adding a shot — persist within a warm
+instance but reset when the platform starts a cold one. That is fine, and
+arguably good, for a shared demo: every visitor gets the same clean story.
+
+For a demo where changes must stick, add the two Supabase variables. The
+Postgres path, auth and row-level security are already built; setting the
+variables is the only step.
+
+---
+
 ## The product loop
 
 ```

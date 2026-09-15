@@ -169,6 +169,15 @@ export function puttBand(feet: number): (typeof PUTT_BANDS)[number] {
   return PUTT_BANDS[PUTT_BANDS.length - 1]!;
 }
 
+/**
+ * Lower bound of a band id, for ordering bands on a chart axis.
+ * parseInt, not Number: the open-ended bands are "225+" and "30+", and
+ * Number("225+") is NaN, which silently scrambles a sort instead of failing.
+ */
+export function bandStart(id: string): number {
+  return parseInt(id, 10);
+}
+
 export const CONDITIONS = ["calm", "breezy", "windy", "wet", "cold", "hot"] as const;
 export type Condition = (typeof CONDITIONS)[number];
 

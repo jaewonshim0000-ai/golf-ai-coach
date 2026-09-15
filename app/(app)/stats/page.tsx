@@ -22,7 +22,7 @@ import {
   Stat,
 } from "@/components/ui/primitives";
 import type { Club, Lie, SGCategory, ShotType } from "@/types/golf";
-import { CLUB_LABELS, SG_CATEGORIES, SG_CATEGORY_LABELS, labelize } from "@/types/golf";
+import { CLUB_LABELS, SG_CATEGORIES, SG_CATEGORY_LABELS, bandStart, labelize } from "@/types/golf";
 import type { StatsFilters as Filters } from "@/types/analytics";
 import {
   applyFilters,
@@ -82,7 +82,7 @@ export default async function StatsPage({ searchParams }: { searchParams: Promis
 
   const distanceData = segments
     .filter((s) => s.kind === "approach_distance")
-    .sort((a, b) => Number(a.key.split("-")[0]) - Number(b.key.split("-")[0]))
+    .sort((a, b) => bandStart(a.key) - bandStart(b.key))
     .map((s) => ({ label: s.label.replace(" yd approach", ""), value: s.sg_per_round }));
 
   const clubData = segments
@@ -97,7 +97,7 @@ export default async function StatsPage({ searchParams }: { searchParams: Promis
 
   const puttData = segments
     .filter((s) => s.kind === "putt_distance")
-    .sort((a, b) => Number(a.key.split("-")[0]) - Number(b.key.split("-")[0]))
+    .sort((a, b) => bandStart(a.key) - bandStart(b.key))
     .map((s) => ({ label: s.label.replace("Putts ", ""), value: s.sg_per_round }));
 
   const misses = missBreakdown(shots).map((m) => ({

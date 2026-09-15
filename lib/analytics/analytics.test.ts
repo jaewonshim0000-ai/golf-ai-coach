@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
 
-import { distanceBand, puttBand } from "../../types/golf";
+import { DISTANCE_BANDS, PUTT_BANDS, bandStart, distanceBand, puttBand } from "../../types/golf";
 import type { PlayerProfile } from "../../types/player";
 import type { Drill, DrillAttempt, PracticeSession } from "../../types/practice";
 import type { ScoredShot } from "../../types/rounds";
@@ -76,6 +76,21 @@ describe("distance grouping", () => {
     assert.equal(puttBand(2).id, "0-3");
     assert.equal(puttBand(3).id, "3-6");
     assert.equal(puttBand(45).id, "30+");
+  });
+
+  it("orders every band id, including the open-ended one", () => {
+    // Number("225+") is NaN, which sorts bands into a meaningless order
+    // without throwing. Both band families must survive an ordinary sort.
+    for (const bands of [DISTANCE_BANDS, PUTT_BANDS]) {
+      const ids = bands.map((b) => b.id);
+      const shuffled = [...ids].reverse();
+      const sorted = shuffled.sort((a, b) => bandStart(a) - bandStart(b));
+      assert.deepEqual(sorted, ids, `bands out of order: ${sorted.join(", ")}`);
+      assert.ok(
+        ids.every((id) => Number.isFinite(bandStart(id))),
+        "every band id must yield a finite lower bound",
+      );
+    }
   });
 });
 

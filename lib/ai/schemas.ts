@@ -121,3 +121,15 @@ export const swingAnalysisSchema = z.object({
   reference_note: z.string().max(600).default(""),
 });
 export type SwingAnalysisOutput = z.infer<typeof swingAnalysisSchema>;
+
+/**
+ * The find-it agent. `result_ids` must name entries the retriever already
+ * found; the caller drops any that do not, so an invented id costs a link,
+ * never a wrong number.
+ */
+export const askAnswerSchema = z.object({
+  answer: z.string().min(5).max(600),
+  result_ids: z.array(z.string().min(1)).min(1).max(6),
+  follow_up: z.array(z.string().min(3).max(90)).max(3).default([]),
+});
+export type AskAnswer = z.infer<typeof askAnswerSchema>;

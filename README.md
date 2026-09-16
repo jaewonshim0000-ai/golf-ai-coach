@@ -85,12 +85,13 @@ app/
 components/
   ui/               the design system (no component library, no chart library)
   charts/           bars and sparklines drawn in CSS and inline SVG
+  ask/              the find-it agent (a native <dialog>)
   dashboard/ practice/ rounds/ plans/ swing/ forms/
 lib/
   golf/             expected strokes tables, strokes-gained engine
   analytics/        aggregation, segments, weakness ranking, practice progress
   practice/         deterministic plan skeleton + progress evaluation
-  ai/               provider abstraction, coaching context, prompts, schemas
+  ai/               provider abstraction, coaching context, prompts, schemas, ask
   db/               Supabase clients, repository, demo store
   validation/       Zod schemas at the trust boundary
   seed/             45 drills, 3 reference swings, the demo player simulator
@@ -137,6 +138,36 @@ Two consequences worth knowing:
   always printed next to the bar rather than hidden behind a hover tooltip,
   which does not exist on a phone. `components/charts/index.tsx` is a server
   component: none of it ships JavaScript.
+
+---
+
+## Finding things
+
+The **Ask** button on every screen opens a search over the player's own data.
+Retrieval is deterministic (`lib/ai/ask.ts`): every scored segment, ranked
+weakness, logged round, drill, tracked practice metric and screen is indexed
+with the number already computed for it and the URL that shows it. A question
+is matched against that index, and each result deep-links into the filtered
+view — "150–175 yd approach" opens `/stats?category=approach&distance=150-175`,
+which is the same 44 shots and the same −2.36 a round the answer quoted.
+
+Three things the matching has to get right, each with a test:
+
+- **Common words must not win.** "Shots" is in nearly every label, "150" is in
+  one. Scoring is weighted by inverse document frequency, so rarity decides,
+  and it tunes itself to the player's own data instead of needing a
+  hand-maintained list of golf stop words.
+- **Superlatives are a ranking, not a name.** "Where am I losing the most
+  shots?" cannot be answered by word overlap, so it routes to the weakness
+  list, which is already sorted by cost.
+- **A named kind wins.** "Find a bunker drill" returns the drill, not the
+  bunker statistic that shares the word.
+
+The model's only job is choosing among what was retrieved and writing a
+sentence about it. It cannot introduce a result — any id it returns that was
+not retrieved is dropped — and it cannot introduce a number, because every
+figure rendered comes from the index entry rather than from the reply. With no
+API key the rule-based answer states the same facts in plainer language.
 
 ---
 
@@ -193,13 +224,14 @@ npm run typecheck
 npm run build
 ```
 
-73 tests covering the parts where a silent error would be worst:
+84 tests covering the parts where a silent error would be worst:
 
 - **Strokes gained** — normal shots, penalties, out of bounds, putts, holed shots, bunker saves, par-3 tee shots, greenside classification, category sums, incomplete and empty rounds.
 - **Analytics** — distance-band boundaries, per-round division, trend sample floors, weakness ranking, sample-size gating, confidence caps, cross-system corroboration.
 - **Practice** — baseline vs latest, stalled and regressing detection, refusal to classify under three sessions.
 - **Plans** — every referenced drill exists, facilities are respected, blocks progress technical → pressure, targets are anchored on the player's own baseline, adaptation verdicts.
 - **AI schemas** — malformed output is rejected, invented drill ids are dropped, invented skills are discarded, the rule-based coach never fabricates a number.
+- **Ask agent** — generic words do not outrank specific ones, superlatives resolve to the ranked weakness list, a named kind wins, invented result ids are dropped.
 
 ---
 

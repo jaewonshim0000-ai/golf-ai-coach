@@ -9,6 +9,7 @@ import type { Goal, PracticeFacility } from "@/types/player";
 import type { Club } from "@/types/golf";
 import type { PracticeItem } from "@/types/practice";
 import { adaptPracticePlan, generatePracticePlan } from "@/lib/ai/practice-plan";
+import { ASK_IDLE, askCoach, type AskState } from "@/lib/ai/ask";
 import { DRILLS_BY_ID } from "@/lib/seed/drills";
 import { loadPlayerState } from "@/lib/player-state";
 import * as repo from "@/lib/db/repo";
@@ -586,6 +587,26 @@ export async function deleteSwingFindingAction(
   }
   revalidatePath("/swing");
   return { ok: true };
+}
+
+// --------------------------------------------------------------- ask agent
+
+/**
+ * Read-only: it searches the signed-in player's own computed data and returns
+ * where to look. Nothing here writes, so there is no revalidation to do.
+ */
+export async function askAction(_prev: AskState, formData: FormData): Promise<AskState> {
+  const user = await requireUser();
+  const question = String(formData.get("question") ?? "");
+  try {
+    return await askCoach(question, await loadPlayerState(user.id));
+  } catch (error) {
+    return {
+      ...ASK_IDLE,
+      question,
+      message: error instanceof Error ? error.message : "Could not search your data.",
+    };
+  }
 }
 
 // -------------------------------------------------------------------- misc

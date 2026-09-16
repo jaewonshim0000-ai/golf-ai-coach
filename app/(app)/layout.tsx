@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 
+import { AskAgent } from "@/components/ask/ask-agent";
 import { MobileNav, Sidebar } from "@/components/layout/nav";
 import * as repo from "@/lib/db/repo";
 
@@ -22,6 +23,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-32 pt-5 md:px-8 md:pb-10 md:pt-8">
           {children}
         </main>
+        <AskAgent />
         <MobileNav />
       </div>
     </div>

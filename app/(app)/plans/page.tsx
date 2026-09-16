@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { ArrowRight, CalendarDays, CheckCircle2, Moon } from "lucide-react";
+import { ArrowRight, CheckCircle2, Moon } from "lucide-react";
 
 import { AdaptPlanForm, GeneratePlanForm } from "@/components/plans/plan-controls";
 import {
@@ -10,8 +10,9 @@ import {
   CardHeader,
   CardTitle,
   EmptyState,
+  HeroPill,
+  PageHero,
   Progress,
-  SectionHeading,
   Stat,
 } from "@/components/ui/primitives";
 import { PRACTICE_BLOCK_LABELS } from "@/types/practice";
@@ -37,9 +38,10 @@ export default async function PlansPage() {
 
   if (!state.plan) {
     return (
-      <div className="space-y-6">
-        <SectionHeading
-          title="Training plan"
+      <div className="space-y-5">
+        <PageHero
+          art="green"
+          title={<>Training<br />plan</>}
           description="A block built around your biggest development area, progressing from technique to pressure."
         />
         <EmptyState
@@ -56,32 +58,44 @@ export default async function PlansPage() {
   const weeks = [...new Set(sessions.map((s) => s.week))].sort((a, b) => a - b);
 
   return (
-    <div className="space-y-6">
-      <SectionHeading
-        title="Training plan"
-        description={`${formatDate(plan.starts_on)} to ${formatDate(plan.ends_on)}`}
-        action={<GeneratePlanForm hasPlan />}
+    <div className="space-y-5">
+      <PageHero
+        art="green"
+        title={<>Training<br />plan</>}
+        pills={
+          <>
+            <HeroPill tone="solid">{plan.weeks}-week block</HeroPill>
+            <HeroPill>{plan.generated_by === "ai" ? "AI generated" : "Rule generated"}</HeroPill>
+            {progress ? <HeroPill>{progress.verdict.replace("_", " ")}</HeroPill> : null}
+          </>
+        }
       />
 
-      <Card className="hero-grid">
-        <CardContent className="space-y-4 p-6">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge tone="accent">
-              <CalendarDays className="h-3 w-3" />
-              {plan.weeks}-week block
-            </Badge>
-            <Badge tone={plan.generated_by === "ai" ? "accent" : "neutral"}>
-              {plan.generated_by === "ai" ? "AI generated" : "Rule generated"}
-            </Badge>
-            {progress ? <Badge tone={VERDICT_TONE[progress.verdict]}>{progress.verdict.replace("_", " ")}</Badge> : null}
-          </div>
+      <div className="flex justify-end">
+        <GeneratePlanForm hasPlan />
+      </div>
 
+      <Card>
+        <CardContent
+          className="space-y-4 p-6"
+          style={{
+            backgroundImage:
+              "radial-gradient(circle at 12% 10%, color-mix(in oklab, var(--c-accent) 12%, transparent), transparent 46%)",
+          }}
+        >
           <div>
-            <h2 className="text-xl font-semibold tracking-tight">{plan.title}</h2>
-            <p className="mt-1 text-sm text-fg-muted">{plan.primary_goal}</p>
+            <h2 className="dsp text-[25px] font-semibold leading-none tracking-[-0.015em]">
+              {plan.title}
+            </h2>
+            <p className="mt-2 text-[13px] leading-[1.55] text-fg-muted">{plan.primary_goal}</p>
           </div>
 
-          <p className="max-w-3xl text-sm leading-relaxed text-fg-muted">{plan.rationale}</p>
+          <p className="max-w-3xl text-[12.5px] leading-[1.6] text-fg-muted">
+            {plan.rationale}
+            <span className="block mt-1.5 text-fg-subtle">
+              {formatDate(plan.starts_on)} to {formatDate(plan.ends_on)}
+            </span>
+          </p>
 
           {progress ? (
             <div className="space-y-1.5">
@@ -131,13 +145,13 @@ export default async function PlansPage() {
 
       <div className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold tracking-tight">Calendar</h2>
+          <h2 className="dsp text-[26px] font-semibold leading-none tracking-[-0.01em]">Calendar</h2>
           <AdaptPlanForm />
         </div>
 
         {weeks.map((week) => (
           <div key={week} className="space-y-2">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-fg-subtle">
+            <h3 className="dsp text-[10px] font-medium tracking-[0.17em] text-fg-subtle">
               Week {week}
             </h3>
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
@@ -157,7 +171,7 @@ export default async function PlansPage() {
                     >
                       <CardContent className="space-y-2 p-3">
                         <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-semibold uppercase tracking-wider text-fg-subtle">
+                          <span className="dsp text-[9px] font-medium tracking-[0.15em] text-fg-subtle">
                             {DAY_NAMES[session.day - 1]}
                           </span>
                           {session.is_rest ? (

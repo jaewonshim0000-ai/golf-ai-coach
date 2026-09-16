@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { MobileHeader, MobileNav, Sidebar } from "@/components/layout/nav";
+import { MobileNav, Sidebar } from "@/components/layout/nav";
 import * as repo from "@/lib/db/repo";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -14,8 +14,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <div className="flex min-h-svh bg-bg">
       <Sidebar mode={repo.mode()} />
       <div className="flex min-w-0 flex-1 flex-col">
-        <MobileHeader />
-        <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-24 pt-5 md:px-8 md:pb-10 md:pt-8">
+        {/*
+          The page padding is cancelled by `PageHero`'s negative margin, which is
+          how the hero artwork reaches the edges without every page having to
+          manage its own layout. Change these and change PageHero with them.
+        */}
+        <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-32 pt-5 md:px-8 md:pb-10 md:pt-8">
           {children}
         </main>
         <MobileNav />

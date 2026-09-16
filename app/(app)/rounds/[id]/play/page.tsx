@@ -1,7 +1,5 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { ArrowLeft } from "lucide-react";
 
 import { ShotEntry } from "@/components/rounds/shot-entry";
 import { CLUBS } from "@/types/golf";
@@ -30,17 +28,7 @@ export default async function PlayRoundPage({ params }: { params: Promise<{ id: 
     Array.from({ length: 18 }, (_, i) => ({ hole_number: i + 1, par: 4, yards: 400 }));
 
   return (
-    <div className="mx-auto max-w-2xl space-y-4">
-      <div className="flex items-center justify-between">
-        <Link
-          href={`/rounds/${round.id}`}
-          className="inline-flex items-center gap-1.5 text-xs text-fg-muted hover:text-fg"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" /> Round summary
-        </Link>
-        <p className="text-xs text-fg-subtle">{round.course_name}</p>
-      </div>
-
+    <div>
       <ShotEntry
         round={round}
         holes={holes}

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 import { NewRoundForm } from "@/components/rounds/new-round-form";
-import { SectionHeading } from "@/components/ui/primitives";
+import { ButtonLink, PageHero } from "@/components/ui/primitives";
 import * as repo from "@/lib/db/repo";
 
 export const metadata: Metadata = { title: "New round" };
@@ -13,10 +13,18 @@ export default async function NewRoundPage() {
   const courses = await repo.getCourses(user.id);
 
   return (
-    <div className="space-y-6">
-      <SectionHeading
-        title="New round"
-        description="Set the round up here, then record shots hole by hole. It is built to be usable on your phone while you play."
+    <div className="space-y-5">
+      <PageHero
+        art="course"
+        size="sm"
+        eyebrow="Start playing"
+        title={<>New<br />round</>}
+        description="Set the round up here, then record shots hole by hole."
+        topLeft={
+          <ButtonLink href="/rounds" variant="onHero" size="sm">
+            Rounds
+          </ButtonLink>
+        }
       />
       <NewRoundForm courses={courses} />
     </div>

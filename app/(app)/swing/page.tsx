@@ -10,7 +10,8 @@ import {
   CardHeader,
   CardTitle,
   EmptyState,
-  SectionHeading,
+  HeroPill,
+  PageHero,
 } from "@/components/ui/primitives";
 import type { Drill, SwingFinding, SwingSession } from "@/types/practice";
 import { CLUB_LABELS, labelize } from "@/types/golf";
@@ -44,14 +45,21 @@ export default async function SwingPage() {
   const reference = referenceFor(profile?.swing_pattern ?? "unknown");
 
   return (
-    <div className="space-y-6">
-      <SectionHeading
-        title="Swing"
-        description="Upload a swing, record what you or your coach can actually see, and it becomes the third input to your development priority."
+    <div className="space-y-5">
+      <PageHero
+        art="dusk"
+        size="lg"
+        eyebrow="The third input"
+        title={<>Swing<br />findings</>}
+        pills={
+          <HeroPill>
+            {sessions.length} session{sessions.length === 1 ? "" : "s"} recorded
+          </HeroPill>
+        }
         action={<NewSwingSessionForm />}
       />
 
-      <div className="flex gap-3 rounded-lg border border-info/30 bg-info-soft p-4 text-sm">
+      <div className="flex gap-3 rounded-xl border border-info/30 bg-info-soft p-4 text-sm">
         <Info className="mt-0.5 h-4 w-4 shrink-0 text-info" />
         <div className="space-y-1">
           <p className="font-medium text-fg">
@@ -79,7 +87,7 @@ export default async function SwingPage() {
           <p className="text-sm leading-relaxed text-fg-muted">{reference.summary}</p>
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-good">
+              <p className="dsp text-[9px] font-medium tracking-[0.17em] text-good">
                 Useful similarities
               </p>
               <ul className="mt-1.5 list-disc space-y-1 pl-4 text-sm text-fg-muted">
@@ -89,7 +97,7 @@ export default async function SwingPage() {
               </ul>
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-warn">
+              <p className="dsp text-[9px] font-medium tracking-[0.17em] text-warn">
                 Potential differences
               </p>
               <ul className="mt-1.5 list-disc space-y-1 pl-4 text-sm text-fg-muted">

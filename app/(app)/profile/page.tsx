@@ -5,11 +5,13 @@ import { ProfileForm } from "@/components/forms/profile-form";
 import { TrendLine } from "@/components/charts";
 import {
   Button,
+  ButtonLink,
   Card,
   CardContent,
   CardHeader,
   CardTitle,
-  SectionHeading,
+  HeroPill,
+  PageHero,
   Stat,
 } from "@/components/ui/primitives";
 import * as repo from "@/lib/db/repo";
@@ -31,42 +33,44 @@ export default async function ProfilePage() {
   }));
 
   return (
-    <div className="space-y-6">
-      <SectionHeading
-        title="Profile"
+    <div className="space-y-5">
+      <PageHero
+        art="dusk"
+        eyebrow="Your profile"
+        title={state.profile?.display_name ?? "Profile"}
         description="Everything the coaching engine knows about you before it looks at a single shot."
+        pills={
+          state.profile?.handicap_index !== null && state.profile?.handicap_index !== undefined ? (
+            <HeroPill tone="solid">HCP {state.profile.handicap_index.toFixed(1)}</HeroPill>
+          ) : null
+        }
+        topLeft={
+          <ButtonLink href="/dashboard" variant="onHero" size="sm" className="md:hidden">
+            Close
+          </ButtonLink>
+        }
       />
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Card>
-          <CardContent className="p-5">
-            <Stat
-              label="Handicap index"
-              value={state.profile?.handicap_index ?? "—"}
-              sub={`${state.rounds.length} rounds logged`}
-            />
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-5">
-            <Stat
-              label="Strokes gained"
-              value={signed(state.summary.per_round, 1)}
-              sub="per round vs Tour baseline"
-              tone={state.summary.per_round >= 0 ? "good" : "bad"}
-            />
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-5">
-            <Stat
-              label="Practice"
-              value={state.volume.sessions_completed}
-              sub={`${state.volume.total_minutes} minutes logged`}
-            />
-          </CardContent>
-        </Card>
-      </div>
+      <Card>
+        <CardContent className="grid grid-cols-3 gap-3 p-5">
+          <Stat
+            label="Handicap"
+            value={state.profile?.handicap_index ?? "—"}
+            sub={`${state.rounds.length} rounds`}
+          />
+          <Stat
+            label="SG / round"
+            value={signed(state.summary.per_round, 1)}
+            sub="vs Tour"
+            tone={state.summary.per_round >= 0 ? "good" : "bad"}
+          />
+          <Stat
+            label="Practice"
+            value={state.volume.sessions_completed}
+            sub={`${state.volume.total_minutes} min`}
+          />
+        </CardContent>
+      </Card>
 
       {handicapPoints.length > 1 ? (
         <Card>

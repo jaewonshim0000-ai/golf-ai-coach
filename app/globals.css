@@ -3,20 +3,34 @@
 /*
   Design tokens. Defined as plain custom properties so the light/dark swap is a
   single block, then exposed to Tailwind with `@theme inline`.
+
+  The palette is the warm-paper / moss-green scheme from the mobile design:
+  a paper page, near-white cards with long soft shadows, one deep green accent,
+  and an ink card for the thing that matters most on each screen.
 */
 :root {
-  --c-bg: #f4f6f4;
-  --c-surface: #ffffff;
-  --c-surface-2: #fafbfa;
-  --c-border: #e3e7e3;
-  --c-border-strong: #cdd4cd;
-  --c-fg: #0f1511;
-  --c-fg-muted: #5c665f;
-  --c-fg-subtle: #8b948d;
+  --c-bg: #f1efe8;
+  --c-surface: #fffefb;
+  --c-surface-2: #f7f4ec;
+  --c-track: #e7e3d6;
+  --c-border: #e9e6dc;
+  --c-border-strong: #d8d3c3;
+  --c-fg: #101510;
+  --c-fg-muted: #5b6155;
+  --c-fg-subtle: #8b9083;
 
   --c-accent: #10733f;
   --c-accent-fg: #ffffff;
   --c-accent-soft: #e6f2ea;
+
+  /* The primary button is a two-stop gradient in the design, not a flat fill. */
+  --grad-accent: linear-gradient(180deg, #178a4f, #0d6236);
+  --shadow-accent: 0 14px 28px -14px rgb(13 98 54 / 0.75), inset 0 1px 0 rgb(255 255 255 / 0.24);
+
+  /* The dark card: current priority, and any hero that carries a headline. */
+  --c-ink: #111a14;
+  --c-ink-fg: #f4f2e9;
+  --c-gold: #a8873f;
 
   --c-good: #0f7a4a;
   --c-good-soft: #e3f3e9;
@@ -29,28 +43,41 @@
 
   --c-chart-1: #10733f;
   --c-chart-2: #2f7fb8;
-  --c-chart-3: #c07a17;
+  --c-chart-3: #a8873f;
   --c-chart-4: #8659b5;
   --c-chart-5: #b3261e;
 
-  --shadow-card: 0 1px 2px rgb(16 21 17 / 0.04), 0 1px 3px rgb(16 21 17 / 0.06);
-  --shadow-raised: 0 4px 16px rgb(16 21 17 / 0.08);
+  --shadow-card: 0 1px 1px rgb(16 21 17 / 0.03), 0 24px 48px -32px rgb(16 21 17 / 0.45);
+  --shadow-soft: 0 1px 1px rgb(16 21 17 / 0.03), 0 16px 34px -26px rgb(16 21 17 / 0.4);
+  --shadow-raised: 0 1px 0 rgb(255 255 255 / 0.9) inset, 0 18px 40px -16px rgb(16 21 17 / 0.4),
+    0 2px 8px rgb(16 21 17 / 0.08);
+  --shadow-ink: 0 1px 1px rgb(16 21 17 / 0.2), 0 30px 60px -28px rgb(11 22 15 / 0.65);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --c-bg: #0a0e0b;
-    --c-surface: #121813;
-    --c-surface-2: #171e18;
-    --c-border: #222c24;
-    --c-border-strong: #334036;
-    --c-fg: #e8efe9;
-    --c-fg-muted: #93a097;
-    --c-fg-subtle: #6b786f;
+    --c-bg: #0b0f0c;
+    --c-surface: #141a15;
+    --c-surface-2: #1a211b;
+    --c-track: #26301f;
+    --c-border: #232c25;
+    --c-border-strong: #35413a;
+    --c-fg: #f4f2e9;
+    --c-fg-muted: #9aa69d;
+    --c-fg-subtle: #727f76;
 
     --c-accent: #2fbd6f;
     --c-accent-fg: #04150b;
     --c-accent-soft: #10291b;
+
+    --grad-accent: linear-gradient(180deg, #2fbd6f, #17864b);
+    --shadow-accent: 0 14px 28px -16px rgb(47 189 111 / 0.5), inset 0 1px 0 rgb(255 255 255 / 0.18);
+
+    /* Darker than the page is not available here, so the ink card lifts
+       off the background instead of sinking into it. */
+    --c-ink: #17211a;
+    --c-ink-fg: #f4f2e9;
+    --c-gold: #d6b169;
 
     --c-good: #3ecf82;
     --c-good-soft: #10291b;
@@ -63,12 +90,14 @@
 
     --c-chart-1: #3ecf82;
     --c-chart-2: #61a9e0;
-    --c-chart-3: #e0a23c;
+    --c-chart-3: #d6b169;
     --c-chart-4: #b18ce0;
     --c-chart-5: #f2685c;
 
-    --shadow-card: 0 1px 2px rgb(0 0 0 / 0.3), 0 1px 3px rgb(0 0 0 / 0.25);
-    --shadow-raised: 0 6px 22px rgb(0 0 0 / 0.45);
+    --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), 0 24px 48px -32px rgb(0 0 0 / 0.8);
+    --shadow-soft: 0 1px 2px rgb(0 0 0 / 0.35), 0 16px 34px -26px rgb(0 0 0 / 0.7);
+    --shadow-raised: 0 1px 0 rgb(255 255 255 / 0.05) inset, 0 18px 40px -16px rgb(0 0 0 / 0.75);
+    --shadow-ink: 0 1px 1px rgb(0 0 0 / 0.4), 0 30px 60px -28px rgb(0 0 0 / 0.8);
   }
 }
 
@@ -76,6 +105,7 @@
   --color-bg: var(--c-bg);
   --color-surface: var(--c-surface);
   --color-surface-2: var(--c-surface-2);
+  --color-track: var(--c-track);
   --color-border: var(--c-border);
   --color-border-strong: var(--c-border-strong);
   --color-fg: var(--c-fg);
@@ -86,6 +116,10 @@
   --color-accent-fg: var(--c-accent-fg);
   --color-accent-soft: var(--c-accent-soft);
 
+  --color-ink: var(--c-ink);
+  --color-ink-fg: var(--c-ink-fg);
+  --color-gold: var(--c-gold);
+
   --color-good: var(--c-good);
   --color-good-soft: var(--c-good-soft);
   --color-bad: var(--c-bad);
@@ -95,8 +129,18 @@
   --color-info: var(--c-info);
   --color-info-soft: var(--c-info-soft);
 
+  --radius-card: 22px;
+  --radius-soft: 18px;
+  --radius-control: 14px;
+
+  --shadow-card: var(--shadow-card);
+  --shadow-soft: var(--shadow-soft);
+  --shadow-raised: var(--shadow-raised);
+  --shadow-ink: var(--shadow-ink);
+
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
     Arial, sans-serif;
+  --font-display: var(--font-oswald), "Oswald", ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
 }
 
@@ -110,10 +154,24 @@ html {
 
 body {
   background: var(--c-bg);
+  /* Paper grain. 3px dots at 3% are invisible as dots and read as texture. */
+  background-image: radial-gradient(color-mix(in oklab, var(--c-fg) 3%, transparent) 0.5px, transparent 0.5px);
+  background-size: 3px 3px;
   color: var(--c-fg);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+}
+
+/*
+  Display type. Condensed, uppercase, tight - used for every heading, every
+  eyebrow label and every button. It is the single strongest signal in the
+  design, so it gets one class rather than being re-declared per component.
+*/
+.dsp {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.005em;
 }
 
 /* Numbers in tables and stat blocks must not jitter between renders. */
@@ -122,11 +180,86 @@ body {
   font-feature-settings: "tnum";
 }
 
-/* A restrained texture that suggests turf without being a golf cliché. */
+/* Horizontal chip rails scroll; the scrollbar is noise on a phone. */
+.no-bar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.no-bar::-webkit-scrollbar {
+  display: none;
+}
+
+/*
+  Hero artwork. The design puts a course photograph behind every page title.
+  There are no photographs in the repo, so these are layered gradients tuned to
+  read as light falling across turf. Each page picks a variant so the screens
+  do not all open identically.
+
+  ponytail: gradients, not photography. `PageHero` takes an `image` prop -
+  point it at a real photo and the gradient becomes the fallback underneath.
+*/
+.hero-art {
+  background-color: #1e4429;
+  background-image:
+    radial-gradient(120% 90% at 16% 2%, rgb(178 216 150 / 0.85), transparent 56%),
+    radial-gradient(85% 70% at 88% 0%, rgb(240 230 176 / 0.55), transparent 52%),
+    radial-gradient(150% 130% at 60% 118%, rgb(9 28 16 / 0.92), transparent 58%),
+    linear-gradient(168deg, #63a06a 0%, #2f6b41 44%, #13301d 100%);
+}
+
+.hero-art-range {
+  background-color: #23492f;
+  background-image:
+    radial-gradient(110% 80% at 86% 0%, rgb(247 226 150 / 0.8), transparent 54%),
+    radial-gradient(100% 90% at 6% 14%, rgb(140 195 145 / 0.8), transparent 56%),
+    radial-gradient(150% 130% at 44% 118%, rgb(10 26 18 / 0.92), transparent 56%),
+    linear-gradient(162deg, #7fae72 0%, #35714a 46%, #12301f 100%);
+}
+
+.hero-art-green {
+  background-color: #1b4430;
+  background-image:
+    radial-gradient(95% 75% at 24% 0%, rgb(190 226 168 / 0.85), transparent 54%),
+    radial-gradient(120% 100% at 98% 34%, rgb(86 168 118 / 0.7), transparent 54%),
+    radial-gradient(150% 135% at 50% 120%, rgb(7 24 15 / 0.92), transparent 56%),
+    linear-gradient(182deg, #5ea272 0%, #276b48 46%, #102d1e 100%);
+}
+
+.hero-art-dusk {
+  background-color: #1f3a45;
+  background-image:
+    radial-gradient(110% 80% at 80% 0%, rgb(250 200 132 / 0.72), transparent 52%),
+    radial-gradient(100% 90% at 2% 20%, rgb(118 176 186 / 0.72), transparent 56%),
+    radial-gradient(150% 135% at 42% 120%, rgb(8 20 26 / 0.92), transparent 56%),
+    linear-gradient(170deg, #6d9ea4 0%, #2d5763 48%, #0f2630 100%);
+}
+
+/*
+  The scrim only has to guarantee legible white type over the bottom third. On
+  gradient art it is light; a photograph dropped into `PageHero` sits under the
+  same scrim and the art class stays as the fallback behind it.
+*/
+.hero-scrim {
+  background-image: linear-gradient(
+    to bottom,
+    rgb(6 14 9 / 0.28) 0%,
+    rgb(6 14 9 / 0) 34%,
+    rgb(6 14 9 / 0.55) 74%,
+    rgb(6 14 9 / 0.78) 100%
+  );
+}
+
+/* A restrained wash for the full-page shells: sign-in, onboarding, not-found. */
 .hero-grid {
   background-image:
-    radial-gradient(circle at 15% 12%, color-mix(in oklab, var(--c-accent) 14%, transparent), transparent 46%),
-    linear-gradient(to bottom right, color-mix(in oklab, var(--c-accent) 6%, transparent), transparent 62%);
+    radial-gradient(circle at 15% 12%, color-mix(in oklab, var(--c-accent) 12%, transparent), transparent 46%),
+    radial-gradient(circle at 88% 6%, color-mix(in oklab, var(--c-gold) 10%, transparent), transparent 42%),
+    radial-gradient(color-mix(in oklab, var(--c-fg) 3%, transparent) 0.5px, transparent 0.5px);
+  background-size:
+    auto,
+    auto,
+    3px 3px;
 }
 
 @keyframes rise {
@@ -187,12 +320,10 @@ body {
   border-radius: 4px;
 }
 
-/* Recharts inherits our tokens rather than shipping its own palette. */
-.recharts-cartesian-axis-tick text {
-  fill: var(--c-fg-subtle);
-  font-size: 11px;
-}
-
-.recharts-cartesian-grid line {
-  stroke: var(--c-border);
+/* On a hero the focus ring has to be visible against dark artwork. */
+.hero-art :focus-visible,
+.hero-art-range :focus-visible,
+.hero-art-green :focus-visible,
+.hero-art-dusk :focus-visible {
+  outline-color: #ffffff;
 }

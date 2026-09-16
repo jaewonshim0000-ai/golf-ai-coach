@@ -13,7 +13,8 @@ import {
   CardHeader,
   CardTitle,
   EmptyState,
-  SectionHeading,
+  HeroPill,
+  PageHero,
 } from "@/components/ui/primitives";
 import * as repo from "@/lib/db/repo";
 import { loadPlayerState, todaysSession } from "@/lib/player-state";
@@ -47,16 +48,30 @@ export default async function PracticePage({
   }));
 
   return (
-    <div className="space-y-8">
-      <SectionHeading
-        title="Practice"
-        description="Build a session, record a real number for every drill, and watch whether the number moves."
+    <div className="space-y-6">
+      <PageHero
+        art="range"
+        eyebrow={planSession && !planSession.is_rest ? planSession.title : "Today"}
+        title={<>Practice<br />session</>}
+        pills={
+          <>
+            {planSession && !planSession.is_rest ? (
+              <HeroPill tone="solid">{planSession.duration} min</HeroPill>
+            ) : null}
+            <HeroPill>{state.volume.sessions_completed} sessions logged</HeroPill>
+          </>
+        }
         action={
-          <ButtonLink href="/practice/drills" variant="secondary" size="sm">
-            Drill library
+          <ButtonLink href="/practice/drills" variant="onHero" size="sm">
+            Drills
           </ButtonLink>
         }
       />
+
+      <p className="text-[12.5px] leading-[1.55] text-fg-muted">
+        Record a real number for every drill. A result nobody logs is worth nothing to the coaching
+        engine.
+      </p>
 
       <SessionBuilder
         drills={state.drills}

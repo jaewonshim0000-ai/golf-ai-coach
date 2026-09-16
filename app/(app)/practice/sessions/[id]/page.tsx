@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { ArrowLeft } from "lucide-react";
@@ -7,11 +6,13 @@ import { SourceBadge } from "@/components/dashboard/sections";
 import { SessionRunner } from "@/components/practice/session-runner";
 import {
   Badge,
+  ButtonLink,
   Card,
   CardContent,
   CardHeader,
   CardTitle,
-  SectionHeading,
+  HeroPill,
+  PageHero,
 } from "@/components/ui/primitives";
 import { summarizePracticeSession } from "@/lib/ai/insights";
 import * as repo from "@/lib/db/repo";
@@ -42,23 +43,25 @@ export default async function PracticeSessionPage({
   });
 
   return (
-    <div className="space-y-6">
-      <Link
-        href="/practice"
-        className="inline-flex items-center gap-1.5 text-xs text-fg-muted hover:text-fg"
-      >
-        <ArrowLeft className="h-3.5 w-3.5" /> Practice
-      </Link>
-
-      <SectionHeading
-        title={bundle.session.title}
-        description={`${formatDate(bundle.session.scheduled_for)} · ${bundle.session.focus} · ${
+    <div className="space-y-5">
+      <PageHero
+        art="range"
+        eyebrow={`${formatDate(bundle.session.scheduled_for)} · ${
           bundle.session.actual_duration ?? bundle.session.planned_duration
-        } minutes`}
-        action={
-          <Badge tone={bundle.session.status === "complete" ? "good" : "warn"}>
-            {bundle.session.status === "complete" ? "Complete" : "In progress"}
-          </Badge>
+        } min`}
+        title={bundle.session.title}
+        pills={
+          <>
+            <HeroPill tone="solid">{bundle.session.focus}</HeroPill>
+            <HeroPill>
+              {bundle.session.status === "complete" ? "Complete" : "In progress"}
+            </HeroPill>
+          </>
+        }
+        topLeft={
+          <ButtonLink href="/practice" variant="onHero" size="sm">
+            <ArrowLeft className="h-3.5 w-3.5" /> Practice
+          </ButtonLink>
         }
       />
 

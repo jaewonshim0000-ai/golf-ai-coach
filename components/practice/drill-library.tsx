@@ -50,8 +50,8 @@ export function DrillLibrary({
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-        <div className="relative sm:col-span-2 lg:col-span-1">
+      <div className="space-y-2.5">
+        <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-subtle" />
           <Input
             value={query}
@@ -61,7 +61,9 @@ export function DrillLibrary({
             aria-label="Search drills"
           />
         </div>
-        <Select value={category} onChange={(e) => setCategory(e.target.value)} aria-label="Category">
+        {/* A rail, not a stack: four full-width selects bury the drills. */}
+        <div className="no-bar -mx-4 flex gap-1.5 overflow-x-auto px-4 md:mx-0 md:flex-wrap md:px-0">
+        <Select className={chip(category)} value={category} onChange={(e) => setCategory(e.target.value)} aria-label="Category">
           <option value="">All categories</option>
           {DRILL_CATEGORIES.map((c) => (
             <option key={c} value={c}>
@@ -69,7 +71,7 @@ export function DrillLibrary({
             </option>
           ))}
         </Select>
-        <Select value={skill} onChange={(e) => setSkill(e.target.value)} aria-label="Skill">
+        <Select className={chip(skill)} value={skill} onChange={(e) => setSkill(e.target.value)} aria-label="Skill">
           <option value="">All skills</option>
           {SKILLS.map((s) => (
             <option key={s} value={s}>
@@ -78,6 +80,7 @@ export function DrillLibrary({
           ))}
         </Select>
         <Select
+          className={chip(difficulty)}
           value={difficulty}
           onChange={(e) => setDifficulty(e.target.value)}
           aria-label="Difficulty"
@@ -90,6 +93,7 @@ export function DrillLibrary({
           ))}
         </Select>
         <Select
+          className={chip(maxDuration)}
           value={maxDuration}
           onChange={(e) => setMaxDuration(e.target.value)}
           aria-label="Maximum duration"
@@ -100,6 +104,7 @@ export function DrillLibrary({
           <option value="20">20 min or less</option>
           <option value="30">30 min or less</option>
         </Select>
+        </div>
       </div>
 
       <p className="flex items-center gap-1.5 text-xs text-fg-subtle">
@@ -227,5 +232,13 @@ export function DrillCard({
     >
       {body}
     </Card>
+  );
+}
+
+/** Compact pill styling for the filter rail, highlighted when it is set. */
+function chip(value: string): string {
+  return cn(
+    "h-9 w-auto shrink-0 rounded-full px-3.5 text-[11.5px] font-medium shadow-none",
+    value ? "border-accent bg-accent-soft text-accent" : "bg-surface",
   );
 }

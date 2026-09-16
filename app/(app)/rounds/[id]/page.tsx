@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { ArrowLeft, Pencil } from "lucide-react";
@@ -14,7 +13,8 @@ import {
   CardHeader,
   CardTitle,
   EmptyState,
-  SectionHeading,
+  HeroPill,
+  PageHero,
   Stat,
 } from "@/components/ui/primitives";
 import { CLUB_LABELS, SG_CATEGORIES, SG_CATEGORY_LABELS, labelize } from "@/types/golf";
@@ -45,28 +45,37 @@ export default async function RoundDetailPage({ params }: { params: Promise<{ id
   const biggestGains = [...scored].sort((a, b) => b.strokes_gained - a.strokes_gained).slice(0, 3);
 
   return (
-    <div className="space-y-6">
-      <Link
-        href="/rounds"
-        className="inline-flex items-center gap-1.5 text-xs text-fg-muted hover:text-fg"
-      >
-        <ArrowLeft className="h-3.5 w-3.5" /> Rounds
-      </Link>
-
-      <SectionHeading
-        title={round.course_name}
-        description={`${formatDate(round.played_on)}${round.tees ? ` · ${round.tees} tees` : ""}${
-          round.conditions.length ? ` · ${round.conditions.map(labelize).join(", ")}` : ""
-        }`}
-        action={
-          <div className="flex flex-wrap items-center gap-2">
-            <ButtonLink href={`/rounds/${round.id}/play`} variant="secondary" size="sm">
-              <Pencil className="h-3.5 w-3.5" /> Edit shots
-            </ButtonLink>
-            <DeleteRoundButton roundId={round.id} />
-          </div>
+    <div className="space-y-5">
+      <PageHero
+        art="course"
+        size="lg"
+        title={<>Round<br />summary</>}
+        pills={
+          <>
+            <HeroPill tone="solid">
+              {round.course_name} · {formatDate(round.played_on)}
+            </HeroPill>
+            {round.tees ? <HeroPill>{round.tees} tees</HeroPill> : null}
+            {round.conditions.length ? (
+              <HeroPill>{round.conditions.map(labelize).join(", ")}</HeroPill>
+            ) : null}
+          </>
+        }
+        topLeft={
+          <ButtonLink href="/rounds" variant="onHero" size="sm">
+            <ArrowLeft className="h-3.5 w-3.5" /> Rounds
+          </ButtonLink>
+        }
+        topRight={
+          <ButtonLink href={`/rounds/${round.id}/play`} variant="onHeroSolid" size="sm">
+            <Pencil className="h-3.5 w-3.5" /> Edit shots
+          </ButtonLink>
         }
       />
+
+      <div className="flex justify-end">
+        <DeleteRoundButton roundId={round.id} />
+      </div>
 
       {shots.length === 0 ? (
         <EmptyState
@@ -81,7 +90,7 @@ export default async function RoundDetailPage({ params }: { params: Promise<{ id
       ) : (
         <>
           <Card>
-            <CardContent className="grid grid-cols-2 gap-5 p-5 sm:grid-cols-4 lg:grid-cols-6">
+            <CardContent className="grid grid-cols-3 gap-x-3 gap-y-4 p-5 lg:grid-cols-6">
               <Stat label="Score" value={stats.score ?? "—"} sub={toParLabel(stats.to_par)} />
               <Stat
                 label="SG total"
@@ -111,7 +120,6 @@ export default async function RoundDetailPage({ params }: { params: Promise<{ id
                     label: SG_CATEGORY_LABELS[c],
                     value: stats.sg_by_category[c],
                   }))}
-                  height={180}
                 />
               </CardContent>
             </Card>
@@ -125,7 +133,7 @@ export default async function RoundDetailPage({ params }: { params: Promise<{ id
                 <p className="text-sm font-medium">{narrative.data.headline}</p>
                 {narrative.data.what_went_well.length > 0 ? (
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-wider text-good">
+                    <p className="dsp text-[9px] font-medium tracking-[0.17em] text-good">
                       What went well
                     </p>
                     <ul className="mt-1 space-y-1 text-sm text-fg-muted">
@@ -137,7 +145,7 @@ export default async function RoundDetailPage({ params }: { params: Promise<{ id
                 ) : null}
                 {narrative.data.what_cost_you.length > 0 ? (
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-wider text-bad">
+                    <p className="dsp text-[9px] font-medium tracking-[0.17em] text-bad">
                       What cost you
                     </p>
                     <ul className="mt-1 space-y-1 text-sm text-fg-muted">
@@ -160,7 +168,7 @@ export default async function RoundDetailPage({ params }: { params: Promise<{ id
           </div>
 
           <div className="space-y-3">
-            <h2 className="text-lg font-semibold tracking-tight">Hole by hole</h2>
+            <h2 className="dsp text-[26px] font-semibold leading-none tracking-[-0.01em]">Hole by hole</h2>
             <div className="space-y-2">
               {holes.map((hole) => (
                 <details

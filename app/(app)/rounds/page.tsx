@@ -11,6 +11,8 @@ import {
   CardHeader,
   CardTitle,
   EmptyState,
+  MiniCard,
+  PageHero,
   SectionHeading,
 } from "@/components/ui/primitives";
 import { summarizeRound } from "@/lib/golf/strokes-gained";
@@ -27,9 +29,10 @@ export default async function RoundsPage() {
   const state = await loadPlayerState(user.id);
 
   return (
-    <div className="space-y-6">
-      <SectionHeading
-        title="Rounds"
+    <div className="space-y-5">
+      <PageHero
+        art="course"
+        title="All rounds"
         description="Every shot you log feeds the strokes-gained engine. Nothing here is estimated."
         action={
           <ButtonLink href="/rounds/new" size="sm">
@@ -55,69 +58,63 @@ export default async function RoundsPage() {
               <CardTitle>Scoring</CardTitle>
             </CardHeader>
             <CardContent>
-              <TrendLine points={state.scoringTrend} height={180} invert />
+              <TrendLine points={state.scoringTrend} height={150} invert />
             </CardContent>
           </Card>
 
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] text-sm">
-              <thead>
-                <tr className="border-b border-border text-left text-[11px] uppercase tracking-wider text-fg-subtle">
-                  <th className="py-2 pr-4 font-medium">Course</th>
-                  <th className="py-2 pr-4 font-medium">Date</th>
-                  <th className="py-2 pr-4 text-right font-medium">Score</th>
-                  <th className="py-2 pr-4 text-right font-medium">SG</th>
-                  <th className="py-2 pr-4 text-right font-medium">Tee</th>
-                  <th className="py-2 pr-4 text-right font-medium">App</th>
-                  <th className="py-2 pr-4 text-right font-medium">ARG</th>
-                  <th className="py-2 pr-4 text-right font-medium">Putt</th>
-                  <th className="py-2 pr-4 text-right font-medium">FIR</th>
-                  <th className="py-2 pr-4 text-right font-medium">GIR</th>
-                  <th className="py-2 text-right font-medium">Putts</th>
-                </tr>
-              </thead>
-              <tbody>
-                {state.rounds.map((round) => {
-                  const stats = summarizeRound(round, state.shotsByRound.get(round.id) ?? []);
-                  return (
-                    <tr key={round.id} className="border-b border-border last:border-0">
-                      <td className="py-2.5 pr-4">
-                        <Link href={`/rounds/${round.id}`} className="font-medium hover:text-accent">
+          <SectionHeading title="Logged rounds" />
+
+          <div className="grid gap-2.5 md:grid-cols-2">
+            {state.rounds.map((round) => {
+              const stats = summarizeRound(round, state.shotsByRound.get(round.id) ?? []);
+              return (
+                <MiniCard key={round.id} className="transition-colors hover:border-border-strong">
+                  <Link href={`/rounds/${round.id}`} className="block p-3.5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-[13.5px] font-semibold">
                           {round.course_name}
-                        </Link>
-                        {round.status === "in_progress" ? (
-                          <Badge tone="warn" className="ml-2">
-                            in progress
-                          </Badge>
-                        ) : null}
-                      </td>
-                      <td className="py-2.5 pr-4 text-fg-muted">
-                        {formatDate(round.played_on)}
-                        <span className="ml-1.5 text-xs text-fg-subtle">
-                          {relativeDays(round.played_on)}
-                        </span>
-                      </td>
-                      <td className="tabular py-2.5 pr-4 text-right font-medium">
-                        {stats.score ?? "—"}
-                        <span className="ml-1 text-xs text-fg-subtle">{toParLabel(stats.to_par)}</span>
-                      </td>
-                      <SGCell value={stats.sg_total} digits={1} />
-                      <SGCell value={stats.sg_by_category.off_the_tee} />
-                      <SGCell value={stats.sg_by_category.approach} />
-                      <SGCell value={stats.sg_by_category.around_the_green} />
-                      <SGCell value={stats.sg_by_category.putting} />
-                      <td className="tabular py-2.5 pr-4 text-right text-fg-muted">
-                        {stats.fairways_hit}/{stats.fairway_opportunities}
-                      </td>
-                      <td className="tabular py-2.5 pr-4 text-right text-fg-muted">
-                        {stats.greens_in_regulation}/{stats.holes_played}
-                      </td>
-                      <td className="tabular py-2.5 text-right text-fg-muted">{stats.putts}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                          {round.status === "in_progress" ? (
+                            <Badge tone="warn" className="ml-2 align-middle">
+                              in progress
+                            </Badge>
+                          ) : null}
+                        </p>
+                        <p className="mt-0.5 text-[11px] text-fg-subtle">
+                          {formatDate(round.played_on)} &middot; {relativeDays(round.played_on)}
+                        </p>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className="tabular text-[20px] font-semibold leading-none">
+                          {stats.score ?? "—"}
+                        </p>
+                        <p className="tabular dsp mt-0.5 text-[10px] tracking-[0.08em] text-fg-subtle">
+                          {toParLabel(stats.to_par)}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 grid grid-cols-5 gap-2">
+                      <SGCell label="SG" value={stats.sg_total} digits={1} />
+                      <SGCell label="Tee" value={stats.sg_by_category.off_the_tee} />
+                      <SGCell label="App" value={stats.sg_by_category.approach} />
+                      <SGCell label="ARG" value={stats.sg_by_category.around_the_green} />
+                      <SGCell label="Putt" value={stats.sg_by_category.putting} />
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-border pt-2.5 text-[11px] text-fg-subtle">
+                      <span className="tabular">
+                        FIR {stats.fairways_hit}/{stats.fairway_opportunities}
+                      </span>
+                      <span className="tabular">
+                        GIR {stats.greens_in_regulation}/{stats.holes_played}
+                      </span>
+                      <span className="tabular">Putts {stats.putts}</span>
+                    </div>
+                  </Link>
+                </MiniCard>
+              );
+            })}
           </div>
         </>
       )}
@@ -125,15 +122,18 @@ export default async function RoundsPage() {
   );
 }
 
-function SGCell({ value, digits = 2 }: { value: number; digits?: number }) {
+function SGCell({ label, value, digits = 2 }: { label: string; value: number; digits?: number }) {
   return (
-    <td
-      className={cn(
-        "tabular py-2.5 pr-4 text-right",
-        value > 0.05 ? "text-good" : value < -0.05 ? "text-bad" : "text-fg-muted",
-      )}
-    >
-      {signed(value, digits)}
-    </td>
+    <div className="min-w-0">
+      <p className="dsp text-[8.5px] tracking-[0.15em] text-fg-subtle">{label}</p>
+      <p
+        className={cn(
+          "tabular mt-0.5 text-[12.5px] font-semibold",
+          value > 0.05 ? "text-good" : value < -0.05 ? "text-bad" : "text-fg-muted",
+        )}
+      >
+        {signed(value, digits)}
+      </p>
+    </div>
   );
 }

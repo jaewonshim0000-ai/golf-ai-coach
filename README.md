@@ -83,8 +83,8 @@ app/
   onboarding/       four-step profile builder
   actions.ts        every server action, each Zod-validated
 components/
-  ui/               the design system (8 primitives, no component library)
-  charts/           Recharts wrappers driven by CSS design tokens
+  ui/               the design system (no component library, no chart library)
+  charts/           bars and sparklines drawn in CSS and inline SVG
   dashboard/ practice/ rounds/ plans/ swing/ forms/
 lib/
   golf/             expected strokes tables, strokes-gained engine
@@ -115,6 +115,28 @@ The model receives a small structured `CoachingContext`, never the database. Eve
 - The AI is instructed — and the rule-based coach is written — to distinguish *observed / likely / possible / uncertain*.
 - Empty data produces "not enough data yet", never an invented statistic.
 - Swing analysis says plainly that nothing has been machine-measured, because no vision pipeline exists yet.
+
+---
+
+## The look
+
+Warm paper, one deep-green accent, condensed uppercase display type, and a
+single near-black card per screen for the thing that matters most. Everything
+comes from the tokens at the top of `app/globals.css`, so changing the palette
+is one block, and light and dark are the same components.
+
+Two consequences worth knowing:
+
+- **Every page opens with a full-bleed hero.** `PageHero` in
+  `components/ui/primitives.tsx` cancels the layout padding with a negative
+  margin so the artwork reaches the edges. The artwork is layered CSS
+  gradients, not photographs — pass `image="/some-course.jpg"` to any hero and
+  the photo takes over, with the gradient staying as the fallback behind it.
+- **There is no charting dependency.** Strokes gained is drawn as diverging
+  bars either side of a centre line, trends as SVG sparklines, and the value is
+  always printed next to the bar rather than hidden behind a hover tooltip,
+  which does not exist on a phone. `components/charts/index.tsx` is a server
+  component: none of it ships JavaScript.
 
 ---
 
@@ -171,7 +193,7 @@ npm run typecheck
 npm run build
 ```
 
-72 tests covering the parts where a silent error would be worst:
+73 tests covering the parts where a silent error would be worst:
 
 - **Strokes gained** — normal shots, penalties, out of bounds, putts, holed shots, bunker saves, par-3 tee shots, greenside classification, category sums, incomplete and empty rounds.
 - **Analytics** — distance-band boundaries, per-round division, trend sample floors, weakness ranking, sample-size gating, confidence caps, cross-system corroboration.

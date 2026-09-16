@@ -69,7 +69,7 @@ export function ProfileForm({
       {wizard ? (
         <div className="space-y-2">
           <div className="flex items-baseline justify-between">
-            <p className="text-xs font-medium uppercase tracking-wider text-fg-subtle">
+            <p className="dsp text-[10px] font-medium tracking-[0.17em] text-fg-subtle">
               Step {step + 1} of {STEPS.length}
             </p>
             <p className="text-xs text-fg-muted">{STEPS[step]!.blurb}</p>

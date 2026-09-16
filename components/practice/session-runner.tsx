@@ -113,7 +113,7 @@ function DrillTracker({
           <input type="hidden" name="attempts" value={attempts} />
           <input type="hidden" name="successes" value={successes} />
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-2 gap-3">
             <Counter
               label={`Good (${drill.metric_to_track.toLowerCase()})`}
               value={successes}
@@ -202,9 +202,11 @@ function Counter({
   disabled?: boolean;
 }) {
   return (
-    <div className="space-y-1.5">
-      <span className="text-xs font-medium text-fg-muted">{label}</span>
-      <div className="flex items-center gap-2">
+    <div className="min-w-0 space-y-1.5">
+      <span className="dsp block truncate text-[9px] font-medium tracking-[0.15em] text-fg-subtle">
+        {label}
+      </span>
+      <div className="flex items-center gap-1.5">
         <Button
           type="button"
           variant="secondary"
@@ -220,7 +222,7 @@ function Counter({
           value={value}
           onChange={(e) => onChange(Number(e.target.value))}
           disabled={disabled}
-          className="tabular text-center text-lg font-semibold"
+          className="tabular min-w-0 px-1 text-center text-lg font-semibold"
           aria-label={label}
         />
         <Button

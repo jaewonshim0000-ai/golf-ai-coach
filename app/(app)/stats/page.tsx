@@ -17,7 +17,7 @@ import {
   CardHeader,
   CardTitle,
   EmptyState,
-  SectionHeading,
+  PageHero,
   Skeleton,
   Stat,
 } from "@/components/ui/primitives";
@@ -116,10 +116,12 @@ export default async function StatsPage({ searchParams }: { searchParams: Promis
   );
 
   return (
-    <div className="space-y-6">
-      <SectionHeading
+    <div className="space-y-5">
+      <PageHero
+        art="green"
+        size="sm"
         title="Stats"
-        description="Filter the whole dataset. Every number is computed from your recorded shots, never estimated."
+        description="Every number is computed from your recorded shots, never estimated."
       />
 
       <Suspense fallback={<Skeleton className="h-10 w-full" />}>
@@ -134,7 +136,7 @@ export default async function StatsPage({ searchParams }: { searchParams: Promis
       ) : (
         <>
           <Card>
-            <CardContent className="grid grid-cols-2 gap-5 p-5 sm:grid-cols-3 lg:grid-cols-6">
+            <CardContent className="grid grid-cols-3 gap-x-3 gap-y-4 p-5 lg:grid-cols-6">
               <Stat label="Shots" value={summary.shots} sub={`${summary.rounds} rounds`} />
               <Stat
                 label="SG total"
@@ -160,11 +162,7 @@ export default async function StatsPage({ searchParams }: { searchParams: Promis
 
           <div className="grid gap-6 lg:grid-cols-2">
             <ChartCard title="Strokes gained trend" subtitle="Per round, oldest first">
-              <TrendLine
-                points={sgTrend(filteredRounds, groupByRound(shots))}
-                height={200}
-                zeroLine
-              />
+              <TrendLine points={sgTrend(filteredRounds, groupByRound(shots))} height={160} zeroLine />
             </ChartCard>
 
             <ChartCard title="By category" subtitle="Strokes gained per round">
@@ -172,8 +170,8 @@ export default async function StatsPage({ searchParams }: { searchParams: Promis
                 data={SG_CATEGORIES.map((c) => ({
                   label: SG_CATEGORY_LABELS[c],
                   value: summary.by_category[c].per_round,
+                  sub: `${summary.by_category[c].shots} shots`,
                 }))}
-                height={200}
               />
             </ChartCard>
 
@@ -181,27 +179,27 @@ export default async function StatsPage({ searchParams }: { searchParams: Promis
               title="Approach by distance"
               subtitle={`Bands with fewer than ${MIN_SAMPLE.approach_distance} shots are not yet reliable`}
             >
-              <DivergingBars data={distanceData} height={230} layout="horizontal" />
+              <DivergingBars data={distanceData} compact />
             </ChartCard>
 
             <ChartCard title="Putting by distance" subtitle="Strokes gained per round">
-              <DivergingBars data={puttData} height={230} layout="horizontal" />
+              <DivergingBars data={puttData} compact />
             </ChartCard>
 
             <ChartCard title="By club" subtitle="Worst first, minimum 4 shots">
-              <DivergingBars data={clubData.slice(0, 10)} height={260} />
+              <DivergingBars data={clubData.slice(0, 10)} compact />
             </ChartCard>
 
             <ChartCard title="By lie" subtitle="Where you are playing from">
-              <DivergingBars data={lieData} height={260} />
+              <DivergingBars data={lieData} compact />
             </ChartCard>
 
             <ChartCard title="Dispersion" subtitle="Distance against miss direction, coloured by SG">
-              <DispersionChart points={dispersion(shots)} height={280} />
+              <DispersionChart points={dispersion(shots)} height={240} />
             </ChartCard>
 
             <ChartCard title="Miss directions" subtitle="How many shots missed each way">
-              <CountBars data={misses} height={220} />
+              <CountBars data={misses} height={150} />
             </ChartCard>
           </div>
 
@@ -210,7 +208,7 @@ export default async function StatsPage({ searchParams }: { searchParams: Promis
               title="Practice metrics"
               subtitle="Recorded drill results over time. Practice data is unaffected by the shot filters."
             >
-              <PracticeTrendChart series={practiceSeries} height={240} />
+              <PracticeTrendChart series={practiceSeries} height={190} />
               <ul className="mt-3 flex flex-wrap gap-3 text-xs text-fg-muted">
                 {practiceSeries.map((series) => (
                   <li key={series.name} className="flex items-center gap-1.5">

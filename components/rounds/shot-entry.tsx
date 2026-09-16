@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useActionState, useMemo, useState, useTransition } from "react";
-import { Check, ChevronLeft, ChevronRight, Flag, Loader2, Trash2 } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 
 import { addShotAction, deleteShotAction, finishRoundAction } from "@/app/actions";
 import { IDLE } from "@/lib/action-state";
@@ -11,7 +11,18 @@ import { CLUBS, CLUB_LABELS, labelize } from "@/types/golf";
 import type { HoleSpec, Round, Shot } from "@/types/rounds";
 import { cn } from "@/lib/utils";
 import { AROUND_GREEN_YARDS } from "@/lib/golf/strokes-gained";
-import { Badge, Button, Card, CardContent, Field, Input, Select } from "@/components/ui/primitives";
+import {
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  Eyebrow,
+  Field,
+  HeroPill,
+  Input,
+  MiniCard,
+  Select,
+} from "@/components/ui/primitives";
 
 /**
  * Shot entry.
@@ -161,9 +172,12 @@ export function ShotEntry({
 
   const strokes = holeShots.length + holeShots.reduce((sum, s) => sum + s.penalty_strokes, 0);
   const totalStrokes = shots.length + shots.reduce((sum, s) => sum + s.penalty_strokes, 0);
-  const holesDone = new Set(
-    shots.filter((s) => s.ending_location === "holed").map((s) => s.hole_number),
-  ).size;
+  const played = useMemo(
+    () =>
+      new Set(shots.filter((s) => s.ending_location === "holed").map((s) => s.hole_number)),
+    [shots],
+  );
+  const holesDone = played.size;
 
   function submit() {
     setError(null);
@@ -245,255 +259,309 @@ export function ShotEntry({
   }
 
   return (
-    <div className="space-y-4 pb-4">
-      <Card>
-        <CardContent className="flex items-center justify-between gap-3 p-3">
+    <div>
+      {/* The hero carries the hole stepper, so it lives in here with the state. */}
+      <div className="hero-art relative -mx-4 -mt-5 flex min-h-[210px] flex-col justify-between overflow-hidden md:-mx-8 md:-mt-8">
+        <div className="hero-scrim pointer-events-none absolute inset-0" />
+
+        <div className="relative z-10 flex items-start justify-between gap-3 p-5 pb-8">
           <Button
             type="button"
-            variant="ghost"
-            size="icon"
-            onClick={() => setHoleIndex((i) => Math.max(0, i - 1))}
-            disabled={holeIndex === 0}
-            aria-label="Previous hole"
+            variant="onHero"
+            size="sm"
+            onClick={() => router.push(`/rounds/${round.id}`)}
           >
-            <ChevronLeft className="h-5 w-5" />
+            Back
           </Button>
+          <HeroPill tone="solid">{round.course_name}</HeroPill>
+        </div>
 
-          <div className="text-center">
-            <p className="text-[11px] uppercase tracking-wider text-fg-subtle">
-              Hole {hole.hole_number}
-            </p>
-            <p className="text-lg font-semibold leading-tight">
-              Par {hole.par} &middot; <span className="tabular">{hole.yards}</span> yd
-            </p>
-            <p className="tabular text-xs text-fg-muted">
+        <div className="relative z-10 flex items-end justify-between gap-3 p-5 pt-0">
+          <div className="min-w-0">
+            <p className="dsp text-[11px] font-medium tracking-[0.2em] text-white/80">
               {strokes} shot{strokes === 1 ? "" : "s"} this hole
               {holedOut ? ` · ${strokes - hole.par >= 0 ? "+" : ""}${strokes - hole.par}` : ""}
             </p>
+            <h1 className="dsp mt-1 text-[38px] font-semibold leading-[0.94] tracking-[-0.02em] text-white">
+              Hole {hole.hole_number}
+            </h1>
+            <p className="tabular mt-1.5 text-[12px] text-white/85">
+              Par {hole.par} &middot; {hole.yards} yd
+            </p>
           </div>
-
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            onClick={() => setHoleIndex((i) => Math.min(holes.length - 1, i + 1))}
-            disabled={holeIndex === holes.length - 1}
-            aria-label="Next hole"
-          >
-            <ChevronRight className="h-5 w-5" />
-          </Button>
-        </CardContent>
-      </Card>
-
-      {holeShots.length > 0 ? (
-        <ol className="space-y-1.5">
-          {holeShots.map((shot) => (
-            <li
-              key={shot.id}
-              className="flex items-center justify-between gap-3 rounded-lg border border-border bg-surface px-3 py-2 text-sm"
+          <div className="flex shrink-0 gap-2">
+            <button
+              type="button"
+              onClick={() => setHoleIndex((i) => Math.max(0, i - 1))}
+              disabled={holeIndex === 0}
+              aria-label="Previous hole"
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-white/50 text-white disabled:opacity-40"
             >
-              <span className="flex min-w-0 items-baseline gap-2">
-                <span className="tabular w-4 shrink-0 text-xs text-fg-subtle">{shot.shot_number}</span>
-                <span className="truncate">
-                  <span className="font-medium">{shot.club ? CLUB_LABELS[shot.club] : "—"}</span>
-                  <span className="text-fg-muted">
-                    {" "}
-                    from <span className="tabular">{Math.round(shot.starting_distance)}</span>
-                    {shot.starting_unit === "feet" ? " ft" : " yd"} {labelize(shot.starting_location).toLowerCase()}
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setHoleIndex((i) => Math.min(holes.length - 1, i + 1))}
+              disabled={holeIndex === holes.length - 1}
+              aria-label="Next hole"
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-fg disabled:opacity-40"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="mx-auto mt-4 max-w-2xl space-y-3.5">
+        <div className="no-bar -mx-4 flex gap-1.5 overflow-x-auto px-4 md:mx-0 md:px-0">
+          {holes.map((h, index) => {
+            const active = index === holeIndex;
+            const done = played.has(h.hole_number);
+            return (
+              <button
+                key={h.hole_number}
+                type="button"
+                onClick={() => setHoleIndex(index)}
+                aria-current={active ? "true" : undefined}
+                aria-label={`Hole ${h.hole_number}${done ? ", complete" : ""}`}
+                className={cn(
+                  "flex h-[52px] w-[52px] shrink-0 flex-col items-center justify-center rounded-full border transition-colors",
+                  active
+                    ? "border-transparent bg-[image:var(--grad-accent)] text-white shadow-[var(--shadow-accent)]"
+                    : done
+                      ? "border-transparent bg-[#3c4a3f] text-white"
+                      : "border-border-strong text-fg-muted",
+                )}
+              >
+                <span className="tabular dsp text-[16px] font-semibold leading-none">
+                  {h.hole_number}
+                </span>
+                <span className="dsp text-[8px] tracking-[0.15em] opacity-75">Hole</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {holeShots.length > 0 ? (
+          <ol className="space-y-1.5">
+            {holeShots.map((shot) => (
+              <li
+                key={shot.id}
+                className="flex items-center justify-between gap-3 rounded-xl border border-border bg-surface px-3 py-2.5"
+              >
+                <span className="flex min-w-0 items-baseline gap-2">
+                  <span className="tabular w-4 shrink-0 text-[11px] text-fg-subtle">
+                    {shot.shot_number}
                   </span>
-                  <span className="text-fg-muted">
-                    {" → "}
-                    {shot.ending_location === "holed"
-                      ? "holed"
-                      : `${Math.round(shot.ending_distance)}${shot.ending_unit === "feet" ? " ft" : " yd"} ${labelize(shot.ending_location).toLowerCase()}`}
+                  <span className="truncate text-[12.5px] leading-[1.4]">
+                    <span className="font-medium">{shot.club ? CLUB_LABELS[shot.club] : "—"}</span>
+                    <span className="text-fg-muted">
+                      {" "}
+                      from <span className="tabular">{Math.round(shot.starting_distance)}</span>
+                      {shot.starting_unit === "feet" ? " ft" : " yd"}{" "}
+                      {labelize(shot.starting_location).toLowerCase()}
+                    </span>
+                    <span className="text-fg-muted">
+                      {" → "}
+                      {shot.ending_location === "holed"
+                        ? "holed"
+                        : `${Math.round(shot.ending_distance)}${shot.ending_unit === "feet" ? " ft" : " yd"} ${labelize(shot.ending_location).toLowerCase()}`}
+                    </span>
                   </span>
                 </span>
-              </span>
-              <span className="flex shrink-0 items-center gap-1.5">
-                {shot.penalty_strokes > 0 ? <Badge tone="bad">+{shot.penalty_strokes}</Badge> : null}
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => removeShot(shot)}
-                  aria-label={`Delete shot ${shot.shot_number}`}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
-              </span>
-            </li>
-          ))}
-        </ol>
-      ) : null}
-
-      {holedOut ? (
-        <Card>
-          <CardContent className="flex flex-col items-center gap-3 p-6 text-center">
-            <p className="text-sm text-fg-muted">
-              Hole {hole.hole_number} complete in <span className="tabular font-semibold">{strokes}</span>.
-            </p>
-            {holeIndex < holes.length - 1 ? (
-              <Button type="button" onClick={() => setHoleIndex((i) => i + 1)}>
-                Next hole <ChevronRight className="h-4 w-4" />
-              </Button>
-            ) : null}
-          </CardContent>
-        </Card>
-      ) : (
-        <Card>
-          <CardContent className="space-y-4 p-4">
-            <div className="flex items-baseline justify-between">
-              <h3 className="text-sm font-semibold">Shot {shotNumber}</h3>
-              <p className="tabular text-xs text-fg-muted">
-                {Math.round(startingDistance)}
-                {startingUnit === "feet" ? " ft" : " yd"} from {labelize(startingLocation).toLowerCase()}
-                {shotType === startingLocation ? "" : ` · ${labelize(shotType).toLowerCase()}`}
-              </p>
-            </div>
-
-            {!isPutt ? (
-              <div>
-                <p className="mb-1.5 text-xs font-medium text-fg-muted">Club</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {[...new Set([...recentClubs, ...bag])]
-                    .filter((club) => club !== "putter")
-                    .map((club) => (
-                      <Chip
-                        key={club}
-                        active={draft.club === club}
-                        onClick={() => setDraft((d) => ({ ...d, club }))}
-                      >
-                        {CLUB_LABELS[club]}
-                      </Chip>
-                    ))}
-                </div>
-              </div>
-            ) : (
-              <input type="hidden" value="putter" readOnly />
-            )}
-
-            <div>
-              <p className="mb-1.5 text-xs font-medium text-fg-muted">Result</p>
-              <div className="flex flex-wrap gap-1.5">
-                {(isPutt ? PUTT_RESULTS : RESULT_LIES).map(({ lie, label }) => (
-                  <Chip
-                    key={lie}
-                    active={draft.endingLocation === lie}
-                    tone={lie === "holed" ? "good" : lie === "out_of_bounds" || lie === "hazard" ? "bad" : "default"}
-                    onClick={() =>
-                      setDraft((d) => ({
-                        ...d,
-                        endingLocation: lie,
-                        endingDistance: lie === "holed" ? "0" : d.endingDistance,
-                        penaltyStrokes: lie === "out_of_bounds" || lie === "hazard" ? 1 : 0,
-                      }))
-                    }
+                <span className="flex shrink-0 items-center gap-2">
+                  {shot.penalty_strokes > 0 ? <Badge tone="bad">+{shot.penalty_strokes}</Badge> : null}
+                  <button
+                    type="button"
+                    onClick={() => removeShot(shot)}
+                    aria-label={`Delete shot ${shot.shot_number}`}
+                    className="text-[11px] text-fg-subtle hover:text-bad"
                   >
-                    {label}
-                  </Chip>
-                ))}
+                    Delete
+                  </button>
+                </span>
+              </li>
+            ))}
+          </ol>
+        ) : null}
+
+        {holedOut ? (
+          <Card>
+            <CardContent className="flex flex-col items-center gap-3 p-6 text-center">
+              <p className="text-[13px] text-fg-muted">
+                Hole {hole.hole_number} complete in{" "}
+                <span className="tabular font-semibold text-fg">{strokes}</span>.
+              </p>
+              {holeIndex < holes.length - 1 ? (
+                <Button type="button" onClick={() => setHoleIndex((i) => i + 1)}>
+                  Next hole
+                </Button>
+              ) : null}
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardContent className="space-y-1 p-4">
+              <div className="flex items-baseline justify-between gap-3">
+                <h3 className="dsp text-[15px] font-semibold tracking-[0.02em]">
+                  Shot {shotNumber}
+                </h3>
+                <p className="tabular text-[11px] text-fg-muted">
+                  {Math.round(startingDistance)}
+                  {startingUnit === "feet" ? " ft" : " yd"} from{" "}
+                  {labelize(startingLocation).toLowerCase()}
+                  {shotType === startingLocation ? "" : ` · ${labelize(shotType).toLowerCase()}`}
+                </p>
               </div>
-            </div>
 
-            {draft.endingLocation !== "holed" ? (
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Field
-                  label={`Distance left (${endingUnit === "feet" ? "feet" : "yards"})`}
-                >
-                  <Input
-                    type="number"
-                    inputMode="decimal"
-                    min={0}
-                    step={endingUnit === "feet" ? 1 : 1}
-                    value={draft.endingDistance}
-                    onChange={(e) => setDraft((d) => ({ ...d, endingDistance: e.target.value }))}
-                    placeholder={endingUnit === "feet" ? "12" : "35"}
-                    autoFocus
-                  />
-                </Field>
-
-                {!isPutt ? (
-                  <div>
-                    <p className="mb-1.5 text-xs font-medium text-fg-muted">Miss direction</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {MISSES.map((miss) => (
+              {!isPutt ? (
+                <div className="pt-4">
+                  <Eyebrow>Club</Eyebrow>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {[...new Set([...recentClubs, ...bag])]
+                      .filter((club) => club !== "putter")
+                      .map((club) => (
                         <Chip
-                          key={miss}
-                          active={draft.miss === miss}
-                          onClick={() =>
-                            setDraft((d) => ({ ...d, miss: d.miss === miss ? null : miss }))
-                          }
+                          key={club}
+                          active={draft.club === club}
+                          onClick={() => setDraft((d) => ({ ...d, club }))}
                         >
-                          {labelize(miss)}
+                          {CLUB_LABELS[club]}
                         </Chip>
                       ))}
-                    </div>
                   </div>
-                ) : null}
+                </div>
+              ) : (
+                <input type="hidden" value="putter" readOnly />
+              )}
+
+              <div className="pt-4">
+                <Eyebrow>Result</Eyebrow>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {(isPutt ? PUTT_RESULTS : RESULT_LIES).map(({ lie, label }) => (
+                    <Chip
+                      key={lie}
+                      active={draft.endingLocation === lie}
+                      tone={lie === "holed" ? "good" : lie === "out_of_bounds" || lie === "hazard" ? "bad" : "default"}
+                      onClick={() =>
+                        setDraft((d) => ({
+                          ...d,
+                          endingLocation: lie,
+                          endingDistance: lie === "holed" ? "0" : d.endingDistance,
+                          penaltyStrokes: lie === "out_of_bounds" || lie === "hazard" ? 1 : 0,
+                        }))
+                      }
+                    >
+                      {label}
+                    </Chip>
+                  ))}
+                </div>
               </div>
-            ) : null}
 
-            {draft.penaltyStrokes > 0 ? (
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Field label="Penalty strokes">
-                  <Input
-                    type="number"
-                    min={0}
-                    max={3}
-                    value={draft.penaltyStrokes}
-                    onChange={(e) =>
-                      setDraft((d) => ({ ...d, penaltyStrokes: Number(e.target.value) }))
-                    }
-                  />
-                </Field>
-                <Field label="Penalty type">
-                  <Select
-                    value={draft.penaltyType}
-                    onChange={(e) =>
-                      setDraft((d) => ({ ...d, penaltyType: e.target.value as PenaltyType }))
-                    }
-                  >
-                    {PENALTY_TYPES.map((type) => (
-                      <option key={type} value={type}>
-                        {labelize(type)}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
+              {draft.endingLocation !== "holed" ? (
+                <div className="grid gap-4 pt-4 sm:grid-cols-2">
+                  <Field label={`Distance left (${endingUnit === "feet" ? "feet" : "yards"})`}>
+                    <Input
+                      type="number"
+                      inputMode="decimal"
+                      min={0}
+                      step={1}
+                      value={draft.endingDistance}
+                      onChange={(e) => setDraft((d) => ({ ...d, endingDistance: e.target.value }))}
+                      placeholder={endingUnit === "feet" ? "12" : "35"}
+                      autoFocus
+                    />
+                  </Field>
+
+                  {!isPutt ? (
+                    <div>
+                      <Eyebrow className="tracking-[0.15em]">Miss direction</Eyebrow>
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {MISSES.map((miss) => (
+                          <Chip
+                            key={miss}
+                            active={draft.miss === miss}
+                            onClick={() =>
+                              setDraft((d) => ({ ...d, miss: d.miss === miss ? null : miss }))
+                            }
+                          >
+                            {labelize(miss)}
+                          </Chip>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {draft.penaltyStrokes > 0 ? (
+                <div className="grid gap-4 pt-4 sm:grid-cols-2">
+                  <Field label="Penalty strokes">
+                    <Input
+                      type="number"
+                      min={0}
+                      max={3}
+                      value={draft.penaltyStrokes}
+                      onChange={(e) =>
+                        setDraft((d) => ({ ...d, penaltyStrokes: Number(e.target.value) }))
+                      }
+                    />
+                  </Field>
+                  <Field label="Penalty type">
+                    <Select
+                      value={draft.penaltyType}
+                      onChange={(e) =>
+                        setDraft((d) => ({ ...d, penaltyType: e.target.value as PenaltyType }))
+                      }
+                    >
+                      {PENALTY_TYPES.map((type) => (
+                        <option key={type} value={type}>
+                          {labelize(type)}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                </div>
+              ) : null}
+
+              {error ? <p className="pt-3 text-[12px] text-bad">{error}</p> : null}
+
+              <div className="pt-4">
+                <Button type="button" size="lg" onClick={submit} disabled={pending}>
+                  {pending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Check className="h-4 w-4" />
+                  )}
+                  Add shot {shotNumber}
+                </Button>
               </div>
-            ) : null}
+            </CardContent>
+          </Card>
+        )}
 
-            {error ? <p className="text-sm text-bad">{error}</p> : null}
-
-            <Button type="button" className="w-full" onClick={submit} disabled={pending}>
-              {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-              Add shot {shotNumber}
-            </Button>
-          </CardContent>
-        </Card>
-      )}
-
-      <Card>
-        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
+        <MiniCard className="flex flex-wrap items-center justify-between gap-3 p-4">
           <div className="flex gap-6">
-            <span className="text-xs text-fg-muted">
+            <span className="text-[11px] text-fg-muted">
               Holes
-              <span className="tabular ml-1.5 text-sm font-semibold text-fg">{holesDone}</span>
+              <span className="tabular ml-1.5 text-[14px] font-semibold text-fg">{holesDone}</span>
             </span>
-            <span className="text-xs text-fg-muted">
+            <span className="text-[11px] text-fg-muted">
               Strokes
-              <span className="tabular ml-1.5 text-sm font-semibold text-fg">{totalStrokes}</span>
+              <span className="tabular ml-1.5 text-[14px] font-semibold text-fg">
+                {totalStrokes}
+              </span>
             </span>
           </div>
           <form action={finishAction}>
             <input type="hidden" name="round_id" value={round.id} />
             <Button type="submit" variant="secondary" size="sm" disabled={finishing}>
-              {finishing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Flag className="h-3.5 w-3.5" />}
+              {finishing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
               Finish round
             </Button>
           </form>
-        </CardContent>
-      </Card>
+        </MiniCard>
+      </div>
     </div>
   );
 }
@@ -528,14 +596,14 @@ function Chip({
       onClick={onClick}
       aria-pressed={active}
       className={cn(
-        "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+        "rounded-full border px-3 py-1.5 text-[12px] font-medium transition-colors",
         active
           ? tone === "good"
             ? "border-good bg-good text-white"
             : tone === "bad"
               ? "border-bad bg-bad text-white"
               : "border-accent bg-accent text-accent-fg"
-          : "border-border bg-surface text-fg-muted hover:border-border-strong hover:text-fg",
+          : "border-border-strong bg-surface text-fg-muted hover:border-fg-subtle hover:text-fg",
       )}
     >
       {children}

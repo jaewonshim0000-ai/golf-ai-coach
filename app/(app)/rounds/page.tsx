@@ -42,7 +42,7 @@ import * as repo from "@/lib/db/repo";
 import { loadPlayerState } from "@/lib/player-state";
 import { cn, formatDate, relativeDays, signed, toParLabel } from "@/lib/utils";
 
-export const metadata: Metadata = { title: "Rounds" };
+export const metadata: Metadata = { title: "Play" };
 export const dynamic = "force-dynamic";
 
 type Search = {
@@ -107,8 +107,8 @@ export default async function RoundsPage({ searchParams }: { searchParams: Promi
     <div className="space-y-5">
       <PageHero
         art="course"
-        title="All rounds"
-        description="Every shot you log. Nothing estimated."
+        title="Play"
+        description="Every round you log, and what the shots say about it."
         action={
           <ButtonLink href="/rounds/new" size="sm">
             <Flag className="h-3.5 w-3.5" /> New round

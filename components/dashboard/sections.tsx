@@ -58,12 +58,26 @@ export function SourceBadge({ source, note }: { source: "ai" | "rules"; note?: s
 
 // ------------------------------------------------------------ current focus
 
-export function CurrentFocus({ weakness }: { weakness: Weakness | null }) {
+/**
+ * Whether a weakness shows up in the swing or only on the card. The tag is not
+ * a guess: it is true when one of the corroborating pieces of evidence came
+ * from a swing finding, and false otherwise.
+ */
+export function priorityKind(weakness: Weakness): "Swing related" | "Course pattern" {
+  return weakness.evidence.some((item) => item.source === "swing") ? "Swing related" : "Course pattern";
+}
+
+/**
+ * A ranked priority. Rank 1 gets the ink card because there is only ever one
+ * thing that costs the most; rank 2 gets the same content at card weight.
+ */
+export function PriorityCard({ weakness, rank }: { weakness: Weakness | null; rank: 1 | 2 }) {
   if (!weakness) {
+    if (rank === 2) return null;
     return (
       <InkCard>
         <div className="p-6" style={INK_GLOW}>
-          <Eyebrow className="tracking-[0.2em] text-white/60">Priority</Eyebrow>
+          <Eyebrow className="tracking-[0.2em] text-white/60">Priority #1</Eyebrow>
           <h2 className="dsp mt-3 text-[31px] font-semibold leading-[0.98] tracking-[-0.015em]">
             Building your baseline
           </h2>
@@ -74,7 +88,7 @@ export function CurrentFocus({ weakness }: { weakness: Weakness | null }) {
             <ButtonLink href="/rounds/new" size="sm" variant="onHeroSolid">
               Log a round
             </ButtonLink>
-            <ButtonLink href="/train" size="sm" variant="onHero">
+            <ButtonLink href="/practice/start" size="sm" variant="onHero">
               Practise
             </ButtonLink>
           </div>
@@ -83,19 +97,84 @@ export function CurrentFocus({ weakness }: { weakness: Weakness | null }) {
     );
   }
 
+  const badges = (
+    <>
+      <Badge tone={rank === 1 ? SEVERITY_TONE_INK[weakness.severity] : SEVERITY_TONE[weakness.severity]}>
+        {weakness.severity}
+      </Badge>
+      <Badge tone={rank === 1 ? "onInk" : "neutral"}>{priorityKind(weakness)}</Badge>
+      <TrendBadge trend={weakness.trend_label} onInk={rank === 1} />
+    </>
+  );
+
+  /* The quick explanation: one line on why this is the priority, then the
+     evidence a tap away. Neither is worth a screen of prose. */
+  const explanation = (
+    <>
+      <p
+        className={cn(
+          "mt-3 text-[13px] leading-[1.55]",
+          rank === 1 ? "text-ink-fg/80" : "text-fg-muted",
+        )}
+      >
+        {weakness.recommended_action}
+      </p>
+      {weakness.evidence.length > 0 ? (
+        <details
+          className={cn("group mt-4 border-t pt-3.5", rank === 1 ? "border-white/15" : "border-border")}
+        >
+          <summary
+            className={cn(
+              "dsp flex cursor-pointer list-none items-center gap-1.5 text-[10px] font-medium tracking-[0.17em] marker:hidden",
+              rank === 1 ? "text-gold" : "text-fg-subtle",
+            )}
+          >
+            Evidence ({weakness.evidence.length})
+            <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" />
+          </summary>
+          <ul className="mt-3 flex flex-col gap-2.5">
+            {weakness.evidence.map((item, index) => (
+              <EvidenceLine key={index} evidence={item} onInk={rank === 1} />
+            ))}
+          </ul>
+        </details>
+      ) : null}
+    </>
+  );
+
+  if (rank === 2) {
+    return (
+      <Card>
+        <CardContent className="p-5">
+          <Eyebrow className="tracking-[0.2em]">Priority #2</Eyebrow>
+          <div className="mt-2 flex items-start justify-between gap-3">
+            <h3 className="dsp min-w-0 text-[21px] font-semibold leading-[1.05] tracking-[-0.01em]">
+              {weakness.title}
+            </h3>
+            <p className="tabular shrink-0 text-[21px] font-semibold leading-none text-bad">
+              -{weakness.strokes_lost_per_round.toFixed(2)}
+            </p>
+          </div>
+          <div className="mt-2.5 flex flex-wrap gap-1.5">{badges}</div>
+          {explanation}
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <InkCard>
       <div className="p-6" style={INK_GLOW}>
         <div className="flex flex-wrap items-center gap-2">
-          <Eyebrow className="tracking-[0.2em] text-white/60">Priority</Eyebrow>
-          <Badge tone={SEVERITY_TONE_INK[weakness.severity]}>{weakness.severity}</Badge>
-          {!weakness.sufficient_sample ? <Badge tone="onInk">early signal</Badge> : null}
-          <TrendBadge trend={weakness.trend_label} onInk />
+          <Eyebrow className="tracking-[0.2em] text-white/60">Priority #1</Eyebrow>
+          {badges}
         </div>
 
         <h2 className="dsp mt-3.5 text-[31px] font-semibold leading-[0.98] tracking-[-0.015em]">
           {weakness.title}
         </h2>
+
+        {explanation}
 
         <div className="mt-5 grid grid-cols-3 gap-3 border-t border-white/15 pt-4">
           <InkStat
@@ -118,25 +197,6 @@ export function CurrentFocus({ weakness }: { weakness: Weakness | null }) {
             divided
           />
         </div>
-
-        {/*
-          The evidence is what makes the priority trustworthy, so it stays -
-          but it is four lines of prose on a screen that should read at a
-          glance. <details> keeps it one tap away and costs no JavaScript.
-        */}
-        {weakness.evidence.length > 0 ? (
-          <details className="group mt-5 border-t border-white/15 pt-4">
-            <summary className="dsp flex cursor-pointer list-none items-center gap-1.5 text-[10px] font-medium tracking-[0.17em] text-gold marker:hidden">
-              Evidence ({weakness.evidence.length})
-              <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" />
-            </summary>
-            <ul className="mt-3 flex flex-col gap-2.5">
-              {weakness.evidence.map((item, index) => (
-                <EvidenceLine key={index} evidence={item} />
-              ))}
-            </ul>
-          </details>
-        ) : null}
       </div>
     </InkCard>
   );
@@ -171,12 +231,24 @@ function InkStat({
   );
 }
 
-function EvidenceLine({ evidence }: { evidence: Evidence }) {
+function EvidenceLine({ evidence, onInk }: { evidence: Evidence; onInk?: boolean }) {
   return (
-    <li className="flex gap-2.5 text-[13px] leading-[1.55] text-ink-fg/80">
+    <li
+      className={cn(
+        "flex gap-2.5 text-[13px] leading-[1.55]",
+        onInk ? "text-ink-fg/80" : "text-fg-muted",
+      )}
+    >
       <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-gold" aria-hidden />
       <span>
-        <span className="dsp text-[9px] tracking-[0.15em] text-white/45">{evidence.source}</span>{" "}
+        <span
+          className={cn(
+            "dsp text-[9px] tracking-[0.15em]",
+            onInk ? "text-white/45" : "text-fg-subtle",
+          )}
+        >
+          {evidence.source}
+        </span>{" "}
         {evidence.statement}
       </span>
     </li>
@@ -264,8 +336,8 @@ export function TodaysSession({ session }: { session: SuggestedSession | null })
           ))}
         </ol>
 
-        <ButtonLink href="/train" size="lg">
-          Start
+        <ButtonLink href="/practice/start" size="lg">
+          Start practice
         </ButtonLink>
       </CardContent>
     </Card>

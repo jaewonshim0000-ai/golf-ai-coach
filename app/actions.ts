@@ -124,7 +124,7 @@ export async function completeOnboardingAction(
 ): Promise<ActionState> {
   const result = await saveProfileAction(prev, formData);
   if (!result.ok) return result;
-  redirect("/dashboard");
+  redirect("/practice");
 }
 
 // ------------------------------------------------------------------- rounds
@@ -433,8 +433,9 @@ export async function createSwingSessionAction(
   });
   if (!parsed.success) return fail(parsed.error);
 
+  let created;
   try {
-    await repo.createSwingSession({
+    created = await repo.createSwingSession({
       user_id: user.id,
       video_url: parsed.data.video_url || null,
       camera_angle: parsed.data.camera_angle,
@@ -449,7 +450,7 @@ export async function createSwingSessionAction(
   }
 
   revalidatePath("/swing");
-  return { ok: true, message: "Swing session added." };
+  return { ok: true, message: "Swing session added.", id: created.id };
 }
 
 export async function addSwingFindingAction(
@@ -545,7 +546,7 @@ export async function saveMeasurementAction(
   } catch (error) {
     return asError(error);
   }
-  revalidatePath("/train");
+  revalidatePath("/practice");
   return { ok: true };
 }
 
@@ -581,5 +582,5 @@ export async function resetDemoAction(): Promise<void> {
   if (repo.mode() !== "demo") return;
   resetDemoStore();
   revalidatePath("/", "layout");
-  redirect("/dashboard");
+  redirect("/practice");
 }

@@ -14,7 +14,7 @@ export default async function OnboardingPage() {
   if (!user) redirect("/login");
 
   const profile = await repo.getProfile(user.id);
-  if (profile) redirect("/dashboard");
+  if (profile) redirect("/practice");
 
   return (
     <div className="hero-grid min-h-svh px-4 py-10">

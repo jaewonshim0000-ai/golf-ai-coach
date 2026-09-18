@@ -2,19 +2,19 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Flag, LayoutDashboard, Target, User } from "lucide-react";
+import { Flag, Target, User, Video } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
 /*
-  Three destinations, because that is how many the app has: where you stand,
-  where you play, where you work. Stats live inside rounds and the swing lives
-  inside training, since neither is a thing you go to on its own.
+  Three destinations plus you: swing, practice, play. Practice is the landing
+  screen because it is the one that says what to do next; stats live inside
+  play, since they are a reading of the rounds rather than a place.
 */
 const ITEMS = [
-  { href: "/dashboard", label: "Home", short: "Home", icon: LayoutDashboard },
-  { href: "/rounds", label: "Rounds", short: "Rounds", icon: Flag },
-  { href: "/train", label: "Train", short: "Train", icon: Target },
+  { href: "/swing", label: "Swing", short: "Swing", icon: Video },
+  { href: "/practice", label: "Practice", short: "Practice", icon: Target },
+  { href: "/rounds", label: "Play", short: "Play", icon: Flag },
   { href: "/profile", label: "Profile", short: "You", icon: User },
 ] as const;
 
@@ -27,7 +27,7 @@ export function Sidebar({ mode }: { mode: "demo" | "supabase" }) {
 
   return (
     <aside className="sticky top-0 hidden h-svh w-60 shrink-0 flex-col border-r border-border bg-surface md:flex">
-      <Link href="/dashboard" className="flex items-center gap-2.5 px-5 py-6">
+      <Link href="/practice" className="flex items-center gap-2.5 px-5 py-6">
         <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[image:var(--grad-accent)] text-white shadow-[var(--shadow-accent)]">
           <Flag className="h-4 w-4" strokeWidth={2.5} />
         </span>

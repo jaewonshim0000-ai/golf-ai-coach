@@ -9,7 +9,7 @@ import { mode } from "@/lib/db/repo";
 export const metadata: Metadata = { title: "Create account" };
 
 export default function SignupPage() {
-  if (mode() === "demo") redirect("/dashboard");
+  if (mode() === "demo") redirect("/practice");
 
   return (
     <Card>

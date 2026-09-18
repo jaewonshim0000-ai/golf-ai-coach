@@ -10,7 +10,7 @@ export default function NotFound() {
         account.
       </p>
       <Link
-        href="/dashboard"
+        href="/practice"
         className="mt-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-fg"
       >
         Back to the dashboard

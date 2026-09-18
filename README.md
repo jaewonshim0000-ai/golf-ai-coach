@@ -59,18 +59,18 @@ Every arrow is implemented:
 
 | Step | Where |
 | --- | --- |
-| Collect golf data | `app/(app)/rounds/[id]/play`, `app/(app)/train` |
+| Collect golf data | `app/(app)/rounds/[id]/play`, `app/(app)/swing` |
 | Normalise + score | `lib/golf/strokes-gained` |
 | Analyse performance | `lib/analytics/aggregate.ts` |
 | Identify weaknesses | `lib/analytics/weaknesses.ts` |
 | Cross-reference systems | `lib/analytics/weaknesses.ts` (evidence), `lib/ai/context.ts` |
 | Determine priority | `lib/analytics/weaknesses.ts` (priority score) |
 | Build today's session | `lib/practice/session.ts` |
-| Track training | `app/(app)/train/sessions/[id]` |
+| Track training | `app/(app)/practice/sessions/[id]` |
 | Measure improvement | `lib/analytics/practice-progress.ts` |
 | Update priority | `lib/player-state.ts` (recomputed on every request) |
 
-To see it close, open the dashboard, note the evidence behind the current priority, complete today's session with a result above its target, and reload: the evidence, the plan verdict and the coaching language all change.
+To see it close, open Practice, note the evidence behind priority #1, complete today's session with a result above its target, and reload: the evidence, the plan verdict and the coaching language all change.
 
 ---
 
@@ -148,7 +148,7 @@ Retrieval is deterministic (`lib/ai/ask.ts`): every scored segment, ranked
 weakness, logged round, drill, tracked practice metric and screen is indexed
 with the number already computed for it and the URL that shows it. A question
 is matched against that index, and each result deep-links into the filtered
-view — "150–175 yd approach" opens `/stats?category=approach&distance=150-175`,
+view — "150–175 yd approach" opens `/rounds?category=approach&distance=150-175`,
 which is the same 44 shots and the same −2.36 a round the answer quoted.
 
 Three things the matching has to get right, each with a test:
@@ -173,16 +173,24 @@ API key the rule-based answer states the same facts in plainer language.
 
 ## Three screens
 
-**Home** is the current priority, today's session and the last round. The
-evidence behind the priority sits in a `<details>` rather than on the surface:
-it is what makes the ranking trustworthy, and it is four lines of prose on a
-screen that should read at a glance.
+**Swing** is the video library. Recording uses a file input with `capture`,
+which is the phone's camera and costs no recorder code, and the clip is written
+to IndexedDB on that device — this app has no file storage, so a clip lives in
+the browser that took it and the screen says so. Open one and you get the
+biggest issue first, then what that flaw tends to do, then your goals, then
+every measured position against its band. Trimming stores two numbers beside
+the clip; nothing is re-encoded.
 
-**Rounds** is every round plus the full strokes-gained breakdown, filterable.
-The breakdowns live here because this is where the shots come from.
+**Practice** is the landing screen, because it is the one that says what to do
+next. Priority #1 and #2 carry a one-line explanation, a tag saying whether the
+weakness shows up in the swing or only on the card, and the evidence a tap away
+in a `<details>` — it is what makes the ranking trustworthy, and four lines of
+prose on a screen that should read at a glance. **Start practice** picks a goal
+(a ranked weakness, or the swing itself) and lists the drills for it with the
+number to beat.
 
-**Train** is today's session, drill benchmarks, the ranked development areas
-and the swing diagnostic.
+**Play** is every round plus the full strokes-gained breakdown, filterable. The
+breakdowns live here because this is where the shots come from.
 
 There is no training-plan feature. A plan is a promise about six weeks that the
 data rewrites after two, and keeping one in sync with the rankings was more
@@ -296,7 +304,7 @@ npm run typecheck
 npm run build
 ```
 
-70 tests covering the parts where a silent error would be worst:
+75 tests covering the parts where a silent error would be worst:
 
 - **Strokes gained** — normal shots, penalties, out of bounds, putts, holed shots, bunker saves, par-3 tee shots, greenside classification, category sums, incomplete and empty rounds.
 - **Analytics** — distance-band boundaries, per-round division, trend sample floors, weakness ranking, sample-size gating, confidence caps, cross-system corroboration.
@@ -304,6 +312,7 @@ npm run build
 - **Baselines** — rebasing is subtraction, categories still sum to the total, a Tour deficit can become a gain against a weaker level, an unknown id falls back to Tour.
 - **Benchmarks** — the standard rounds up, the best attempt wins over the latest, a short attempt cannot inflate the margin.
 - **Swing diagnostic** — an unmeasured metric is missing rather than fine, an unknown metric is ignored rather than given a band, ranking is by deviation relative to band width.
+- **Clip trimming** — an inverted or hairline trim falls back to the whole clip, a duration the browser has not measured yet is not trusted.
 - **AI schemas** — malformed output is rejected, invented drill ids are dropped, invented skills are discarded, the rule-based coach never fabricates a number.
 - **Ask agent** — generic words do not outrank specific ones, superlatives resolve to the ranked weakness list, a named kind wins, invented result ids are dropped.
 

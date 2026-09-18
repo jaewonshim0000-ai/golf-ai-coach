@@ -236,7 +236,7 @@ describe("ask agent", () => {
     const empty = { ...askState(), rounds: [], segments: [] };
     const index = buildAskIndex(empty);
     assert.ok(index.every((entry) => entry.kind === "screen"));
-    assert.ok(index.some((entry) => entry.href === "/train"));
+    assert.ok(index.some((entry) => entry.href === "/practice"));
   });
 
   it("matches a question to a segment across word endings", () => {

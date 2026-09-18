@@ -45,7 +45,7 @@ export default async function ProfilePage() {
           ) : null
         }
         topLeft={
-          <ButtonLink href="/dashboard" variant="onHero" size="sm" className="md:hidden">
+          <ButtonLink href="/practice" variant="onHero" size="sm" className="md:hidden">
             Close
           </ButtonLink>
         }

@@ -53,7 +53,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
         const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
         if (signInError) throw signInError;
       }
-      router.push("/dashboard");
+      router.push("/practice");
       router.refresh();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Sign-in failed. Please try again.");

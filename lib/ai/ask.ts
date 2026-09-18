@@ -80,9 +80,9 @@ const SCREENS: AskEntry[] = [
   {
     id: "screen:dashboard",
     kind: "screen",
-    title: "Dashboard",
-    detail: "Your current priority, the coach read-out and today's session",
-    href: "/dashboard",
+    title: "Practice",
+    detail: "Your ranked priorities and today's session",
+    href: "/practice",
     keywords: ["home", "priority", "focus", "overview", "summary", "coach"],
   },
   {
@@ -112,18 +112,26 @@ const SCREENS: AskEntry[] = [
   {
     id: "screen:practice",
     kind: "screen",
-    title: "Train",
-    detail: "Today's session, your drills and your swing",
-    href: "/train",
-    keywords: ["train", "training", "session", "range", "log", "results"],
+    title: "Start practice",
+    detail: "Pick a goal and the drills for it",
+    href: "/practice/start",
+    keywords: ["train", "training", "session", "range", "log", "results", "goal"],
   },
   {
     id: "screen:drills",
     kind: "screen",
     title: "Drill library",
     detail: "Every drill, with the metric it tracks and the standard to beat",
-    href: "/train/drills",
+    href: "/practice/drills",
     keywords: ["drills", "exercises", "routines", "library", "search"],
+  },
+  {
+    id: "screen:swing",
+    kind: "screen",
+    title: "Swing",
+    detail: "Your swing videos and the positions measured off them",
+    href: "/swing",
+    keywords: ["swing", "video", "record", "camera", "technique", "positions"],
   },
   {
     id: "screen:profile",
@@ -232,7 +240,7 @@ export function buildAskIndex(state: PlayerState): AskEntry[] {
       kind: "practice",
       title: trend.drill_name,
       detail: `${trend.metric}: ${trend.latest === null ? "no result yet" : percent(trend.latest)} against a ${percent(trend.target)} target · ${trend.sessions} sessions`,
-      href: "/train",
+      href: "/practice",
       keywords: ["practice", "progress", "result", "improving", trend.skill, trend.metric],
     });
   }
@@ -243,7 +251,7 @@ export function buildAskIndex(state: PlayerState): AskEntry[] {
       kind: "drill",
       title: drill.name,
       detail: `${labelize(drill.category)} · tracks ${drill.metric_to_track} · ${drill.recommended_duration} min · ${drill.difficulty}`,
-      href: "/train/drills",
+      href: "/practice/drills",
       keywords: [
         "drill",
         "practice",
@@ -262,7 +270,7 @@ export function buildAskIndex(state: PlayerState): AskEntry[] {
       kind: "swing",
       title: finding.issue,
       detail: `${labelize(finding.category)} · ${finding.certainty} · ${percent(finding.confidence)} confidence · ${finding.severity} severity`,
-      href: "/train#swing",
+      href: `/swing/${finding.swing_session_id}`,
       keywords: ["swing", "technique", "fault", "finding", finding.certainty],
     });
   }
@@ -273,7 +281,7 @@ export function buildAskIndex(state: PlayerState): AskEntry[] {
       kind: "session",
       title: state.session.title,
       detail: `Today · ${state.session.block} block · ${state.session.duration} min · ${state.session.drills.length} drills`,
-      href: "/train",
+      href: "/practice",
       keywords: ["today", "session", "training", "block", "practice", "next"],
     });
   }

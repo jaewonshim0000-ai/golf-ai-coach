@@ -6,13 +6,11 @@ import type { Course, Round, Shot } from "../../types/rounds";
 import type {
   Drill,
   DrillAttempt,
-  PlanAdaptation,
-  PlanSession,
   PracticeItem,
   PracticeSession,
   SwingFinding,
+  SwingMeasurement,
   SwingSession,
-  TrainingPlan,
 } from "../../types/practice";
 import { DRILLS } from "../seed/drills";
 import { serverClient, supabaseConfigured } from "./supabase";
@@ -395,107 +393,6 @@ export async function recordDrillAttempt(
   return data as DrillAttempt;
 }
 
-// ----------------------------------------------------------------- plans
-
-export type PlanBundle = {
-  plan: TrainingPlan;
-  sessions: PlanSession[];
-  adaptations: PlanAdaptation[];
-};
-
-export async function getActivePlan(userId: string): Promise<PlanBundle | null> {
-  const sb = await client();
-  if (!sb) {
-    const s = store();
-    const plan = s.plans.find((p) => p.status === "active") ?? s.plans[s.plans.length - 1];
-    if (!plan) return null;
-    return {
-      plan,
-      sessions: s.planSessions
-        .filter((x) => x.plan_id === plan.id)
-        .sort((a, b) => a.week - b.week || a.day - b.day),
-      adaptations: s.planAdaptations
-        .filter((a) => a.plan_id === plan.id)
-        .sort((a, b) => b.created_at.localeCompare(a.created_at)),
-    };
-  }
-  const { data: plan, error } = await sb
-    .from("training_plans")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("status", "active")
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (error) throw new Error(`getActivePlan: ${error.message}`);
-  if (!plan) return null;
-  const sessions = unwrap(
-    await sb.from("plan_sessions").select("*").eq("plan_id", plan.id).order("week").order("day"),
-    "getActivePlan.sessions",
-  ) as PlanSession[];
-  const adaptations = unwrap(
-    await sb
-      .from("plan_adaptations")
-      .select("*")
-      .eq("plan_id", plan.id)
-      .order("created_at", { ascending: false }),
-    "getActivePlan.adaptations",
-  ) as PlanAdaptation[];
-  return { plan: plan as TrainingPlan, sessions, adaptations };
-}
-
-/** Replaces the active plan. Archiving the old one keeps the history intact. */
-export async function savePlan(
-  userId: string,
-  plan: TrainingPlan,
-  sessions: PlanSession[],
-): Promise<void> {
-  const sb = await client();
-  if (!sb) {
-    const s = store();
-    for (const existing of s.plans) {
-      if (existing.status === "active") existing.status = "archived";
-    }
-    s.plans = s.plans.filter((p) => p.id !== plan.id);
-    s.plans.push(plan);
-    s.planSessions = s.planSessions.filter((x) => x.plan_id !== plan.id);
-    s.planSessions.push(...sessions);
-    return;
-  }
-  await sb.from("training_plans").update({ status: "archived" }).eq("user_id", userId).eq("status", "active");
-  const { error } = await sb.from("training_plans").upsert(plan);
-  if (error) throw new Error(`savePlan: ${error.message}`);
-  await sb.from("plan_sessions").delete().eq("plan_id", plan.id);
-  const { error: sessionError } = await sb.from("plan_sessions").insert(sessions);
-  if (sessionError) throw new Error(`savePlan.sessions: ${sessionError.message}`);
-}
-
-export async function updatePlanSession(
-  planSessionId: string,
-  patch: Partial<PlanSession>,
-): Promise<void> {
-  const sb = await client();
-  if (!sb) {
-    const sessions = store().planSessions;
-    const index = sessions.findIndex((s) => s.id === planSessionId);
-    if (index >= 0) sessions[index] = { ...sessions[index]!, ...patch };
-    return;
-  }
-  const { error } = await sb.from("plan_sessions").update(patch).eq("id", planSessionId);
-  if (error) throw new Error(`updatePlanSession: ${error.message}`);
-}
-
-export async function addPlanAdaptation(adaptation: Omit<PlanAdaptation, "id">): Promise<void> {
-  const sb = await client();
-  const row: PlanAdaptation = { ...adaptation, id: newId("adapt") };
-  if (!sb) {
-    store().planAdaptations.unshift(row);
-    return;
-  }
-  const { error } = await sb.from("plan_adaptations").insert(row);
-  if (error) throw new Error(`addPlanAdaptation: ${error.message}`);
-}
-
 // ----------------------------------------------------------------- swing
 
 export async function getSwingSessions(userId: string): Promise<SwingSession[]> {
@@ -575,3 +472,47 @@ export async function deleteSwingFinding(userId: string, findingId: string): Pro
 }
 
 export { DEMO_USER_ID };
+
+export async function getSwingMeasurements(userId: string): Promise<SwingMeasurement[]> {
+  const sb = await client();
+  if (!sb) return [...store().swingMeasurements];
+  const sessions = await getSwingSessions(userId);
+  if (sessions.length === 0) return [];
+  return unwrap(
+    await sb
+      .from("swing_measurements")
+      .select("*")
+      .in(
+        "swing_session_id",
+        sessions.map((session) => session.id),
+      ),
+    "getSwingMeasurements",
+  );
+}
+
+/**
+ * One row per metric per session. Re-measuring replaces the previous value
+ * rather than appending, so the diagnostic reads the current swing and not an
+ * average of every attempt to measure it.
+ */
+export async function saveSwingMeasurement(
+  measurement: Omit<SwingMeasurement, "id">,
+): Promise<void> {
+  const sb = await client();
+  const row: SwingMeasurement = { ...measurement, id: newId("measure") };
+  if (!sb) {
+    const s = store();
+    s.swingMeasurements = s.swingMeasurements.filter(
+      (m) => !(m.swing_session_id === row.swing_session_id && m.metric === row.metric),
+    );
+    s.swingMeasurements.push(row);
+    return;
+  }
+  await sb
+    .from("swing_measurements")
+    .delete()
+    .eq("swing_session_id", row.swing_session_id)
+    .eq("metric", row.metric);
+  const { error } = await sb.from("swing_measurements").insert(row);
+  if (error) throw new Error(`saveSwingMeasurement: ${error.message}`);
+}

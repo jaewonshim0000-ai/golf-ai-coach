@@ -3,19 +3,16 @@ import type { HandicapEntry, PlayerProfile, User } from "../../types/player";
 import type { Course, HoleSpec, Round, Shot } from "../../types/rounds";
 import type {
   DrillAttempt,
-  PlanAdaptation,
-  PlanSession,
   PracticeItem,
   PracticeSession,
   SwingFinding,
+  SwingMeasurement,
   SwingSession,
-  TrainingPlan,
 } from "../../types/practice";
 import { scoreShots } from "../golf/strokes-gained";
 import { buildSegments } from "../analytics/aggregate";
 import { identifyWeaknesses } from "../analytics/weaknesses";
 import { practiceTrends } from "../analytics/practice-progress";
-import { buildPlanSkeleton } from "../practice/plan-builder";
 import { DRILLS_BY_ID } from "./drills";
 
 /**
@@ -487,9 +484,7 @@ export type DemoData = {
   drillAttempts: DrillAttempt[];
   swingSessions: SwingSession[];
   swingFindings: SwingFinding[];
-  plan: TrainingPlan;
-  planSessions: PlanSession[];
-  planAdaptations: PlanAdaptation[];
+  swingMeasurements: SwingMeasurement[];
 };
 
 export const DEMO_USER_ID = "demo-user-0000-0000-000000000001";
@@ -627,7 +622,6 @@ function buildDemoData(today: Date): DemoData {
     practiceSessions.push({
       id: sessionId,
       user_id: userId,
-      plan_session_id: null,
       title: template.title,
       location: "Meadow Park Range",
       focus: template.focus,
@@ -784,53 +778,38 @@ function buildDemoData(today: Date): DemoData {
     },
   ];
 
-  // ---- derived plan -------------------------------------------------------
-  // The plan comes out of the same pipeline the app uses at runtime.
-  const scored = scoreShots(shots);
-  const trends = practiceTrends(drillAttempts, [...DRILLS_BY_ID.values()]);
-  const weaknesses = identifyWeaknesses({
-    segments: buildSegments(scored),
-    profile,
-    practiceTrends: trends,
-    swingFindings,
-    totalRounds: rounds.length,
-  });
-
-  const planStart = daysAgo(11, today);
-  const skeleton = buildPlanSkeleton({
-    profile,
-    weaknesses,
-    practiceTrends: trends,
-    weeks: 2,
-    startsOn: planStart,
-    now: `${planStart}T08:00:00.000Z`,
-  });
-
-  const elapsedDays = 11;
-  const planSessions: PlanSession[] = skeleton.sessions.map((session) => {
-    const offset = (session.week - 1) * 7 + (session.day - 1);
-    if (session.is_rest || offset >= elapsedDays) return session;
-    return { ...session, status: "complete" as const };
-  });
-
-  const plan: TrainingPlan = { ...skeleton.plan, status: "active" };
-
-  const planAdaptations: PlanAdaptation[] = [
-    {
-      id: "adapt_1",
-      plan_id: plan.id,
-      created_at: `${daysAgo(4, today)}T20:00:00.000Z`,
-      trigger: "Practice session completed",
-      verdict: "on_track",
-      summary:
-        "Contact has moved from 61% to 74% against a 75% standard, and the last three rounds show the 150-175 yard losses shrinking. The technical block is doing its job.",
-      changes: [
-        "Reduce the blocked contact drill from 15 to 10 minutes.",
-        "Add a random approach block with a different yardage on every shot.",
-        "Keep the transition drill as a warm-up rather than the main block.",
-      ],
-    },
-  ];
+  /*
+    Measurements for the down-the-line session. These are hand-entered values
+    of the kind a coach reads off a video - the app has no pose estimation, so
+    the diagnostic screen labels them as manual, and the numbers are chosen to
+    agree with the recorded findings rather than to flatter the player.
+  */
+  const swingMeasurements: SwingMeasurement[] = [
+    ["pelvis_bend_address", "address", 22, 0.7],
+    ["chest_bend_address", "address", 34, 0.7],
+    ["pelvis_turn_top", "top", 41, 0.6],
+    ["chest_turn_top", "top", 86, 0.6],
+    ["pelvis_sway_top", "top", 4.2, 0.5],
+    ["pelvis_lift_top", "top", 1.1, 0.5],
+    ["chest_side_bend_top", "top", 12, 0.6],
+    ["pelvis_turn_impact", "impact", 33, 0.6],
+    ["chest_turn_impact", "impact", 24, 0.6],
+    ["pelvis_sway_impact", "impact", 0.8, 0.5],
+    ["pelvis_thrust_impact", "impact", 1.4, 0.5],
+    ["head_sway_impact", "impact", -2.9, 0.5],
+  ].map(([metric, phase, value, confidence], index) => ({
+    id: `measure_${index + 1}`,
+    swing_session_id: "swing_1",
+    phase: phase as SwingMeasurement["phase"],
+    metric: metric as string,
+    value: value as number,
+    unit: (metric as string).includes("sway") ||
+      (metric as string).includes("lift") ||
+      (metric as string).includes("thrust")
+      ? "in"
+      : "deg",
+    confidence: confidence as number,
+  }));
 
   return {
     user,
@@ -844,9 +823,7 @@ function buildDemoData(today: Date): DemoData {
     drillAttempts,
     swingSessions,
     swingFindings,
-    plan,
-    planSessions,
-    planAdaptations,
+    swingMeasurements,
   };
 }
 

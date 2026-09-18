@@ -59,7 +59,7 @@ export default async function PracticeSessionPage({
           </>
         }
         topLeft={
-          <ButtonLink href="/practice" variant="onHero" size="sm">
+          <ButtonLink href="/train" variant="onHero" size="sm">
             <ArrowLeft className="h-3.5 w-3.5" /> Practice
           </ButtonLink>
         }

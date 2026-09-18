@@ -2,13 +2,11 @@ import type { HandicapEntry, PlayerProfile, User } from "../../types/player";
 import type { Course, Round, Shot } from "../../types/rounds";
 import type {
   DrillAttempt,
-  PlanAdaptation,
-  PlanSession,
   PracticeItem,
   PracticeSession,
   SwingFinding,
+  SwingMeasurement,
   SwingSession,
-  TrainingPlan,
 } from "../../types/practice";
 import { demoData, DEMO_USER_ID } from "../seed/demo-player";
 
@@ -31,9 +29,7 @@ export type DemoStore = {
   drillAttempts: DrillAttempt[];
   swingSessions: SwingSession[];
   swingFindings: SwingFinding[];
-  plans: TrainingPlan[];
-  planSessions: PlanSession[];
-  planAdaptations: PlanAdaptation[];
+  swingMeasurements: SwingMeasurement[];
 };
 
 declare global {
@@ -55,9 +51,7 @@ function create(): DemoStore {
     drillAttempts: [...data.drillAttempts],
     swingSessions: [...data.swingSessions],
     swingFindings: [...data.swingFindings],
-    plans: [data.plan],
-    planSessions: [...data.planSessions],
-    planAdaptations: [...data.planAdaptations],
+    swingMeasurements: [...data.swingMeasurements],
   };
 }
 

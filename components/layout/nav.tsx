@@ -2,25 +2,19 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  BarChart3,
-  CalendarRange,
-  Flag,
-  LayoutDashboard,
-  Target,
-  User,
-  Video,
-} from "lucide-react";
+import { Flag, LayoutDashboard, Target, User } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
+/*
+  Three destinations, because that is how many the app has: where you stand,
+  where you play, where you work. Stats live inside rounds and the swing lives
+  inside training, since neither is a thing you go to on its own.
+*/
 const ITEMS = [
-  { href: "/dashboard", label: "Dashboard", short: "Home", icon: LayoutDashboard },
-  { href: "/practice", label: "Practice", short: "Train", icon: Target },
-  { href: "/plans", label: "Training Plan", short: "Plan", icon: CalendarRange },
+  { href: "/dashboard", label: "Home", short: "Home", icon: LayoutDashboard },
   { href: "/rounds", label: "Rounds", short: "Rounds", icon: Flag },
-  { href: "/stats", label: "Stats", short: "Stats", icon: BarChart3 },
-  { href: "/swing", label: "Swing", short: "Swing", icon: Video },
+  { href: "/train", label: "Train", short: "Train", icon: Target },
   { href: "/profile", label: "Profile", short: "You", icon: User },
 ] as const;
 
@@ -96,8 +90,7 @@ export function MobileNav() {
       className="fixed inset-x-3.5 bottom-[calc(1.25rem+env(safe-area-inset-bottom))] z-40 flex h-[58px] gap-[3px] rounded-[20px] border border-white/60 bg-[rgb(255_254_251_/_0.72)] p-[5px] shadow-[var(--shadow-raised)] backdrop-blur-[26px] backdrop-saturate-150 md:hidden dark:border-white/10 dark:bg-[rgb(20_26_21_/_0.78)]"
     >
       {items.map(({ href, short, label }) => {
-        const active =
-          isActive(pathname, href) || (href === "/rounds" && pathname.startsWith("/rounds"));
+        const active = isActive(pathname, href);
         return (
           <Link
             key={href}

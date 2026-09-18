@@ -103,7 +103,6 @@ export const practiceSessionSchema = z.object({
   energy_level: z.coerce.number().int().min(1).max(5).optional(),
   scheduled_for: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   drill_ids: z.array(z.string().min(1)).min(1, "Pick at least one drill").max(8),
-  plan_session_id: z.string().nullable().default(null),
 });
 export type PracticeSessionInput = z.infer<typeof practiceSessionSchema>;
 
@@ -146,10 +145,6 @@ export const swingFindingSchema = z.object({
 });
 export type SwingFindingInput = z.infer<typeof swingFindingSchema>;
 
-export const planRequestSchema = z.object({
-  weeks: z.coerce.number().int().min(1).max(8).default(2),
-  starts_on: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-});
 
 /** Turns a Zod error into the flat map the forms render. */
 export function fieldErrors(error: z.ZodError): Record<string, string> {
@@ -160,3 +155,11 @@ export function fieldErrors(error: z.ZodError): Record<string, string> {
   }
   return result;
 }
+
+/** A swing measurement typed in by a person, so every field is bounded. */
+export const measurementSchema = z.object({
+  swing_session_id: z.string().min(1),
+  metric: z.string().min(1).max(60),
+  value: z.coerce.number().finite().min(-90).max(180),
+  confidence: z.coerce.number().min(0).max(1).default(0.6),
+});

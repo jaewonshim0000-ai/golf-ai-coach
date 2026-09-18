@@ -36,46 +36,8 @@ export const coachingInsightSchema = z.object({
 });
 export type CoachingInsight = z.infer<typeof coachingInsightSchema>;
 
-export const planSessionSchema = z.object({
-  week: z.number().int().min(1).max(12),
-  day: z.number().int().min(1).max(7),
-  title: z.string().min(3).max(80),
-  objective: z.string().min(10).max(400),
-  block_emphasis: z.enum(PRACTICE_BLOCKS),
-  duration: z.number().int().min(0).max(240),
-  drill_ids: z.array(z.string().min(1)).max(6),
-  is_rest: z.boolean(),
-});
 
-export const practicePlanSchema = z.object({
-  title: z.string().min(5).max(120),
-  primary_goal: z.string().min(10).max(400),
-  rationale: z.string().min(10).max(1200),
-  weeks: z.number().int().min(1).max(12),
-  targets: z
-    .array(
-      z.object({
-        metric: z.string().min(3).max(120),
-        skill: z.string().min(2).max(60),
-        baseline: z.number(),
-        target: z.number(),
-        unit: z.string().max(12),
-      }),
-    )
-    .min(1)
-    .max(4),
-  sessions: z.array(planSessionSchema).min(1).max(84),
-  progression_note: z.string().min(10).max(600),
-});
-export type PracticePlanOutput = z.infer<typeof practicePlanSchema>;
 
-export const planAdaptationSchema = z.object({
-  verdict: z.enum(["on_track", "ahead", "stalled", "regressing"]),
-  summary: z.string().min(10).max(700),
-  changes: z.array(z.string().min(5).max(300)).min(1).max(6),
-  next_session_focus: z.string().min(5).max(300),
-});
-export type PlanAdaptationOutput = z.infer<typeof planAdaptationSchema>;
 
 export const roundSummarySchema = z.object({
   headline: z.string().min(5).max(160),

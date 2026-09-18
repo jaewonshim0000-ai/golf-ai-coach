@@ -5,7 +5,8 @@ import { Loader2, Play } from "lucide-react";
 
 import { createPracticeSessionAction } from "@/app/actions";
 import { IDLE } from "@/lib/action-state";
-import type { Drill, PlanSession } from "@/types/practice";
+import type { Drill } from "@/types/practice";
+import type { SuggestedSession } from "@/lib/practice/session";
 import { PRACTICE_BLOCK_LABELS } from "@/types/practice";
 import { cn } from "@/lib/utils";
 import {
@@ -22,22 +23,21 @@ import {
 import { DrillLibrary } from "./drill-library";
 
 /**
- * Builds a practice session. When the user arrives from the training plan the
- * whole thing is pre-filled from that plan session, so starting today's work is
- * one click.
+ * Builds a practice session, pre-filled from the suggested session so starting
+ * today's work is one click.
  */
 export function SessionBuilder({
   drills,
-  planSession,
+  suggested,
   defaultDuration,
 }: {
   drills: Drill[];
-  planSession: PlanSession | null;
+  suggested: SuggestedSession | null;
   defaultDuration: number;
 }) {
   const [state, formAction, pending] = useActionState(createPracticeSessionAction, IDLE);
-  const [selected, setSelected] = useState<string[]>(planSession?.drill_ids ?? []);
-  const [open, setOpen] = useState(!planSession);
+  const [selected, setSelected] = useState<string[]>(suggested?.drills.map((d) => d.id) ?? []);
+  const [open, setOpen] = useState(!suggested);
   const errors = state.errors ?? {};
   const today = new Date().toISOString().slice(0, 10);
 
@@ -57,20 +57,17 @@ export function SessionBuilder({
       {selected.map((id) => (
         <input key={id} type="hidden" name="drill_ids" value={id} />
       ))}
-      {planSession ? (
-        <input type="hidden" name="plan_session_id" value={planSession.id} />
-      ) : null}
 
       <Card>
         <CardHeader className="flex-row items-start justify-between gap-3">
           <div>
-            <CardTitle>{planSession ? "Today's planned session" : "New practice session"}</CardTitle>
-            {planSession ? (
-              <p className="mt-0.5 text-xs text-fg-muted">{planSession.objective}</p>
+            <CardTitle>{suggested ? "Today's session" : "New session"}</CardTitle>
+            {suggested ? (
+              <p className="mt-0.5 text-xs text-fg-muted">{suggested.objective}</p>
             ) : null}
           </div>
-          {planSession ? (
-            <Badge tone="accent">{PRACTICE_BLOCK_LABELS[planSession.block_emphasis]}</Badge>
+          {suggested ? (
+            <Badge tone="accent">{PRACTICE_BLOCK_LABELS[suggested.block]}</Badge>
           ) : null}
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
@@ -79,7 +76,7 @@ export function SessionBuilder({
               name="title"
               required
               maxLength={90}
-              defaultValue={planSession?.title ?? ""}
+              defaultValue={suggested?.title ?? ""}
               placeholder="Mid-iron contact"
             />
           </Field>
@@ -88,7 +85,7 @@ export function SessionBuilder({
               name="focus"
               required
               maxLength={60}
-              defaultValue={planSession ? PRACTICE_BLOCK_LABELS[planSession.block_emphasis] : ""}
+              defaultValue={suggested ? PRACTICE_BLOCK_LABELS[suggested.block] : ""}
               placeholder="Contact"
             />
           </Field>
@@ -103,7 +100,7 @@ export function SessionBuilder({
               max={240}
               step={5}
               required
-              defaultValue={planSession?.duration || defaultDuration}
+              defaultValue={suggested?.duration || defaultDuration}
             />
           </Field>
           <Field label="Location" error={errors.location}>

@@ -160,11 +160,9 @@ const demoSql = [
   ),
   insert("practice_items", demo.practiceItems),
   insert("drill_attempts", demo.drillAttempts.map((a) => ({ ...a, user_id: "__USER__" }))),
-  insert("training_plans", [{ ...demo.plan, user_id: "__USER__" }]),
-  insert("plan_sessions", demo.planSessions),
-  insert("plan_adaptations", demo.planAdaptations),
   insert("swing_sessions", demo.swingSessions.map((s) => ({ ...s, user_id: "__USER__" }))),
   insert("swing_findings", demo.swingFindings.map((f) => ({ ...f, user_id: "__USER__" }))),
+  insert("swing_measurements", demo.swingMeasurements),
   "commit;",
   "",
 ]

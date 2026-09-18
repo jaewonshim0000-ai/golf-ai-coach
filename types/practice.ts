@@ -99,7 +99,6 @@ export const PRACTICE_BLOCK_LABELS: Record<PracticeBlock, string> = {
 export type PracticeSession = {
   id: string;
   user_id: string;
-  plan_session_id: string | null;
   title: string;
   location: string | null;
   focus: string;
@@ -139,56 +138,6 @@ export type DrillAttempt = {
   raw_value: number | null;
   notes: string | null;
   completed_at: string;
-};
-
-export type TrainingPlan = {
-  id: string;
-  user_id: string;
-  title: string;
-  primary_goal: string;
-  rationale: string;
-  weeks: number;
-  starts_on: string;
-  ends_on: string;
-  status: "active" | "complete" | "archived";
-  /** Measurable success criteria the plan is judged against. */
-  targets: PlanTarget[];
-  generated_by: "ai" | "rules";
-  source_snapshot: string | null;
-  created_at: string;
-};
-
-export type PlanTarget = {
-  metric: string;
-  skill: Skill;
-  baseline: number;
-  target: number;
-  unit: string;
-};
-
-export type PlanSession = {
-  id: string;
-  plan_id: string;
-  week: number;
-  day: number;
-  title: string;
-  objective: string;
-  block_emphasis: PracticeBlock;
-  duration: number;
-  drill_ids: string[];
-  is_rest: boolean;
-  session_id: string | null;
-  status: "scheduled" | "complete" | "skipped";
-};
-
-export type PlanAdaptation = {
-  id: string;
-  plan_id: string;
-  created_at: string;
-  trigger: string;
-  verdict: "on_track" | "ahead" | "stalled" | "regressing";
-  summary: string;
-  changes: string[];
 };
 
 export type SwingSession = {

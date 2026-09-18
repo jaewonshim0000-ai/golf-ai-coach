@@ -30,7 +30,7 @@ export type AskEntryKind =
   | "round"
   | "drill"
   | "practice"
-  | "plan"
+  | "session"
   | "swing"
   | "screen";
 
@@ -88,9 +88,9 @@ const SCREENS: AskEntry[] = [
   {
     id: "screen:stats",
     kind: "screen",
-    title: "Stats",
+    title: "Round stats",
     detail: "Every segment of your game, filterable",
-    href: "/stats",
+    href: "/rounds",
     keywords: ["numbers", "strokes", "gained", "data", "breakdown", "charts", "filter"],
   },
   {
@@ -112,9 +112,9 @@ const SCREENS: AskEntry[] = [
   {
     id: "screen:practice",
     kind: "screen",
-    title: "Practice",
-    detail: "Build a session and record a result for every drill",
-    href: "/practice",
+    title: "Train",
+    detail: "Today's session, your drills and your swing",
+    href: "/train",
     keywords: ["train", "training", "session", "range", "log", "results"],
   },
   {
@@ -122,24 +122,8 @@ const SCREENS: AskEntry[] = [
     kind: "screen",
     title: "Drill library",
     detail: "Every drill, with the metric it tracks and the standard to beat",
-    href: "/practice/drills",
+    href: "/train/drills",
     keywords: ["drills", "exercises", "routines", "library", "search"],
-  },
-  {
-    id: "screen:plans",
-    kind: "screen",
-    title: "Training plan",
-    detail: "Your current block, its targets and the calendar",
-    href: "/plans",
-    keywords: ["plan", "schedule", "calendar", "block", "weeks", "targets"],
-  },
-  {
-    id: "screen:swing",
-    kind: "screen",
-    title: "Swing",
-    detail: "Recorded swing findings and the reference pattern",
-    href: "/swing",
-    keywords: ["video", "technique", "findings", "fault", "positions", "coach"],
   },
   {
     id: "screen:profile",
@@ -152,7 +136,7 @@ const SCREENS: AskEntry[] = [
 ];
 
 /**
- * Where a segment lives on the stats page. Distance bands carry a `min-max` id
+ * Where a segment lives. The breakdowns live on the rounds screen. Distance bands carry a `min-max` id
  * that the stats distance filter already understands; putt bands do not,
  * because that filter works in yards and putts are recorded in feet, so those
  * narrow to the category and let the chart show the band.
@@ -160,19 +144,19 @@ const SCREENS: AskEntry[] = [
 function segmentHref(kind: string, key: string): string {
   switch (kind) {
     case "category":
-      return `/stats?category=${key}`;
+      return `/rounds?category=${key}`;
     case "club":
-      return `/stats?club=${key}`;
+      return `/rounds?club=${key}`;
     case "lie":
-      return `/stats?lie=${key}`;
+      return `/rounds?lie=${key}`;
     case "shot_type":
-      return `/stats?shot_type=${key}`;
+      return `/rounds?shot_type=${key}`;
     case "approach_distance":
-      return `/stats?category=approach&distance=${key.endsWith("+") ? `${parseInt(key, 10)}-600` : key}`;
+      return `/rounds?category=approach&distance=${key.endsWith("+") ? `${parseInt(key, 10)}-600` : key}`;
     case "putt_distance":
-      return "/stats?category=putting";
+      return "/rounds?category=putting";
     default:
-      return "/stats";
+      return "/rounds";
   }
 }
 
@@ -248,7 +232,7 @@ export function buildAskIndex(state: PlayerState): AskEntry[] {
       kind: "practice",
       title: trend.drill_name,
       detail: `${trend.metric}: ${trend.latest === null ? "no result yet" : percent(trend.latest)} against a ${percent(trend.target)} target · ${trend.sessions} sessions`,
-      href: "/practice",
+      href: "/train",
       keywords: ["practice", "progress", "result", "improving", trend.skill, trend.metric],
     });
   }
@@ -259,7 +243,7 @@ export function buildAskIndex(state: PlayerState): AskEntry[] {
       kind: "drill",
       title: drill.name,
       detail: `${labelize(drill.category)} · tracks ${drill.metric_to_track} · ${drill.recommended_duration} min · ${drill.difficulty}`,
-      href: "/practice/drills",
+      href: "/train/drills",
       keywords: [
         "drill",
         "practice",
@@ -278,22 +262,19 @@ export function buildAskIndex(state: PlayerState): AskEntry[] {
       kind: "swing",
       title: finding.issue,
       detail: `${labelize(finding.category)} · ${finding.certainty} · ${percent(finding.confidence)} confidence · ${finding.severity} severity`,
-      href: "/swing",
+      href: "/train#swing",
       keywords: ["swing", "technique", "fault", "finding", finding.certainty],
     });
   }
 
-  if (state.plan) {
-    const progress = state.planProgress;
+  if (state.session) {
     entries.push({
-      id: `plan:${state.plan.plan.id}`,
-      kind: "plan",
-      title: state.plan.plan.title,
-      detail: progress
-        ? `${state.plan.plan.weeks}-week block · ${progress.completed} of ${progress.scheduled} sessions complete · ${progress.verdict.replace("_", " ")}`
-        : `${state.plan.plan.weeks}-week block`,
-      href: "/plans",
-      keywords: ["plan", "training", "block", "schedule", "calendar", "targets", "sessions"],
+      id: "session:today",
+      kind: "session",
+      title: state.session.title,
+      detail: `Today · ${state.session.block} block · ${state.session.duration} min · ${state.session.drills.length} drills`,
+      href: "/train",
+      keywords: ["today", "session", "training", "block", "practice", "next"],
     });
   }
 
@@ -397,7 +378,7 @@ const SUPERLATIVE_BONUS = 4;
  */
 const KIND_INTENT: [RegExp, AskEntryKind][] = [
   [/\b(drills?|exercises?)\b/i, "drill"],
-  [/\b(plan|block|calendar|schedule)\b/i, "plan"],
+  [/\b(session|today|block)\b/i, "session"],
   [/\b(swing|technique)\b/i, "swing"],
   [/\b(scorecards?|hole by hole)\b/i, "round"],
 ];
@@ -546,8 +527,8 @@ export function ruleBasedAnswer(question: string, hits: AskEntry[]): string {
       return `${top.title} is the closest drill. ${top.detail}.${more}`;
     case "swing":
       return `Recorded swing finding: ${top.title}. ${top.detail}.${more}`;
-    case "plan":
-      return `Your active plan is ${top.title}. ${top.detail}.${more}`;
+    case "session":
+      return `Today's session is ${top.title}. ${top.detail}.${more}`;
     default:
       return `${top.title} is where that lives — ${top.detail.toLowerCase()}.${more}`;
   }

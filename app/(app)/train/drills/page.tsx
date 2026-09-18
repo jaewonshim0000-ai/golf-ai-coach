@@ -18,7 +18,7 @@ export default function DrillLibraryPage() {
         title={<>Drill<br />library</>}
         description="Each one has a metric you can actually record and a standard to beat."
         topLeft={
-          <ButtonLink href="/practice" variant="onHero" size="sm">
+          <ButtonLink href="/train" variant="onHero" size="sm">
             Practice
           </ButtonLink>
         }

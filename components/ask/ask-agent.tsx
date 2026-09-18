@@ -28,7 +28,7 @@ const KIND_LABEL: Record<AskEntry["kind"], string> = {
   round: "Round",
   drill: "Drill",
   practice: "Practice",
-  plan: "Plan",
+  session: "Today",
   swing: "Swing",
   screen: "Screen",
 };

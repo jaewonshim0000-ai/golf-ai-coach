@@ -2,7 +2,11 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { Flag } from "lucide-react";
 
-import { TrendLine } from "@/components/charts";
+import { Suspense } from "react";
+
+import { CountBars, DivergingBars, TrendLine } from "@/components/charts";
+import { BaselinePicker } from "@/components/stats/baseline-picker";
+import { StatsFilters } from "@/components/stats/filters";
 import {
   Badge,
   ButtonLink,
@@ -14,7 +18,25 @@ import {
   MiniCard,
   PageHero,
   SectionHeading,
+  Skeleton,
+  Stat,
 } from "@/components/ui/primitives";
+import type { Club, Lie, SGCategory, ShotType } from "@/types/golf";
+import { SG_CATEGORIES, SG_CATEGORY_LABELS, bandStart, labelize } from "@/types/golf";
+import type { StatsFilters as Filters } from "@/types/analytics";
+import {
+  applyFilters,
+  buildSegments,
+  missBreakdown,
+  summarizeStrokesGained,
+} from "@/lib/analytics/aggregate";
+import {
+  baselineForHandicap,
+  getBaseline,
+  rebaseRound,
+  rebaseSegment,
+  rebaseSummary,
+} from "@/lib/golf/baselines";
 import { summarizeRound } from "@/lib/golf/strokes-gained";
 import * as repo from "@/lib/db/repo";
 import { loadPlayerState } from "@/lib/player-state";
@@ -23,17 +45,70 @@ import { cn, formatDate, relativeDays, signed, toParLabel } from "@/lib/utils";
 export const metadata: Metadata = { title: "Rounds" };
 export const dynamic = "force-dynamic";
 
-export default async function RoundsPage() {
+type Search = {
+  baseline?: string;
+  range?: string;
+  category?: string;
+  club?: string;
+  lie?: string;
+  shot_type?: string;
+  distance?: string;
+};
+
+function toFilters(search: Search): Filters {
+  const filters: Filters = {};
+  if (search.range) {
+    const days = Number(search.range);
+    if (Number.isFinite(days)) {
+      filters.from = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
+    }
+  }
+  if (search.category) filters.categories = [search.category as SGCategory];
+  if (search.club) filters.clubs = [search.club as Club];
+  if (search.lie) filters.lies = [search.lie as Lie];
+  if (search.shot_type) filters.shotTypes = [search.shot_type as ShotType];
+  if (search.distance) {
+    const [min, max] = search.distance.split("-").map(Number);
+    if (Number.isFinite(min)) filters.minDistance = min;
+    if (Number.isFinite(max)) filters.maxDistance = max;
+  }
+  return filters;
+}
+
+export default async function RoundsPage({ searchParams }: { searchParams: Promise<Search> }) {
   const user = await repo.currentUser();
   if (!user) return null;
-  const state = await loadPlayerState(user.id);
+  const [state, search] = await Promise.all([loadPlayerState(user.id), searchParams]);
+
+  const baseline = search.baseline
+    ? getBaseline(search.baseline)
+    : baselineForHandicap(state.profile?.handicap_index ?? null);
+
+  const shots = applyFilters(state.shots, toFilters(search), state.rounds);
+  const summary = rebaseSummary(summarizeStrokesGained(shots), baseline);
+  const segments = buildSegments(shots).map((segment) => rebaseSegment(segment, baseline));
+
+  const bars = (kind: string, strip = "") =>
+    segments
+      .filter((segment) => segment.kind === kind)
+      .sort((a, b) =>
+        kind.endsWith("distance")
+          ? bandStart(a.key) - bandStart(b.key)
+          : a.sg_per_round - b.sg_per_round,
+      )
+      .map((segment) => ({ label: segment.label.replace(strip, ""), value: segment.sg_per_round }));
+
+  const misses = missBreakdown(shots).map((miss) => ({
+    label: labelize(miss.direction),
+    value: miss.count,
+  }));
 
   return (
     <div className="space-y-5">
       <PageHero
         art="course"
         title="All rounds"
-        description="Every shot you log feeds the strokes-gained engine. Nothing here is estimated."
+        description="Every shot you log. Nothing estimated."
         action={
           <ButtonLink href="/rounds/new" size="sm">
             <Flag className="h-3.5 w-3.5" /> New round
@@ -66,7 +141,10 @@ export default async function RoundsPage() {
 
           <div className="grid gap-2.5 md:grid-cols-2">
             {state.rounds.map((round) => {
-              const stats = summarizeRound(round, state.shotsByRound.get(round.id) ?? []);
+              const stats = rebaseRound(
+                summarizeRound(round, state.shotsByRound.get(round.id) ?? []),
+                baseline,
+              );
               return (
                 <MiniCard key={round.id} className="transition-colors hover:border-border-strong">
                   <Link href={`/rounds/${round.id}`} className="block p-3.5">
@@ -116,9 +194,88 @@ export default async function RoundsPage() {
               );
             })}
           </div>
+
+          <SectionHeading
+            title="Breakdown"
+            description={`Every segment of your game, against a ${baseline.label.toLowerCase()}.`}
+          />
+
+          <BaselinePicker current={baseline.id} />
+
+          <Suspense fallback={<Skeleton className="h-9 w-full" />}>
+            <StatsFilters />
+          </Suspense>
+
+          {shots.length === 0 ? (
+            <EmptyState title="No shots match" message="Widen the filters." />
+          ) : (
+            <>
+              <Card>
+                <CardContent className="grid grid-cols-3 gap-x-3 gap-y-4 p-5">
+                  <Stat label="Shots" value={summary.shots} sub={`${summary.rounds} rounds`} />
+                  <Stat
+                    label="SG / round"
+                    value={signed(summary.per_round, 2)}
+                    tone={summary.per_round >= 0 ? "good" : "bad"}
+                  />
+                  <Stat
+                    label="SG total"
+                    value={signed(summary.total, 1)}
+                    tone={summary.total >= 0 ? "good" : "bad"}
+                  />
+                  {SG_CATEGORIES.map((category) => (
+                    <Stat
+                      key={category}
+                      label={SG_CATEGORY_LABELS[category]}
+                      value={signed(summary.by_category[category].per_round)}
+                      sub={`${summary.by_category[category].shots} shots`}
+                      tone={summary.by_category[category].per_round >= 0 ? "good" : "bad"}
+                    />
+                  ))}
+                </CardContent>
+              </Card>
+
+              <div className="grid gap-5 lg:grid-cols-2">
+                <ChartCard title="By category">
+                  <DivergingBars
+                    data={SG_CATEGORIES.map((category) => ({
+                      label: SG_CATEGORY_LABELS[category],
+                      value: summary.by_category[category].per_round,
+                    }))}
+                  />
+                </ChartCard>
+                <ChartCard title="Approach by distance">
+                  <DivergingBars data={bars("approach_distance", " yd approach")} compact />
+                </ChartCard>
+                <ChartCard title="Putting by distance">
+                  <DivergingBars data={bars("putt_distance", "Putts ")} compact />
+                </ChartCard>
+                <ChartCard title="By club">
+                  <DivergingBars data={bars("club").slice(0, 10)} compact />
+                </ChartCard>
+                <ChartCard title="By lie">
+                  <DivergingBars data={bars("lie")} compact />
+                </ChartCard>
+                <ChartCard title="Miss directions">
+                  <CountBars data={misses} height={150} />
+                </ChartCard>
+              </div>
+            </>
+          )}
         </>
       )}
     </div>
+  );
+}
+
+function ChartCard({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+      </CardHeader>
+      <CardContent>{children}</CardContent>
+    </Card>
   );
 }
 

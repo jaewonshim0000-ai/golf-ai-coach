@@ -5,14 +5,16 @@ import type {
   Drill,
   DrillAttempt,
   PracticeSession,
+  Skill,
   SwingFinding,
+  SwingMeasurement,
   SwingSession,
 } from "./../types/practice";
 import { buildSegments, scoringTrend, sgTrend, summarizeStrokesGained } from "./analytics/aggregate";
 import { improvementSummary, practiceTrends, practiceVolume, type ImprovementSummary, type PracticeVolume } from "./analytics/practice-progress";
 import { identifyWeaknesses } from "./analytics/weaknesses";
 import { scoreShots } from "./golf/strokes-gained";
-import { evaluatePlanProgress, type PlanProgress } from "./practice/plan-builder";
+import { suggestSession, type SuggestedSession } from "./practice/session";
 import { buildCoachingContext, type CoachingContext } from "./ai/context";
 import * as repo from "./db/repo";
 
@@ -40,9 +42,10 @@ export type PlayerState = {
   volume: PracticeVolume;
   swingSessions: SwingSession[];
   swingFindings: SwingFinding[];
+  swingMeasurements: SwingMeasurement[];
   handicapHistory: HandicapEntry[];
-  plan: repo.PlanBundle | null;
-  planProgress: PlanProgress | null;
+  /** Rebuilt on every request from the current ranking, never stored. */
+  session: SuggestedSession | null;
   sgTrend: TrendPoint[];
   scoringTrend: TrendPoint[];
   context: CoachingContext | null;
@@ -59,7 +62,7 @@ export async function loadPlayerState(userId: string): Promise<PlayerState> {
     swingSessions,
     swingFindings,
     handicapHistory,
-    plan,
+    swingMeasurements,
   ] = await Promise.all([
     repo.getProfile(userId),
     repo.getRounds(userId),
@@ -69,7 +72,7 @@ export async function loadPlayerState(userId: string): Promise<PlayerState> {
     repo.getSwingSessions(userId),
     repo.getSwingFindings(userId),
     repo.getHandicapHistory(userId),
-    repo.getActivePlan(userId),
+    repo.getSwingMeasurements(userId),
   ]);
 
   const drills = repo.getDrills();
@@ -94,8 +97,17 @@ export async function loadPlayerState(userId: string): Promise<PlayerState> {
       })
     : [];
 
-  const planProgress = plan ? evaluatePlanProgress(plan.plan, plan.sessions, trends) : null;
   const scoring = scoringTrend(rounds);
+
+  // A skill counts as met only if every tracked drill for it is meeting its
+  // standard, so one strong drill cannot promote the block on its own.
+  const met = new Set<Skill>();
+  for (const trend of trends) {
+    if (trends.filter((t) => t.skill === trend.skill).every((t) => t.meeting_target)) {
+      met.add(trend.skill);
+    }
+  }
+  const session = suggestSession(profile, weaknesses, (skill) => met.has(skill));
 
   const context =
     profile !== null
@@ -110,7 +122,6 @@ export async function loadPlayerState(userId: string): Promise<PlayerState> {
           swingSessions,
           swingFindings,
           drills,
-          plan: plan && planProgress ? { ...plan, progress: planProgress } : null,
           scoringTrend: scoring,
         })
       : null;
@@ -132,27 +143,12 @@ export async function loadPlayerState(userId: string): Promise<PlayerState> {
     volume: practiceVolume(practiceSessions),
     swingSessions,
     swingFindings,
+    swingMeasurements,
     handicapHistory,
-    plan,
-    planProgress,
+    session,
     sgTrend: sgTrend(rounds, shotsByRound),
     scoringTrend: scoring,
     context,
     hasData: shots.length > 0 || drillAttempts.length > 0,
   };
-}
-
-/** Today's plan session, if the active plan has one scheduled for today. */
-export function todaysSession(state: PlayerState, today = new Date()) {
-  if (!state.plan) return null;
-  const start = new Date(`${state.plan.plan.starts_on}T00:00:00.000Z`);
-  const dayOffset = Math.floor((today.getTime() - start.getTime()) / 86_400_000);
-  if (dayOffset < 0) return null;
-  const week = Math.floor(dayOffset / 7) + 1;
-  const day = (dayOffset % 7) + 1;
-  return (
-    state.plan.sessions.find((s) => s.week === week && s.day === day) ??
-    state.plan.sessions.find((s) => s.status === "scheduled" && !s.is_rest) ??
-    null
-  );
 }

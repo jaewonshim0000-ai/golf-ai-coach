@@ -344,7 +344,6 @@ describe("practiceVolume", () => {
     return {
       id: `s${date}`,
       user_id: "u1",
-      plan_session_id: null,
       title: "Session",
       location: null,
       focus: "contact",

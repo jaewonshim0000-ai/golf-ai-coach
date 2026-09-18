@@ -1,20 +1,12 @@
 import type { PracticeMetricTrend, SGSummary, TrendPoint, Weakness } from "../../types/analytics";
 import type { PlayerProfile } from "../../types/player";
 import type { Round, ScoredShot } from "../../types/rounds";
-import type {
-  Drill,
-  PlanSession,
-  PracticeSession,
-  SwingFinding,
-  SwingSession,
-  TrainingPlan,
-} from "../../types/practice";
+import type { Drill, PracticeSession, SwingFinding, SwingSession } from "../../types/practice";
 import { GOAL_LABELS } from "../../types/player";
 import { SG_CATEGORIES, SG_CATEGORY_LABELS } from "../../types/golf";
 import { summarizeStrokesGained } from "../analytics/aggregate";
 import { improvementSummary, practiceVolume } from "../analytics/practice-progress";
 import { MIN_SAMPLE } from "../analytics/weaknesses";
-import type { PlanProgress } from "../practice/plan-builder";
 import { BASELINE_NAME } from "../golf/expected-strokes";
 
 /**
@@ -101,14 +93,6 @@ export type CoachingContext = {
     certainty: string;
     confidence: number;
   }[];
-  activePlan: {
-    title: string;
-    week: number | null;
-    completed: number;
-    scheduled: number;
-    verdict: string;
-    signals: string[];
-  } | null;
   availableDrills: { id: string; name: string; skill: string; category: string; minutes: number }[];
   scoringTrend: TrendPoint[];
 };
@@ -124,7 +108,6 @@ export type ContextInput = {
   swingSessions: SwingSession[];
   swingFindings: SwingFinding[];
   drills: Drill[];
-  plan?: { plan: TrainingPlan; sessions: PlanSession[]; progress: PlanProgress } | null;
   scoringTrend?: TrendPoint[];
   now?: Date;
 };
@@ -233,16 +216,6 @@ export function buildCoachingContext(input: ContextInput): CoachingContext {
         confidence: f.confidence,
       };
     }),
-    activePlan: input.plan
-      ? {
-          title: input.plan.plan.title,
-          week: currentWeek(input.plan.plan, input.now ?? new Date()),
-          completed: input.plan.progress.completed,
-          scheduled: input.plan.progress.scheduled,
-          verdict: input.plan.progress.verdict,
-          signals: input.plan.progress.signals,
-        }
-      : null,
     availableDrills: input.drills.map((d) => ({
       id: d.id,
       name: d.name,
@@ -254,12 +227,6 @@ export function buildCoachingContext(input: ContextInput): CoachingContext {
   };
 }
 
-function currentWeek(plan: TrainingPlan, now: Date): number | null {
-  const start = new Date(`${plan.starts_on}T00:00:00.000Z`).getTime();
-  const elapsed = now.getTime() - start;
-  if (elapsed < 0) return null;
-  return Math.min(plan.weeks, Math.floor(elapsed / (7 * 86_400_000)) + 1);
-}
 
 /** Compact prompt rendering. JSON keeps the model honest about which field is which. */
 export function renderContext(context: CoachingContext): string {

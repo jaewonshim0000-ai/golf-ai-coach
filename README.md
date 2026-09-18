@@ -2,7 +2,7 @@
 
 > Your golf coach that actually learns your game.
 
-A persistent golf intelligence system. It combines three data sources — **course performance**, **practice results** and **swing findings** — into a single ranked development priority, generates a training plan against it, and re-evaluates that plan every time new results arrive.
+A persistent golf intelligence system. It combines three data sources — **course performance**, **practice results** and **swing measurements** — into a single ranked development priority, builds today's session against it, and re-ranks every time new results arrive.
 
 It is deliberately not "a golf app with AI bolted on". Strokes gained, trends, sample sizes and weakness ranking are computed by deterministic code. The model is the reasoning layer on top of those signals, and when there is no model configured the app still works — a rule-based coach reads the same signals and says the same things in plainer language.
 
@@ -59,14 +59,14 @@ Every arrow is implemented:
 
 | Step | Where |
 | --- | --- |
-| Collect golf data | `app/(app)/rounds/[id]/play`, `app/(app)/practice`, `app/(app)/swing` |
+| Collect golf data | `app/(app)/rounds/[id]/play`, `app/(app)/train` |
 | Normalise + score | `lib/golf/strokes-gained` |
 | Analyse performance | `lib/analytics/aggregate.ts` |
 | Identify weaknesses | `lib/analytics/weaknesses.ts` |
 | Cross-reference systems | `lib/analytics/weaknesses.ts` (evidence), `lib/ai/context.ts` |
 | Determine priority | `lib/analytics/weaknesses.ts` (priority score) |
-| Generate training plan | `lib/practice/plan-builder.ts` + `lib/ai/practice-plan.ts` |
-| Track training | `app/(app)/practice/sessions/[id]` |
+| Build today's session | `lib/practice/session.ts` |
+| Track training | `app/(app)/train/sessions/[id]` |
 | Measure improvement | `lib/analytics/practice-progress.ts` |
 | Update priority | `lib/player-state.ts` (recomputed on every request) |
 
@@ -79,18 +79,18 @@ To see it close, open the dashboard, note the evidence behind the current priori
 ```
 app/
   (auth)/           sign in, sign up
-  (app)/            the product, behind auth + an onboarded profile
+  (app)/            home, rounds, train - behind auth + an onboarded profile
   onboarding/       four-step profile builder
   actions.ts        every server action, each Zod-validated
 components/
   ui/               the design system (no component library, no chart library)
   charts/           bars and sparklines drawn in CSS and inline SVG
   ask/              the find-it agent (a native <dialog>)
-  dashboard/ practice/ rounds/ plans/ swing/ forms/
+  dashboard/ practice/ rounds/ swing/ stats/ forms/
 lib/
-  golf/             expected strokes tables, strokes-gained engine
+  golf/             expected strokes, strokes-gained engine, baselines, swing metrics
   analytics/        aggregation, segments, weakness ranking, practice progress
-  practice/         deterministic plan skeleton + progress evaluation
+  practice/         today's session, drill benchmarks
   ai/               provider abstraction, coaching context, prompts, schemas, ask
   db/               Supabase clients, repository, demo store
   validation/       Zod schemas at the trust boundary
@@ -171,6 +171,78 @@ API key the rule-based answer states the same facts in plainer language.
 
 ---
 
+## Three screens
+
+**Home** is the current priority, today's session and the last round. The
+evidence behind the priority sits in a `<details>` rather than on the surface:
+it is what makes the ranking trustworthy, and it is four lines of prose on a
+screen that should read at a glance.
+
+**Rounds** is every round plus the full strokes-gained breakdown, filterable.
+The breakdowns live here because this is where the shots come from.
+
+**Train** is today's session, drill benchmarks, the ranked development areas
+and the swing diagnostic.
+
+There is no training-plan feature. A plan is a promise about six weeks that the
+data rewrites after two, and keeping one in sync with the rankings was more
+machinery than it was worth. `lib/practice/session.ts` builds the next session
+instead, fresh on every request, from whatever currently costs the most — so it
+can never disagree with the priority shown next to it.
+
+---
+
+## Comparing against your own level
+
+Strokes gained is computed against the PGA Tour expected-strokes tables,
+because that is the only baseline the shot-level maths knows about. That is the
+right place to compute it and the wrong place to read it: an 11-handicap is not
+trying to beat the Tour, and "−10.7 a round" answers a question nobody asked.
+
+`lib/golf/baselines.ts` rebases the display. Rebasing is subtraction, not a
+second engine — if a 10-handicap averages −4.3 a round on approach, this
+player's approach against a 10-handicap is their Tour figure minus that. The
+same player reads −10.7 against the Tour and **+0.3 against a 10-handicap, with
+approach at −1.19 as the one real leak**. The shot-level calculation and every
+test of it are untouched.
+
+The gaps are rounded approximations of published strokes-gained-by-handicap
+figures, held to one decimal on purpose: accurate enough to answer "am I ahead
+of my level?", not precise enough to pretend to be more.
+
+---
+
+## Swing diagnostic
+
+`lib/golf/swing-metrics.ts` compares twelve body positions at address, top and
+impact against reference bands and ranks whatever falls outside, by deviation
+relative to each band's own width.
+
+**It does not measure anything.** There is no pose estimation in this app, so
+every value arrives from a `swing_measurements` row entered by the player or
+their coach — which is exactly the row shape a vision pipeline would write. The
+screen says so in a banner rather than in a footnote. Adding capture later
+means populating the same table; none of the comparison logic changes.
+
+A metric with no measurement is reported as **missing**, never defaulted — a
+diagnostic that silently treats "not measured" as "fine" is worse than no
+diagnostic.
+
+---
+
+## Drill benchmarks
+
+A drill standard is stored as a rate, which is right for comparing across
+sessions and wrong for saying to someone holding a putter. So the rate is the
+source of truth and the count is the presentation: *"Make at least 6 of 10."*
+
+The count rounds **up** — a 60% standard over 9 balls is 6, not 5 — because
+rounding down quietly hands out a standard nobody set. Beat it and the app says
+by how much, comparing on the rate so a 7-of-8 cannot claim the same margin as
+a 7-of-10.
+
+---
+
 ## Strokes gained
 
 `lib/golf/expected-strokes.ts` holds published PGA Tour expected-strokes baselines by lie and distance (feet on the green, yards elsewhere), interpolated between anchors.
@@ -224,12 +296,14 @@ npm run typecheck
 npm run build
 ```
 
-84 tests covering the parts where a silent error would be worst:
+70 tests covering the parts where a silent error would be worst:
 
 - **Strokes gained** — normal shots, penalties, out of bounds, putts, holed shots, bunker saves, par-3 tee shots, greenside classification, category sums, incomplete and empty rounds.
 - **Analytics** — distance-band boundaries, per-round division, trend sample floors, weakness ranking, sample-size gating, confidence caps, cross-system corroboration.
 - **Practice** — baseline vs latest, stalled and regressing detection, refusal to classify under three sessions.
-- **Plans** — every referenced drill exists, facilities are respected, blocks progress technical → pressure, targets are anchored on the player's own baseline, adaptation verdicts.
+- **Baselines** — rebasing is subtraction, categories still sum to the total, a Tour deficit can become a gain against a weaker level, an unknown id falls back to Tour.
+- **Benchmarks** — the standard rounds up, the best attempt wins over the latest, a short attempt cannot inflate the margin.
+- **Swing diagnostic** — an unmeasured metric is missing rather than fine, an unknown metric is ignored rather than given a band, ranking is by deviation relative to band width.
 - **AI schemas** — malformed output is rejected, invented drill ids are dropped, invented skills are discarded, the rule-based coach never fabricates a number.
 - **Ask agent** — generic words do not outrank specific ones, superlatives resolve to the ranked weakness list, a named kind wins, invented result ids are dropped.
 

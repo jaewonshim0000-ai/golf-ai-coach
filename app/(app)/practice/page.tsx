@@ -70,7 +70,7 @@ export default async function PracticePage() {
         <PriorityCard weakness={state.weaknesses[1] ?? null} rank={2} />
       </div>
 
-      <TodaysSession session={state.session} />
+      <TodaysSession session={state.session} attempts={state.drillAttempts} />
 
       <SectionHeading
         title="Your benchmarks"

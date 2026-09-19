@@ -47,11 +47,23 @@
   --c-chart-4: #8659b5;
   --c-chart-5: #b3261e;
 
-  --shadow-card: 0 1px 1px rgb(16 21 17 / 0.03), 0 24px 48px -32px rgb(16 21 17 / 0.45);
-  --shadow-soft: 0 1px 1px rgb(16 21 17 / 0.03), 0 16px 34px -26px rgb(16 21 17 / 0.4);
+  --shadow-card: 0 1px 2px rgb(58 52 38 / 0.05), 0 12px 28px -14px rgb(58 52 38 / 0.3),
+    0 32px 64px -40px rgb(58 52 38 / 0.45);
+  --shadow-soft: 0 1px 2px rgb(58 52 38 / 0.05), 0 10px 22px -14px rgb(58 52 38 / 0.26);
   --shadow-raised: 0 1px 0 rgb(255 255 255 / 0.9) inset, 0 18px 40px -16px rgb(16 21 17 / 0.4),
     0 2px 8px rgb(16 21 17 / 0.08);
-  --shadow-ink: 0 1px 1px rgb(16 21 17 / 0.2), 0 30px 60px -28px rgb(11 22 15 / 0.65);
+  --shadow-ink: 0 2px 4px rgb(11 22 15 / 0.26), 0 24px 48px -20px rgb(11 22 15 / 0.55),
+    0 48px 96px -56px rgb(11 22 15 / 0.7);
+
+  /*
+    Two curves, no more. The first is critically damped: it covers most of the
+    distance in the first third and settles, which is what the eye actually
+    reads. The second overshoots slightly and is reserved for a gesture the
+    user committed to - the drill tick, and nothing else. A bar that bounced
+    would briefly draw a number the player never lost.
+  */
+  --ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-momentum: cubic-bezier(0.34, 1.28, 0.64, 1);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -97,7 +109,8 @@
     --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), 0 24px 48px -32px rgb(0 0 0 / 0.8);
     --shadow-soft: 0 1px 2px rgb(0 0 0 / 0.35), 0 16px 34px -26px rgb(0 0 0 / 0.7);
     --shadow-raised: 0 1px 0 rgb(255 255 255 / 0.05) inset, 0 18px 40px -16px rgb(0 0 0 / 0.75);
-    --shadow-ink: 0 1px 1px rgb(0 0 0 / 0.4), 0 30px 60px -28px rgb(0 0 0 / 0.8);
+    --shadow-ink: 0 2px 4px rgb(0 0 0 / 0.4), 0 24px 48px -20px rgb(0 0 0 / 0.7),
+      0 48px 96px -56px rgb(0 0 0 / 0.85);
   }
 }
 
@@ -129,9 +142,9 @@
   --color-info: var(--c-info);
   --color-info-soft: var(--c-info-soft);
 
-  --radius-card: 22px;
+  --radius-card: 24px;
   --radius-soft: 18px;
-  --radius-control: 14px;
+  --radius-control: 16px;
 
   --shadow-card: var(--shadow-card);
   --shadow-soft: var(--shadow-soft);
@@ -200,53 +213,98 @@ body {
   point it at a real photo and the gradient becomes the fallback underneath.
 */
 .hero-art {
-  background-color: #1e4429;
+  background-color: #111a14;
   background-image:
-    radial-gradient(120% 90% at 16% 2%, rgb(178 216 150 / 0.85), transparent 56%),
-    radial-gradient(85% 70% at 88% 0%, rgb(240 230 176 / 0.55), transparent 52%),
-    radial-gradient(150% 130% at 60% 118%, rgb(9 28 16 / 0.92), transparent 58%),
-    linear-gradient(168deg, #63a06a 0%, #2f6b41 44%, #13301d 100%);
+    radial-gradient(120% 64% at 4% 0%, rgb(47 189 111 / 0.24), transparent 56%),
+    radial-gradient(90% 48% at 100% 100%, rgb(168 135 63 / 0.2), transparent 60%);
 }
 
 .hero-art-range {
-  background-color: #23492f;
+  background-color: #111a14;
   background-image:
-    radial-gradient(110% 80% at 86% 0%, rgb(247 226 150 / 0.8), transparent 54%),
-    radial-gradient(100% 90% at 6% 14%, rgb(140 195 145 / 0.8), transparent 56%),
-    radial-gradient(150% 130% at 44% 118%, rgb(10 26 18 / 0.92), transparent 56%),
-    linear-gradient(162deg, #7fae72 0%, #35714a 46%, #12301f 100%);
+    radial-gradient(110% 60% at 90% 2%, rgb(47 189 111 / 0.22), transparent 54%),
+    radial-gradient(90% 50% at 0% 100%, rgb(168 135 63 / 0.22), transparent 58%);
 }
 
 .hero-art-green {
-  background-color: #1b4430;
+  background-color: #0f1a13;
   background-image:
-    radial-gradient(95% 75% at 24% 0%, rgb(190 226 168 / 0.85), transparent 54%),
-    radial-gradient(120% 100% at 98% 34%, rgb(86 168 118 / 0.7), transparent 54%),
-    radial-gradient(150% 135% at 50% 120%, rgb(7 24 15 / 0.92), transparent 56%),
-    linear-gradient(182deg, #5ea272 0%, #276b48 46%, #102d1e 100%);
+    radial-gradient(100% 60% at 20% 0%, rgb(47 189 111 / 0.28), transparent 54%),
+    radial-gradient(110% 60% at 100% 90%, rgb(47 189 111 / 0.14), transparent 58%);
 }
 
 .hero-art-dusk {
-  background-color: #1f3a45;
+  background-color: #101a1e;
   background-image:
-    radial-gradient(110% 80% at 80% 0%, rgb(250 200 132 / 0.72), transparent 52%),
-    radial-gradient(100% 90% at 2% 20%, rgb(118 176 186 / 0.72), transparent 56%),
-    radial-gradient(150% 135% at 42% 120%, rgb(8 20 26 / 0.92), transparent 56%),
-    linear-gradient(170deg, #6d9ea4 0%, #2d5763 48%, #0f2630 100%);
+    radial-gradient(110% 62% at 82% 0%, rgb(168 135 63 / 0.26), transparent 54%),
+    radial-gradient(95% 55% at 0% 96%, rgb(47 189 111 / 0.18), transparent 58%);
 }
 
 /*
-  The scrim only has to guarantee legible white type over the bottom third. On
-  gradient art it is light; a photograph dropped into `PageHero` sits under the
-  same scrim and the art class stays as the fallback behind it.
+  Drawn topography, drifting. Two contour layers at different speeds give the
+  hero depth without a photograph and without a gradient wash; `PageHero` draws
+  them as SVG so the paths stay crisp at any width.
 */
+@keyframes drift {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-146px);
+  }
+}
+
+@keyframes drift-back {
+  from {
+    transform: translateX(-146px);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.contour-near {
+  animation: drift 13s linear infinite;
+}
+
+.contour-far {
+  animation: drift-back 23s linear infinite;
+}
+
+/* The flight line draws itself once and stops. Never the fastest thing on screen. */
+@keyframes trace {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.trace {
+  stroke-dasharray: 540;
+  stroke-dashoffset: 540;
+  animation: trace 2.4s var(--ease) 0.2s forwards;
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 0.95;
+  }
+}
+
+.breathe {
+  animation: breathe 4s ease-in-out 2.4s infinite;
+}
+
 .hero-scrim {
   background-image: linear-gradient(
     to bottom,
-    rgb(6 14 9 / 0.28) 0%,
-    rgb(6 14 9 / 0) 34%,
-    rgb(6 14 9 / 0.55) 74%,
-    rgb(6 14 9 / 0.78) 100%
+    rgb(17 26 20 / 0.22) 0%,
+    rgb(17 26 20 / 0) 30%,
+    rgb(17 26 20 / 0.42) 72%,
+    rgb(17 26 20 / 0.62) 100%
   );
 }
 
@@ -262,10 +320,10 @@ body {
     3px 3px;
 }
 
-@keyframes rise {
+@keyframes rise-in {
   from {
     opacity: 0;
-    transform: translateY(6px);
+    transform: translateY(16px);
   }
   to {
     opacity: 1;
@@ -273,40 +331,131 @@ body {
   }
 }
 
-.rise {
-  animation: rise 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+/*
+  Card entry: 16px rise and fade, 500ms, 80ms apart down the screen. Applied to
+  a column rather than per card, so a page does not hand-manage its own delays.
+*/
+.rise > * {
+  animation: rise-in 500ms var(--ease) both;
 }
 
-@keyframes shimmer {
-  100% {
-    transform: translateX(100%);
+.rise > *:nth-child(2) {
+  animation-delay: 80ms;
+}
+
+.rise > *:nth-child(3) {
+  animation-delay: 160ms;
+}
+
+.rise > *:nth-child(4) {
+  animation-delay: 240ms;
+}
+
+.rise > *:nth-child(n + 5) {
+  animation-delay: 320ms;
+}
+
+/* Feedback belongs to the press, never to the release. */
+.press {
+  transition: transform 140ms var(--ease);
+}
+
+.press:active {
+  transform: scale(0.972);
+}
+
+.press-lg {
+  transition: transform 160ms var(--ease);
+}
+
+.press-lg:active {
+  transform: scale(0.988);
+}
+
+/* Bars travel to their value and stop flat: no overshoot on a number. */
+@keyframes glide-right {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
   }
 }
 
-.skeleton {
-  position: relative;
-  overflow: hidden;
-  background: var(--c-surface-2);
+.glide {
+  transform-origin: right center;
+  animation: glide-right 650ms var(--ease) 440ms both;
 }
 
-.skeleton::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  transform: translateX(-100%);
-  background: linear-gradient(
-    90deg,
-    transparent,
-    color-mix(in oklab, var(--c-fg) 6%, transparent),
-    transparent
+.glide-left {
+  transform-origin: left center;
+  animation: glide-right 650ms var(--ease) 440ms both;
+}
+
+.glass {
+  backdrop-filter: blur(24px) saturate(180%);
+}
+
+@keyframes sweep {
+  from {
+    background-position: 130% 0;
+  }
+  to {
+    background-position: -50% 0;
+  }
+}
+
+/* A sweep across the placeholder, not a bar sliding over it. */
+.skeleton {
+  background-color: var(--c-track);
+  background-image: linear-gradient(
+    100deg,
+    transparent 26%,
+    color-mix(in oklab, var(--c-surface) 88%, transparent) 42%,
+    transparent 58%
   );
-  animation: shimmer 1.4s infinite;
+  background-size: 340% 100%;
+  background-repeat: no-repeat;
+  animation: sweep 1.6s ease-in-out infinite;
+}
+
+/* The same sweep on the dark card, where the page-coloured one would vanish. */
+.skeleton-ink {
+  background-color: rgb(244 242 233 / 0.12);
+  background-image: linear-gradient(
+    100deg,
+    transparent 26%,
+    rgb(244 242 233 / 0.24) 42%,
+    transparent 58%
+  );
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .rise,
-  .skeleton::after {
-    animation: none;
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition-duration: 1ms !important;
+  }
+
+  .skeleton,
+  .skeleton-ink {
+    background-image: none;
+  }
+}
+
+/* Transparency and contrast preferences make the glass a solid surface. */
+@media (prefers-reduced-transparency: reduce) {
+  .glass {
+    background: var(--c-surface) !important;
+    backdrop-filter: none !important;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .glass {
+    background: var(--c-surface) !important;
+    border-color: var(--c-border-strong) !important;
   }
 }
 

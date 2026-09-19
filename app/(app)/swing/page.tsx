@@ -45,7 +45,7 @@ export default async function SwingLibraryPage() {
           message="Record one down the line and one face on. The diagnostic reads whatever you measure off them."
         />
       ) : (
-        <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4">
+        <div className="relative grid grid-cols-2 gap-2.5 md:grid-cols-4">
           {swings.map(({ session, diagnostic }) => (
             <Link key={session.id} href={`/swing/${session.id}`} className="group block">
               <SwingVideo

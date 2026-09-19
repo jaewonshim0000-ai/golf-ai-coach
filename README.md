@@ -130,14 +130,23 @@ Two consequences worth knowing:
 
 - **Every page opens with a full-bleed hero.** `PageHero` in
   `components/ui/primitives.tsx` cancels the layout padding with a negative
-  margin so the artwork reaches the edges. The artwork is layered CSS
-  gradients, not photographs — pass `image="/some-course.jpg"` to any hero and
-  the photo takes over, with the gradient staying as the fallback behind it.
+  margin so the artwork reaches the edges, and the content rides 24px up over
+  its rounded bottom edge. The artwork is drawn topography, not a photograph:
+  two contour layers drifting at 13s and 23s with a traced flight line over
+  them. Pass `image="/some-course.jpg"` to any hero and the photo takes over.
 - **There is no charting dependency.** Strokes gained is drawn as diverging
   bars either side of a centre line, trends as SVG sparklines, and the value is
   always printed next to the bar rather than hidden behind a hover tooltip,
   which does not exist on a phone. `components/charts/index.tsx` is a server
   component: none of it ships JavaScript.
+- **Two easing curves, no more.** `cubic-bezier(.32,.72,0,1)` is the critically
+  damped default; `cubic-bezier(.34,1.28,.64,1)` overshoots slightly and is
+  reserved for a gesture the user committed to, never for a bar — a bar that
+  bounced would briefly draw a number the player never lost. Press feedback is
+  140ms on pointer-down, cards enter 80ms apart, and the segmented controls run
+  on two radios and a `:has()` selector rather than JavaScript. Everything
+  collapses under `prefers-reduced-motion`, and the glass bar goes solid under
+  `prefers-reduced-transparency` and `prefers-contrast`.
 
 ---
 

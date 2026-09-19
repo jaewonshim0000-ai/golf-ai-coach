@@ -1,13 +1,15 @@
 import Link from "next/link";
-import { Brain, ChevronDown, TrendingDown, TrendingUp } from "lucide-react";
+import { Brain, Check, ChevronDown, TrendingDown, TrendingUp } from "lucide-react";
 
 import type { Evidence, Weakness } from "@/types/analytics";
+import type { DrillAttempt } from "@/types/practice";
 import { SG_CATEGORIES, SG_CATEGORY_LABELS } from "@/types/golf";
 import type { Baseline } from "@/lib/golf/baselines";
 import type { PlayerState } from "@/lib/player-state";
 import type { SuggestedSession } from "@/lib/practice/session";
 import { rebaseRound } from "@/lib/golf/baselines";
 import { summarizeRound } from "@/lib/golf/strokes-gained";
+import { benchmarkFor } from "@/lib/practice/benchmark";
 import { cn, formatDate, percent, relativeDays, signed, toParLabel } from "@/lib/utils";
 import {
   Badge,
@@ -107,98 +109,166 @@ export function PriorityCard({ weakness, rank }: { weakness: Weakness | null; ra
     </>
   );
 
-  /* The quick explanation: one line on why this is the priority, then the
-     evidence a tap away. Neither is worth a screen of prose. */
-  const explanation = (
-    <>
-      <p
-        className={cn(
-          "mt-3 text-[13px] leading-[1.55]",
-          rank === 1 ? "text-ink-fg/80" : "text-fg-muted",
-        )}
-      >
-        {weakness.recommended_action}
-      </p>
-      {weakness.evidence.length > 0 ? (
-        <details
-          className={cn("group mt-4 border-t pt-3.5", rank === 1 ? "border-white/15" : "border-border")}
-        >
-          <summary
-            className={cn(
-              "dsp flex cursor-pointer list-none items-center gap-1.5 text-[10px] font-medium tracking-[0.17em] marker:hidden",
-              rank === 1 ? "text-gold" : "text-fg-subtle",
-            )}
-          >
-            Evidence ({weakness.evidence.length})
-            <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" />
-          </summary>
-          <ul className="mt-3 flex flex-col gap-2.5">
-            {weakness.evidence.map((item, index) => (
-              <EvidenceLine key={index} evidence={item} onInk={rank === 1} />
-            ))}
-          </ul>
-        </details>
-      ) : null}
-    </>
-  );
-
-  if (rank === 2) {
+  /*
+    Rank 1 switches between the reasoning and the evidence with one pill that
+    travels between two labels. Two radios and a `:has()` selector do it with
+    no JavaScript at all, which is also why the panels can be plain markup.
+  */
+  if (rank === 1) {
     return (
-      <Card>
-        <CardContent className="p-5">
-          <Eyebrow className="tracking-[0.2em]">Priority #2</Eyebrow>
-          <div className="mt-2 flex items-start justify-between gap-3">
-            <h3 className="dsp min-w-0 text-[21px] font-semibold leading-[1.05] tracking-[-0.01em]">
-              {weakness.title}
-            </h3>
-            <p className="tabular shrink-0 text-[21px] font-semibold leading-none text-bad">
-              -{weakness.strokes_lost_per_round.toFixed(2)}
-            </p>
+      <InkCard>
+        <div className="p-6" style={INK_GLOW}>
+          <div className="flex flex-wrap items-center gap-2">
+            <Eyebrow className="tracking-[0.2em] text-white/60">Priority #1</Eyebrow>
+            {badges}
           </div>
-          <div className="mt-2.5 flex flex-wrap gap-1.5">{badges}</div>
-          {explanation}
-        </CardContent>
-      </Card>
+
+          <h2 className="dsp mt-3.5 text-[31px] font-semibold leading-[0.98] tracking-[-0.015em]">
+            {weakness.title}
+          </h2>
+
+          <div className="mt-6">
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="tabular text-[36px] font-semibold leading-none tracking-[-0.03em] text-bad">
+                -{weakness.strokes_lost_per_round.toFixed(2)}
+              </span>
+              <span className="text-[11px] text-white/65">
+                a round &middot; {weakness.sample_size} shots &middot; {percent(weakness.confidence)}{" "}
+                confidence
+              </span>
+            </div>
+            <CostBar value={weakness.strokes_lost_per_round} onInk />
+          </div>
+
+          <div className="mt-6 [&:has(#priority-evidence:checked)_.tab-pill]:translate-x-full [&:has(#priority-evidence:checked)_.tab-why]:text-white/70 [&:has(#priority-evidence:checked)_.tab-ev]:text-ink [&:has(#priority-why:checked)_.panel-why]:block [&:has(#priority-evidence:checked)_.panel-ev]:flex">
+            <input
+              type="radio"
+              id="priority-why"
+              name="priority-panel"
+              defaultChecked
+              className="sr-only"
+            />
+            <input type="radio" id="priority-evidence" name="priority-panel" className="sr-only" />
+
+            <div className="relative flex rounded-full bg-white/[0.09] p-1">
+              <span
+                className="tab-pill pointer-events-none absolute inset-y-1 left-1 w-[calc(50%-0.25rem)] rounded-full bg-ink-fg shadow-[0_2px_8px_-4px_rgb(0_0_0_/_0.6)] transition-transform duration-[420ms] [transition-timing-function:var(--ease)]"
+                aria-hidden
+              />
+              <label
+                htmlFor="priority-why"
+                className="tab-why relative z-10 flex-1 cursor-pointer rounded-full py-2.5 text-center text-[12px] font-semibold text-ink transition-colors"
+              >
+                Why this is #1
+              </label>
+              <label
+                htmlFor="priority-evidence"
+                className="tab-ev relative z-10 flex-1 cursor-pointer rounded-full py-2.5 text-center text-[12px] font-semibold text-white/70 transition-colors"
+              >
+                Evidence &middot; {weakness.evidence.length}
+              </label>
+            </div>
+
+            <div className="panel-why hidden min-h-[132px] pt-5">
+              <p className="text-[13px] leading-[1.62] text-ink-fg/85">
+                {weakness.recommended_action}
+              </p>
+              <div className="mt-6 flex gap-2">
+                <ButtonLink href="/practice/start" size="md" className="press flex-1">
+                  Start today&rsquo;s session
+                </ButtonLink>
+                <ButtonLink href="/rounds" size="md" variant="onHero" className="press">
+                  See shots
+                </ButtonLink>
+              </div>
+            </div>
+
+            <ul className="panel-ev hidden min-h-[132px] flex-col gap-3 pt-5">
+              {weakness.evidence.map((item, index) => (
+                <EvidenceLine key={index} evidence={item} onInk />
+              ))}
+            </ul>
+          </div>
+        </div>
+      </InkCard>
     );
   }
 
+  /* Rank 2 is the same content at card weight: cost, then one line, then the
+     evidence a tap away in a disclosure. */
   return (
-    <InkCard>
-      <div className="p-6" style={INK_GLOW}>
-        <div className="flex flex-wrap items-center gap-2">
-          <Eyebrow className="tracking-[0.2em] text-white/60">Priority #1</Eyebrow>
-          {badges}
+    <Card>
+      <CardContent className="p-5">
+        <div className="flex items-center justify-between gap-3">
+          <Eyebrow className="tracking-[0.2em]">Priority #2</Eyebrow>
+          <TrendBadge trend={weakness.trend_label} />
         </div>
-
-        <h2 className="dsp mt-3.5 text-[31px] font-semibold leading-[0.98] tracking-[-0.015em]">
+        <h3 className="dsp mt-3 text-[26px] font-semibold leading-[1.02] tracking-[-0.018em]">
           {weakness.title}
-        </h2>
+        </h3>
 
-        {explanation}
-
-        <div className="mt-5 grid grid-cols-3 gap-3 border-t border-white/15 pt-4">
-          <InkStat
-            label="Cost"
-            value={`-${weakness.strokes_lost_per_round.toFixed(2)}`}
-            sub="per round"
-            tone="bad"
-          />
-          <InkStat
-            label="Confidence"
-            value={percent(weakness.confidence)}
-            sub={`${weakness.sample_size} shots`}
-            divided
-          />
-          <InkStat
-            label="Total"
-            value={`-${weakness.strokes_lost_total.toFixed(1)}`}
-            sub="all rounds"
-            tone="bad"
-            divided
-          />
+        <div className="mt-4 flex items-baseline justify-between gap-3">
+          <span className="tabular text-[24px] font-semibold leading-none tracking-[-0.02em] text-bad">
+            -{weakness.strokes_lost_per_round.toFixed(2)}
+          </span>
+          <span className="text-[11px] text-fg-muted">
+            a round &middot; {weakness.sample_size} shots &middot; {percent(weakness.confidence)}{" "}
+            confidence
+          </span>
         </div>
-      </div>
-    </InkCard>
+        <CostBar value={weakness.strokes_lost_per_round} />
+
+        <div className="mt-4 flex flex-wrap gap-1.5">
+          <Badge tone={SEVERITY_TONE[weakness.severity]}>{weakness.severity}</Badge>
+          <Badge tone="neutral">{priorityKind(weakness)}</Badge>
+        </div>
+
+        <p className="mt-4 text-[13px] leading-[1.62] text-fg-muted">
+          {weakness.recommended_action}
+        </p>
+
+        {weakness.evidence.length > 0 ? (
+          <details className="group mt-4 border-t border-border pt-3.5">
+            <summary className="dsp flex cursor-pointer list-none items-center gap-1.5 text-[10px] font-medium tracking-[0.17em] text-fg-subtle marker:hidden">
+              Evidence ({weakness.evidence.length})
+              <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" />
+            </summary>
+            <ul className="mt-3 flex flex-col gap-2.5">
+              {weakness.evidence.map((item, index) => (
+                <EvidenceLine key={index} evidence={item} />
+              ))}
+            </ul>
+          </details>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
+ * The cost, drawn from the centre line outwards. Half the track is three
+ * strokes a round, which keeps every real figure on the bar without a scale
+ * that changes under the reader.
+ */
+function CostBar({ value, onInk }: { value: number; onInk?: boolean }) {
+  const width = Math.min(50, (Math.abs(value) / 3) * 50);
+  return (
+    <div
+      className={cn(
+        "relative mt-3 h-2 overflow-hidden rounded-full",
+        onInk ? "bg-white/10" : "bg-track",
+      )}
+    >
+      <div
+        className={cn("absolute inset-y-0 left-1/2 w-px", onInk ? "bg-white/35" : "bg-border-strong")}
+        aria-hidden
+      />
+      <div
+        className="glide absolute inset-y-0 right-1/2 rounded-l-full bg-bad"
+        style={{ width: `${width}%` }}
+        aria-hidden
+      />
+    </div>
   );
 }
 
@@ -280,7 +350,13 @@ function TrendBadge({ trend, onInk }: { trend: Weakness["trend_label"]; onInk?: 
  * The training block. It names the strokes it is aimed at, because "technical
  * block" on its own tells a player nothing about why they are doing it.
  */
-export function TodaysSession({ session }: { session: SuggestedSession | null }) {
+export function TodaysSession({
+  session,
+  attempts,
+}: {
+  session: SuggestedSession | null;
+  attempts: DrillAttempt[];
+}) {
   if (!session) {
     return (
       <Card>
@@ -302,41 +378,93 @@ export function TodaysSession({ session }: { session: SuggestedSession | null })
     );
   }
 
+  const benchmarks = session.drills.map((drill) => benchmarkFor(drill, attempts));
+  const met = benchmarks.filter((benchmark) => benchmark.beaten).length;
+
+  /*
+    The ring reports the standards already being met on today's drills, which
+    is a figure the app has rather than a tick box it would have to remember.
+    r=25 on a 60px circle, so the circumference is what the dash array divides.
+  */
+  const circumference = 2 * Math.PI * 25;
+  const filled = (circumference * met) / benchmarks.length;
+  const complete = met === benchmarks.length;
+
   return (
     <Card>
-      <CardHeader className="flex-row items-center justify-between gap-3">
-        <CardTitle>Today</CardTitle>
-        <div className="flex shrink-0 gap-1.5">
-          <Badge tone="neutral">{session.block}</Badge>
-          <Badge tone="accent">{session.duration} min</Badge>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div>
-          <p className="text-[15px] font-medium leading-snug">{session.title}</p>
-          <p className="mt-1 text-[13px] leading-[1.5] text-fg-muted">{session.objective}</p>
+      <CardContent className="p-5">
+        <div className="flex items-center gap-4">
+          <div className="relative h-[60px] w-[60px] shrink-0">
+            {complete ? (
+              <span
+                className="absolute -inset-1.5 rounded-full bg-[radial-gradient(circle,rgb(16_115_63_/_0.22),rgb(16_115_63_/_0)_68%)]"
+                aria-hidden
+              />
+            ) : null}
+            <svg viewBox="0 0 60 60" width="60" height="60" className="relative" aria-hidden>
+              <circle cx="30" cy="30" r="25" fill="none" stroke="var(--c-track)" strokeWidth="5" />
+              <circle
+                cx="30"
+                cy="30"
+                r="25"
+                fill="none"
+                stroke="var(--c-accent)"
+                strokeWidth="5"
+                strokeLinecap="round"
+                strokeDasharray={`${filled.toFixed(1)} ${circumference.toFixed(1)}`}
+                transform="rotate(-90 30 30)"
+              />
+            </svg>
+            <span className="tabular absolute inset-0 flex items-center justify-center text-[13px] font-semibold">
+              {met}/{benchmarks.length}
+            </span>
+          </div>
+
+          <div className="min-w-0">
+            <Eyebrow className={cn("tracking-[0.2em]", complete && "text-accent")}>
+              {complete
+                ? "Standards met"
+                : `Today · ${session.block} · ${session.duration} min`}
+            </Eyebrow>
+            <h3 className="dsp mt-2 text-[24px] font-semibold leading-none tracking-[-0.018em]">
+              {session.title}
+            </h3>
+            <p className="mt-2 text-[12px] leading-[1.5] text-fg-muted">{session.objective}</p>
+          </div>
         </div>
 
-        <ol className="space-y-2">
-          {session.drills.map((drill) => (
+        <ul className="mt-5 space-y-2">
+          {benchmarks.map((benchmark) => (
             <li
-              key={drill.id}
-              className="flex items-center justify-between gap-3 rounded-xl border border-border bg-surface-2 px-3 py-2.5"
+              key={benchmark.drill.id}
+              className="flex min-h-[60px] items-center gap-3 rounded-[18px] border border-border bg-surface-2 p-3"
             >
-              <span className="min-w-0">
-                <span className="block truncate text-[13px] font-medium">{drill.name}</span>
-                <span className="block truncate text-[11px] text-fg-subtle">
-                  Beat {Math.round(drill.success_threshold * 100)}% · {drill.metric_to_track}
+              <span
+                className={cn(
+                  "flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-[9px]",
+                  benchmark.beaten ? "bg-accent text-white" : "bg-track text-transparent",
+                )}
+                aria-hidden
+              >
+                <Check className="h-3.5 w-3.5" strokeWidth={3.2} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[13px] font-semibold leading-tight">
+                  {benchmark.drill.name}
+                </span>
+                <span className="mt-1 block truncate text-[11px] text-fg-subtle">
+                  {benchmark.drill.metric_to_track} &middot; {benchmark.drill.recommended_duration}{" "}
+                  min
                 </span>
               </span>
-              <span className="tabular shrink-0 text-[11px] text-fg-muted">
-                {drill.recommended_duration} min
+              <span className="tabular shrink-0 text-[12px] font-semibold text-accent">
+                {benchmark.target} of {benchmark.reps}
               </span>
             </li>
           ))}
-        </ol>
+        </ul>
 
-        <ButtonLink href="/practice/start" size="lg">
+        <ButtonLink href="/practice/start" size="lg" className="press mt-5">
           Start practice
         </ButtonLink>
       </CardContent>
@@ -509,7 +637,7 @@ export function WeaknessList({
 
 export function DemoNotice({ onReset }: { onReset: () => Promise<void> }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-warn/30 bg-warn-soft px-3.5 py-2.5">
+    <div className="relative flex flex-wrap items-center justify-between gap-3 rounded-xl border border-warn/30 bg-warn-soft px-3.5 py-2.5">
       <span className="flex min-w-0 items-center gap-2.5 text-[11px] text-fg-muted">
         <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-warn" aria-hidden />
         <span>

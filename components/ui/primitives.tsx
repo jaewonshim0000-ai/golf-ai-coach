@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 // ------------------------------------------------------------------ button
 
 const buttonStyles = cva(
-  "dsp inline-flex items-center justify-center gap-2 font-medium transition-[opacity,transform,background-color] disabled:pointer-events-none disabled:opacity-50 whitespace-nowrap active:scale-[0.99]",
+  "press dsp inline-flex items-center justify-center gap-2 font-medium transition-[opacity,transform,background-color] disabled:pointer-events-none disabled:opacity-50 whitespace-nowrap",
   {
     variants: {
       variant: {
@@ -67,7 +67,7 @@ export function Card({ className, ...props }: ComponentProps<"div">) {
   return (
     <div
       className={cn(
-        "rounded-[var(--radius-card)] border border-border bg-surface shadow-[var(--shadow-card)]",
+        "relative rounded-[var(--radius-card)] border border-border bg-surface shadow-[var(--shadow-card)]",
         className,
       )}
       {...props}
@@ -80,7 +80,7 @@ export function MiniCard({ className, ...props }: ComponentProps<"div">) {
   return (
     <div
       className={cn(
-        "rounded-[var(--radius-soft)] border border-border bg-surface shadow-[var(--shadow-soft)]",
+        "relative rounded-[var(--radius-soft)] border border-border bg-surface shadow-[var(--shadow-soft)]",
         className,
       )}
       {...props}
@@ -93,7 +93,7 @@ export function InkCard({ className, ...props }: ComponentProps<"div">) {
   return (
     <div
       className={cn(
-        "overflow-hidden rounded-[var(--radius-card)] bg-ink text-ink-fg shadow-[var(--shadow-ink)]",
+        "relative overflow-hidden rounded-[var(--radius-card)] bg-ink text-ink-fg shadow-[var(--shadow-ink)]",
         className,
       )}
       {...props}
@@ -310,7 +310,7 @@ export function EmptyState({
   icon?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center gap-3 rounded-[var(--radius-soft)] border border-dashed border-border-strong bg-surface-2/60 px-6 py-10 text-center">
+    <div className="relative flex flex-col items-center gap-3 rounded-[var(--radius-soft)] border border-dashed border-border-strong bg-surface-2/60 px-6 py-10 text-center">
       {icon ? <div className="text-fg-subtle">{icon}</div> : null}
       <h3 className="dsp text-[15px] font-semibold tracking-[0.02em]">{title}</h3>
       <p className="max-w-sm text-[13px] leading-relaxed text-fg-muted">{message}</p>
@@ -368,10 +368,79 @@ const HERO_ART = {
 } as const;
 
 const HERO_HEIGHT = {
-  sm: "min-h-[190px]",
-  md: "min-h-[230px]",
-  lg: "min-h-[290px]",
+  sm: "min-h-[210px]",
+  md: "min-h-[264px]",
+  lg: "min-h-[300px]",
 } as const;
+
+/**
+ * One contour line, repeated far enough to cover a desktop hero while it
+ * drifts. The curve repeats every 146px, which is also the drift distance, so
+ * the loop is seamless.
+ */
+function contour(y: number, amplitude: number, repeats = 12): string {
+  let d = `M0 ${y} c 48 ${-amplitude} 98 ${amplitude} 146 0`;
+  for (let i = 1; i < repeats; i += 1) d += ` s 98 ${-amplitude} 146 0`;
+  return d;
+}
+
+const NEAR = [40, 84, 128, 172, 216].map((y) => contour(y, 26));
+const FAR = [62, 152].map((y) => contour(y, 34));
+
+/**
+ * The hero artwork: drawn topography rather than a photograph or a gradient
+ * wash, with the shot that costs the most traced across it as a flight line.
+ * Two layers drift at different speeds, which is what gives it depth; both are
+ * decorative and both stop under `prefers-reduced-motion`.
+ */
+function HeroArt() {
+  return (
+    <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
+      <svg
+        viewBox="0 0 1752 264"
+        width="1752"
+        height="264"
+        className="contour-near absolute left-0 top-0 opacity-90"
+      >
+        <g fill="none" stroke="#2fbd6f" strokeOpacity="0.26" strokeWidth="1.1">
+          {NEAR.map((d) => (
+            <path key={d} d={d} />
+          ))}
+        </g>
+      </svg>
+
+      <svg
+        viewBox="0 0 1752 264"
+        width="1752"
+        height="264"
+        className="contour-far absolute -left-[60px] top-4"
+      >
+        <g fill="none" stroke="var(--c-gold)" strokeOpacity="0.18" strokeWidth="1">
+          {FAR.map((d) => (
+            <path key={d} d={d} />
+          ))}
+        </g>
+      </svg>
+
+      <svg
+        viewBox="0 0 390 264"
+        preserveAspectRatio="xMidYMid slice"
+        className="absolute inset-0 h-full w-full"
+      >
+        <path
+          className="trace"
+          d="M-12 240 C 88 104, 236 70, 402 156"
+          fill="none"
+          stroke="var(--c-gold)"
+          strokeOpacity="0.85"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+        />
+        <circle className="breathe" cx="238" cy="88" r="3.2" fill="#f4f2e9" />
+      </svg>
+    </div>
+  );
+}
 
 /**
  * The full-bleed title block every screen opens with. It cancels the layout
@@ -410,7 +479,13 @@ export function PageHero({
           Flex column rather than absolute blocks: a long title or a row of
           pills grows the hero instead of colliding with the top row.
         */
-        "relative -mx-4 -mt-5 flex flex-col justify-between overflow-hidden md:-mx-8 md:-mt-8",
+        /*
+          The content after a hero is pulled up 24px to ride over its rounded
+          bottom edge. A positioned element paints above a static one whatever
+          the source order, so the hero stays `relative` and every card is
+          `relative` too - see Card/MiniCard/InkCard.
+        */
+        "relative -mx-4 -mt-5 -mb-11 flex flex-col justify-between overflow-hidden rounded-b-[32px] md:-mx-8 md:-mt-8",
         HERO_HEIGHT[size],
         HERO_ART[art],
         className,
@@ -419,7 +494,9 @@ export function PageHero({
       {image ? (
         // eslint-disable-next-line @next/next/no-img-element -- hero art is decorative and unsized
         <img src={image} alt="" aria-hidden className="absolute inset-0 h-full w-full object-cover" />
-      ) : null}
+      ) : (
+        <HeroArt />
+      )}
       <div className="hero-scrim pointer-events-none absolute inset-0" />
 
       <div className="relative z-10 flex items-start justify-between gap-3 p-5 pb-8">
@@ -427,7 +504,7 @@ export function PageHero({
         <div>{topRight}</div>
       </div>
 
-      <div className="relative z-10 flex items-end justify-between gap-3 p-5 pt-0">
+      <div className="relative z-10 flex items-end justify-between gap-3 p-5 pb-11 pt-0">
         <div className="min-w-0">
           {eyebrow ? (
             <p className="dsp text-[11px] font-medium tracking-[0.2em] text-white/80">{eyebrow}</p>

@@ -123,7 +123,7 @@ export default async function StartPracticePage({
         />
       ) : (
         <>
-          <nav className="no-bar flex gap-1.5 overflow-x-auto" aria-label="Practice goal">
+          <nav className="no-bar relative flex gap-1.5 overflow-x-auto" aria-label="Practice goal">
             {options.map((option) => {
               const active = option.id === goal?.id;
               return (

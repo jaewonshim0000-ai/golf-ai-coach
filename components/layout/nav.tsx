@@ -78,36 +78,42 @@ export function Sidebar({ mode }: { mode: "demo" | "supabase" }) {
 
 /**
  * The floating glass tab bar. It sits above the content rather than docking to
- * the bottom edge, so the page reads as a card stack on a phone.
+ * the bottom edge, and the page fades out under it instead of stopping at a
+ * rule - the content reads as passing beneath the glass.
  */
 export function MobileNav() {
   const pathname = usePathname();
   const items = ITEMS.filter((i) => i.href !== "/profile");
 
   return (
-    <nav
-      aria-label="Primary"
-      className="fixed inset-x-3.5 bottom-[calc(1.25rem+env(safe-area-inset-bottom))] z-40 flex h-[58px] gap-[3px] rounded-[20px] border border-white/60 bg-[rgb(255_254_251_/_0.72)] p-[5px] shadow-[var(--shadow-raised)] backdrop-blur-[26px] backdrop-saturate-150 md:hidden dark:border-white/10 dark:bg-[rgb(20_26_21_/_0.78)]"
-    >
-      {items.map(({ href, short, label }) => {
-        const active = isActive(pathname, href);
-        return (
-          <Link
-            key={href}
-            href={href}
-            aria-label={label}
-            aria-current={active ? "page" : undefined}
-            className={cn(
-              "dsp flex flex-1 items-center justify-center rounded-[15px] text-[10px] font-medium tracking-[0.1em] transition-colors",
-              active
-                ? "bg-[image:var(--grad-accent)] text-white shadow-[0_8px_18px_-8px_rgb(13_98_54_/_0.8),inset_0_1px_0_rgb(255_255_255_/_0.25)]"
-                : "text-fg-subtle",
-            )}
-          >
-            {short}
-          </Link>
-        );
-      })}
-    </nav>
+    <>
+      <div
+        aria-hidden
+        className="pointer-events-none fixed inset-x-0 bottom-0 z-30 h-32 bg-[linear-gradient(180deg,rgb(241_239_232_/_0),rgb(241_239_232_/_0.92)_58%)] md:hidden dark:bg-[linear-gradient(180deg,rgb(11_15_12_/_0),rgb(11_15_12_/_0.92)_58%)]"
+      />
+      <nav
+        aria-label="Primary"
+        className="glass fixed inset-x-4 bottom-[calc(1.25rem+env(safe-area-inset-bottom))] z-40 flex gap-1 rounded-[24px] border border-white/55 bg-[rgb(252_251_246_/_0.72)] p-1.5 shadow-[0_1px_0_rgb(255_255_255_/_0.7)_inset,0_12px_32px_-12px_rgb(58_52_38_/_0.42)] md:hidden dark:border-white/10 dark:bg-[rgb(20_26_21_/_0.78)]"
+      >
+        {items.map(({ href, short, label, icon: Icon }) => {
+          const active = isActive(pathname, href);
+          return (
+            <Link
+              key={href}
+              href={href}
+              aria-label={label}
+              aria-current={active ? "page" : undefined}
+              className={cn(
+                "press flex flex-1 flex-col items-center gap-[5px] rounded-[18px] py-2.5 text-[11px] font-semibold tracking-[0.01em] transition-colors",
+                active ? "bg-accent-soft text-accent" : "text-fg-muted",
+              )}
+            >
+              <Icon className="h-[19px] w-[19px]" strokeWidth={1.9} />
+              {short}
+            </Link>
+          );
+        })}
+      </nav>
+    </>
   );
 }

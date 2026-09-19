@@ -59,7 +59,7 @@ export default async function SwingPage({ params }: { params: Promise<{ id: stri
         }
       />
 
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">
+      <div className="relative grid gap-5 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">
         <SwingVideo id={session.id} videoUrl={session.video_url} trimmable />
 
         <div className="space-y-5">

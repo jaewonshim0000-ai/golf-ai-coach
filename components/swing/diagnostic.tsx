@@ -34,9 +34,23 @@ export function SwingDiagnostic({
       <div className="flex gap-3 rounded-xl border border-info/30 bg-info-soft p-3.5">
         <Info className="mt-0.5 h-4 w-4 shrink-0 text-info" />
         <p className="text-[12px] leading-[1.55] text-fg-muted">
-          <span className="font-medium text-fg">Hand-measured, not machine-measured.</span> There is
-          no pose estimation here, so every value below was entered by you or your coach. The bands
-          are general references, not rules.
+          {diagnostic.estimated > 0 ? (
+            <>
+              <span className="font-medium text-fg">
+                {diagnostic.estimated} of these {diagnostic.measured} were estimated from video
+                frames.
+              </span>{" "}
+              A model read them by eye, which is a good first pass and not a measurement. Type over
+              anything that looks wrong and it becomes a measured value. The bands are general
+              references, not rules.
+            </>
+          ) : (
+            <>
+              <span className="font-medium text-fg">Hand-measured, not machine-measured.</span>{" "}
+              Every value below was entered by you or your coach. The bands are general references,
+              not rules.
+            </>
+          )}
         </p>
       </div>
 
@@ -146,7 +160,12 @@ function MetricRow({ reading }: { reading: MetricReading }) {
   return (
     <div>
       <div className="flex items-baseline justify-between gap-3">
-        <span className="min-w-0 truncate text-[12.5px]">{metric.label}</span>
+        <span className="min-w-0 truncate text-[12.5px]">
+          {metric.label}
+          {reading.source === "vision" ? (
+            <span className="dsp ml-1.5 text-[9px] tracking-[0.14em] text-fg-subtle">est.</span>
+          ) : null}
+        </span>
         <span
           className={cn(
             "tabular shrink-0 text-[12.5px] font-semibold",

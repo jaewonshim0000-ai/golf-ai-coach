@@ -42,7 +42,7 @@ export default async function SwingLibraryPage() {
       {swings.length === 0 ? (
         <EmptyState
           title="No swings yet"
-          message="Record one down the line and one face on. The diagnostic reads whatever you measure off them."
+          message="Upload a swing from your library or record a new one. Play it back and add your own measurements."
         />
       ) : (
         <div className="relative grid grid-cols-2 gap-2.5 md:grid-cols-4">

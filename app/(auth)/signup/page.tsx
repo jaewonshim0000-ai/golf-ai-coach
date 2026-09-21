@@ -7,8 +7,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/primit
 import { mode } from "@/lib/db/repo";
 
 export const metadata: Metadata = { title: "Create account" };
+export const dynamic = "force-dynamic";
 
 export default function SignupPage() {
+  if (mode() === "setup") redirect("/setup");
   if (mode() === "demo") redirect("/practice");
 
   return (

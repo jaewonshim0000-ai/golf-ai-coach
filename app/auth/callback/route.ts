@@ -7,7 +7,9 @@ import { serverClient } from "@/lib/db/supabase";
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
-  const next = url.searchParams.get("next") ?? "/practice";
+  const requestedNext = url.searchParams.get("next") ?? "/practice";
+  const destination = new URL(requestedNext, url.origin);
+  const next = destination.origin === url.origin ? destination.pathname + destination.search : "/practice";
 
   if (code) {
     const supabase = serverClient(await cookies());

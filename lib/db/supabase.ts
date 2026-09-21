@@ -4,10 +4,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 /**
  * Supabase wiring.
  *
- * When the environment variables are absent the app runs in demo mode: every
- * accessor below returns null and the repository falls back to the in-memory
- * demo dataset. That is what makes the product explorable with zero setup
- * without any page needing to know which mode it is in.
+ * The repository requires a configured connection unless demo mode is
+ * explicitly enabled. Never silently send real players into shared demo data.
  */
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -25,6 +23,7 @@ export function browserClient(): SupabaseClient | null {
 type CookieStore = {
   getAll(): { name: string; value: string }[];
   set(name: string, value: string, options?: Record<string, unknown>): void;
+  setAll?(values: { name: string; value: string; options: Record<string, unknown> }[]): void;
 };
 
 /**
@@ -38,6 +37,7 @@ export function serverClient(store: CookieStore): SupabaseClient | null {
       getAll: () => store.getAll(),
       setAll: (cookiesToSet) => {
         try {
+          if (store.setAll) { store.setAll(cookiesToSet); return; }
           for (const { name, value, options } of cookiesToSet) {
             store.set(name, value, options as Record<string, unknown>);
           }

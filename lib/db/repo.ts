@@ -20,22 +20,25 @@ import { DEMO_USER_ID, newId, store } from "./demo-store";
  * Single data-access layer.
  *
  * Every page and server action goes through here. Each function has the same
- * shape: use Supabase when it is configured, otherwise the in-memory demo
- * store. No page ever knows which one it got.
+ * shape: use Supabase when it is configured, or an explicitly enabled demo
+ * store. Unconfigured real deployments fail closed instead of sharing a player.
  *
  * Row-level security means the Supabase branch never needs to filter by user
  * itself for reads - but it does anyway, so a misconfigured policy fails
  * closed rather than leaking.
  */
 
-export type Mode = "demo" | "supabase";
+export type Mode = "demo" | "supabase" | "setup";
 
 export function mode(): Mode {
-  return supabaseConfigured() ? "supabase" : "demo";
+  return supabaseConfigured() ? "supabase" : process.env.ENABLE_DEMO_MODE === "true" ? "demo" : "setup";
 }
 
 async function client(): Promise<SupabaseClient | null> {
-  if (!supabaseConfigured()) return null;
+  if (!supabaseConfigured()) {
+    if (mode() !== "demo") throw new Error("Connect Supabase before saving player data.");
+    return null;
+  }
   const cookieStore = await cookies();
   return serverClient(cookieStore);
 }
@@ -50,6 +53,7 @@ function unwrap<T>(result: { data: T | null; error: { message: string } | null }
 export type SessionUser = { id: string; email: string; name: string | null };
 
 export async function currentUser(): Promise<SessionUser | null> {
+  if (mode() === "setup") return null;
   const sb = await client();
   if (!sb) {
     const demo = store().user;
@@ -114,7 +118,7 @@ export async function addHandicapEntry(entry: Omit<HandicapEntry, "id">): Promis
     store().handicapHistory.push({ ...entry, id: newId("hcp") });
     return;
   }
-  const { error } = await sb.from("handicap_entries").insert(entry);
+  const { error } = await sb.from("handicap_entries").insert({ ...entry, id: newId("hcp") });
   if (error) throw new Error(`addHandicapEntry: ${error.message}`);
 }
 
@@ -328,12 +332,8 @@ export async function createPracticeSession(
     store().practiceItems.push(...itemRows);
     return row;
   }
-  const { data, error } = await sb.from("practice_sessions").insert(row).select().single();
+  const { data, error } = await sb.rpc("create_practice", { session_row: row, item_rows: itemRows });
   if (error) throw new Error(`createPracticeSession: ${error.message}`);
-  if (itemRows.length > 0) {
-    const { error: itemError } = await sb.from("practice_items").insert(itemRows);
-    if (itemError) throw new Error(`createPracticeSession.items: ${itemError.message}`);
-  }
   return data as PracticeSession;
 }
 
@@ -382,13 +382,7 @@ export async function recordDrillAttempt(
     s.drillAttempts.push(row);
     return row;
   }
-  await sb
-    .from("drill_attempts")
-    .delete()
-    .eq("session_id", row.session_id)
-    .eq("drill_id", row.drill_id)
-    .eq("user_id", row.user_id);
-  const { data, error } = await sb.from("drill_attempts").insert(row).select().single();
+  const { data, error } = await sb.from("drill_attempts").upsert(row, { onConflict: "session_id,drill_id" }).select().single();
   if (error) throw new Error(`recordDrillAttempt: ${error.message}`);
   return data as DrillAttempt;
 }
@@ -508,11 +502,6 @@ export async function saveSwingMeasurement(
     s.swingMeasurements.push(row);
     return;
   }
-  await sb
-    .from("swing_measurements")
-    .delete()
-    .eq("swing_session_id", row.swing_session_id)
-    .eq("metric", row.metric);
-  const { error } = await sb.from("swing_measurements").insert(row);
+  const { error } = await sb.from("swing_measurements").upsert(row, { onConflict: "swing_session_id,metric" });
   if (error) throw new Error(`saveSwingMeasurement: ${error.message}`);
 }

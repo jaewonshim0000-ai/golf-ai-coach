@@ -1,12 +1,8 @@
 /**
  * Swing clips, stored on the device.
  *
- * ponytail: IndexedDB, not a bucket. This app has no file storage - demo mode
- * is process memory and the Supabase path has no storage bucket wired up - so a
- * recorded clip lives in the browser that recorded it and nowhere else. The
- * record is the shape a bucket would hold, so the upgrade is replacing these
- * three functions with uploads and putting the URL on `swing_sessions`. Until
- * then the UI says on screen that the clip is device-local.
+ * Used only for explicit demo mode and previously recorded device-local clips.
+ * Connected accounts upload new clips to private Supabase Storage.
  */
 
 const DB_NAME = "golf-swings";
@@ -37,8 +33,11 @@ async function run<T>(
   const db = await open();
   try {
     return await new Promise<T>((resolve, reject) => {
-      const request = operation(db.transaction(STORE, mode).objectStore(STORE));
-      request.onsuccess = () => resolve(request.result as T);
+      const transaction = db.transaction(STORE, mode);
+      const request = operation(transaction.objectStore(STORE));
+      transaction.oncomplete = () => resolve(request.result as T);
+      transaction.onabort = () => reject(transaction.error ?? new Error("Video storage was interrupted."));
+      transaction.onerror = () => reject(transaction.error);
       request.onerror = () => reject(request.error);
     });
   } finally {

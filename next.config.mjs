@@ -1,5 +1,8 @@
+import { fileURLToPath } from "node:url";
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  experimental: { typedRoutes: false },
+  typedRoutes: false,
+  outputFileTracingRoot: fileURLToPath(new URL(".", import.meta.url)),
 };
 export default nextConfig;

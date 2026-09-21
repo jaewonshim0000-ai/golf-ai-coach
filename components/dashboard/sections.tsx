@@ -464,7 +464,7 @@ export function TodaysSession({
           ))}
         </ul>
 
-        <ButtonLink href="/practice/start" size="lg" className="press mt-5">
+        <ButtonLink href={`/practice/start?goal=${session.drills[0]?.id ?? ""}`} size="lg" className="press mt-5">
           Start practice
         </ButtonLink>
       </CardContent>

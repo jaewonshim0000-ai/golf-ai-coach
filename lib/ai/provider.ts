@@ -32,6 +32,8 @@ export type GenerateRequest<T> = {
   schema: ZodType<T, ZodTypeDef, unknown>;
   fallback: () => T;
   maxTokens?: number;
+  /** Base64 JPEG frames, sent before the prompt so the model reads them first. */
+  images?: string[];
 };
 
 export interface AIProvider {
@@ -81,7 +83,22 @@ export class AnthropicProvider implements AIProvider {
         max_tokens: request.maxTokens ?? 2000,
         system: request.system,
         messages: [
-          { role: "user", content: request.prompt },
+          {
+            role: "user",
+            content: [
+              ...(request.images ?? []).map((data, index) => [
+                {
+                  type: "text" as const,
+                  text: `Frame ${index + 1} of ${request.images!.length}:`,
+                },
+                {
+                  type: "image" as const,
+                  source: { type: "base64" as const, media_type: "image/jpeg" as const, data },
+                },
+              ]).flat(),
+              { type: "text" as const, text: request.prompt },
+            ],
+          },
           // Prefilling the opening brace keeps the reply to raw JSON without
           // needing a JSON-schema round trip.
           { role: "assistant", content: "{" },

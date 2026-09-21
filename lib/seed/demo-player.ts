@@ -809,6 +809,7 @@ function buildDemoData(today: Date): DemoData {
       ? "in"
       : "deg",
     confidence: confidence as number,
+    source: "manual" as const,
   }));
 
   return {

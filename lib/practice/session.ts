@@ -2,6 +2,7 @@ import type { Weakness } from "../../types/analytics";
 import type { PlayerProfile, PracticeFacility } from "../../types/player";
 import type { Drill, DrillCategory, PracticeBlock, Skill } from "../../types/practice";
 import { DRILLS } from "../seed/drills";
+import { QUICK_DRILLS } from "./goals";
 
 /**
  * Today's session.
@@ -116,15 +117,16 @@ export function suggestSession(
   const block: PracticeBlock =
     skills.length > 0 && skills.every(meetingTarget) ? "pressure" : "technical";
 
-  const duration = profile.typical_practice_duration || 45;
-  const drills = selectDrills(skills, block, profile, 3);
+  const duration = 10;
+  const chosen = QUICK_DRILLS.find((drill) => skills.includes(drill.skill_trained)) ?? QUICK_DRILLS[1]!;
+  const drills = [chosen];
   if (drills.length === 0) return null;
 
   return {
-    title: target ? target.title : "General practice",
+    title: chosen.name,
     objective: target
       ? `Aimed at the ${target.strokes_lost_per_round.toFixed(2)} strokes a round you are losing here.`
-      : "Build a baseline across the bag so the ranking has something to work with.",
+      : "Start with ten balls at one target. Choose another goal whenever you like.",
     block,
     duration,
     drills,

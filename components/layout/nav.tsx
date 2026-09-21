@@ -22,7 +22,7 @@ function isActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function Sidebar({ mode }: { mode: "demo" | "supabase" }) {
+export function Sidebar({ mode }: { mode: "demo" | "supabase" | "setup" }) {
   const pathname = usePathname();
 
   return (

@@ -155,7 +155,7 @@ export async function summarizePracticeSession(
         target: drill?.success_threshold ?? null,
       };
     }),
-    history: facts.trends.map((t) => ({
+    history: facts.trends.filter((trend) => facts.attempts.some((attempt) => attempt.drill_id === trend.drill_id)).map((t) => ({
       drill: t.drill_name,
       baseline: t.baseline,
       latest: t.latest,
@@ -202,7 +202,7 @@ export function ruleBasedPracticeSummary(facts: PracticeSessionFacts): PracticeS
     return `${drill?.name ?? a.drill_id}: ${a.successes}/${a.attempts} = ${Math.round(a.score * 100)}%${change}, target ${Math.round((drill?.success_threshold ?? 0) * 100)}%.`;
   });
 
-  const withHistory = facts.trends.filter((t) => t.sessions >= 3 && t.delta !== null);
+  const withHistory = facts.trends.filter((t) => facts.attempts.some((a) => a.drill_id === t.drill_id) && t.sessions >= 3 && t.delta !== null);
   const improving = withHistory.filter((t) => (t.delta as number) > 0.03);
   const declining = withHistory.filter((t) => (t.delta as number) < -0.03);
 
@@ -219,7 +219,7 @@ export function ruleBasedPracticeSummary(facts: PracticeSessionFacts): PracticeS
     improving: "The metric is moving. Hold the drill for one more session, then add variability.",
     holding: "Numbers are steady but not climbing. Give it one more session before changing anything.",
     not_transferring: "This drill is not moving the number. Drop to the regression drill and simplify the task.",
-    insufficient_data: "Two more sessions on this drill and there will be enough history to judge it.",
+    insufficient_data: "Log at least three practices on this goal before judging a trend.",
   };
 
   const best = facts.attempts.reduce((a, b) => (b.score > a.score ? b : a));

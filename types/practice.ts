@@ -136,6 +136,7 @@ export type DrillAttempt = {
   /** Normalised 0-1 result on the drill metric. */
   score: number;
   raw_value: number | null;
+  shot_offsets?: number[] | null;
   notes: string | null;
   completed_at: string;
 };
@@ -222,4 +223,6 @@ export type SwingMeasurement = {
   value: number;
   unit: string;
   confidence: number;
+  /** Where the number came from. A model estimate is never a measurement. */
+  source: "manual" | "vision";
 };

@@ -1,10 +1,11 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useCallback, useEffect, useState } from "react";
 import { CheckCircle2, Loader2, Minus, Plus } from "lucide-react";
 
 import { completeSessionAction, recordAttemptAction } from "@/app/actions";
 import { IDLE } from "@/lib/action-state";
+import { dispersion, practiceGoal } from "@/lib/practice/goals";
 import type { PracticeMetricTrend } from "@/types/analytics";
 import type { Drill, DrillAttempt, PracticeItem, PracticeSession } from "@/types/practice";
 import { PRACTICE_BLOCK_LABELS } from "@/types/practice";
@@ -41,6 +42,9 @@ export function SessionRunner({
   trends: PracticeMetricTrend[];
 }) {
   const complete = session.status === "complete";
+  const [dirty, setDirty] = useState<Record<string, boolean>>({});
+  const onDirty = useCallback((id: string, value: boolean) => setDirty((current) => current[id] === value ? current : { ...current, [id]: value }), []);
+  const canFinish = items.every((item) => attempts.some((attempt) => attempt.practice_item_id === item.id) && dirty[item.id] === false);
 
   return (
     <div className="space-y-4">
@@ -55,11 +59,12 @@ export function SessionRunner({
             attempt={attempts.find((a) => a.drill_id === drill.id) ?? null}
             trend={trends.find((t) => t.drill_id === drill.id) ?? null}
             readOnly={complete}
+            onDirty={onDirty}
           />
         );
       })}
 
-      {!complete ? <CompleteSessionForm session={session} /> : null}
+      {!complete ? <CompleteSessionForm session={session} canFinish={canFinish} /> : null}
     </div>
   );
 }
@@ -70,16 +75,30 @@ function DrillTracker({
   attempt,
   trend,
   readOnly,
+  onDirty,
 }: {
   item: PracticeItem;
   drill: Drill;
   attempt: DrillAttempt | null;
   trend: PracticeMetricTrend | null;
   readOnly: boolean;
+  onDirty: (id: string, value: boolean) => void;
 }) {
   const [state, formAction, pending] = useActionState(recordAttemptAction, IDLE);
-  const [attempts, setAttempts] = useState(attempt?.attempts ?? drill.recommended_reps);
-  const [successes, setSuccesses] = useState(attempt?.successes ?? 0);
+  const goal = practiceGoal(drill.id);
+  const tracksOffsets = goal?.tolerance != null;
+  const [counts, setAttempts] = useState(attempt?.attempts ?? item.target_reps);
+  const [good, setSuccesses] = useState(attempt?.successes ?? 0);
+  const [offsets, setOffsets] = useState<string[]>(Array.from({ length: item.target_reps }, (_, index) => attempt?.shot_offsets?.[index]?.toString() ?? ""));
+  const values = offsets.filter((value) => value.trim() !== "").map(Number);
+  const summary = tracksOffsets ? dispersion(values, goal.tolerance!) : null;
+  const attempts = tracksOffsets ? values.length : counts;
+  const successes = summary?.successes ?? good;
+  const chip = goal?.id === "chip_accuracy";
+  const hasChanges = !attempt || (tracksOffsets
+    ? JSON.stringify(values) !== JSON.stringify(attempt.shot_offsets)
+    : counts !== attempt.attempts || good !== attempt.successes);
+  useEffect(() => { onDirty(item.id, hasChanges || pending); }, [item.id, hasChanges, pending, onDirty]);
 
   const score = attempts > 0 ? successes / attempts : 0;
   const met = score >= drill.success_threshold;
@@ -112,13 +131,32 @@ function DrillTracker({
           <input type="hidden" name="drill_id" value={drill.id} />
           <input type="hidden" name="attempts" value={attempts} />
           <input type="hidden" name="successes" value={successes} />
+          {tracksOffsets ? <input type="hidden" name="shot_offsets" value={JSON.stringify(values)} /> : null}
 
-          <div className="grid grid-cols-2 gap-3">
+          <p className="text-sm text-fg-muted">{drill.description}</p>
+          {tracksOffsets ? (
+            <div className="space-y-3">
+              <p className="text-sm text-fg-muted">{chip ? "Distance from the hole in feet (0 = holed)." : "Estimated sideways miss in yards: negative = left, positive = right, 0 = on line."}</p>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+                {offsets.map((value, index) => (
+                  <Field key={index} label={`Ball ${index + 1}`}>
+                    <Input type="number" step="0.5" min={chip ? 0 : -300} max={300} required disabled={readOnly || pending}
+                      aria-label={`Ball ${index + 1} ${chip ? "distance" : "offline"}`} value={value} placeholder={chip ? "e.g. 4" : "e.g. -5"}
+                      onChange={(event) => setOffsets((current) => current.map((entry, i) => i === index ? event.target.value : entry))} />
+                  </Field>
+                ))}
+              </div>
+              {summary ? <div className="rounded-xl bg-surface-2 p-3 text-sm" aria-live="polite">
+                <p>{summary.count}/{item.target_reps} logged · Average {chip ? "proximity" : "miss"}: {summary.averageMiss.toFixed(1)} {goal.unit}</p>
+                {!chip ? <p>Left-to-right spread: {summary.spread.toFixed(1)} yd · Average direction: {Math.abs(summary.bias).toFixed(1)} yd {summary.bias < 0 ? "left" : summary.bias > 0 ? "right" : "on line"}</p> : null}
+              </div> : null}
+            </div>
+          ) : <div className="grid grid-cols-2 gap-3">
             <Counter
               label={`Good (${drill.metric_to_track.toLowerCase()})`}
               value={successes}
               onChange={(v) => setSuccesses(Math.max(0, Math.min(attempts, v)))}
-              disabled={readOnly}
+              disabled={readOnly || pending}
             />
             <Counter
               label="Total attempts"
@@ -129,9 +167,9 @@ function DrillTracker({
                 setAttempts(next);
                 setSuccesses((s) => Math.min(s, next));
               }}
-              disabled={readOnly}
+              disabled={readOnly || pending || Boolean(goal)}
             />
-          </div>
+          </div>}
 
           <div className="space-y-1.5">
             <div className="flex items-baseline justify-between text-xs">
@@ -160,7 +198,7 @@ function DrillTracker({
 
           {!readOnly ? (
             <div className="flex items-center gap-3">
-              <Button type="submit" size="sm" variant="secondary" disabled={pending}>
+              <Button type="submit" size="sm" variant="secondary" disabled={pending || (tracksOffsets && values.length !== item.target_reps)}>
                 {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
                 {attempt ? "Update result" : "Save result"}
               </Button>
@@ -240,13 +278,13 @@ function Counter({
   );
 }
 
-function CompleteSessionForm({ session }: { session: PracticeSession }) {
+function CompleteSessionForm({ session, canFinish }: { session: PracticeSession; canFinish: boolean }) {
   const [state, formAction, pending] = useActionState(completeSessionAction, IDLE);
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Finish the session</CardTitle>
+        <CardTitle>Finish practice</CardTitle>
       </CardHeader>
       <CardContent>
         <form action={formAction} className="space-y-4">
@@ -255,7 +293,7 @@ function CompleteSessionForm({ session }: { session: PracticeSession }) {
             <Input
               name="actual_duration"
               type="number"
-              min={5}
+              min={1}
               max={300}
               defaultValue={session.planned_duration}
             />
@@ -266,9 +304,10 @@ function CompleteSessionForm({ session }: { session: PracticeSession }) {
           {state.message && !state.ok ? (
             <p className="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad">{state.message}</p>
           ) : null}
-          <Button type="submit" disabled={pending}>
+          {!canFinish ? <p className="text-xs text-fg-muted">Save your result above before finishing practice.</p> : null}
+          <Button type="submit" disabled={pending || !canFinish}>
             {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-            Complete session
+            Finish practice
           </Button>
         </form>
       </CardContent>

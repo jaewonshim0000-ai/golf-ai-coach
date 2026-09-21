@@ -118,7 +118,7 @@ export function ShotEntry({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [, finishAction, finishing] = useActionState(finishRoundAction, IDLE);
+  const [finishState, finishAction, finishing] = useActionState(finishRoundAction, IDLE);
   const [shots, setShots] = useState<Shot[]>(initialShots);
   const [error, setError] = useState<string | null>(null);
   const [holeIndex, setHoleIndex] = useState(() => {
@@ -554,6 +554,7 @@ export function ShotEntry({
             </span>
           </div>
           <form action={finishAction}>
+            {finishState.message ? <p role="alert" className="mb-2 text-xs text-bad">{finishState.message}</p> : null}
             <input type="hidden" name="round_id" value={round.id} />
             <Button type="submit" variant="secondary" size="sm" disabled={finishing}>
               {finishing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}

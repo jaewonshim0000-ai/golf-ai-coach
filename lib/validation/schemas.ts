@@ -102,7 +102,7 @@ export const practiceSessionSchema = z.object({
   planned_duration: z.coerce.number().int().min(10).max(240),
   energy_level: z.coerce.number().int().min(1).max(5).optional(),
   scheduled_for: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  drill_ids: z.array(z.string().min(1)).min(1, "Pick at least one drill").max(8),
+  drill_ids: z.array(z.string().min(1)).length(1, "Choose one practice goal"),
 });
 export type PracticeSessionInput = z.infer<typeof practiceSessionSchema>;
 
@@ -113,6 +113,7 @@ export const drillAttemptSchema = z
     drill_id: z.string().min(1),
     attempts: z.coerce.number().int().min(1).max(500),
     successes: z.coerce.number().int().min(0).max(500),
+    shot_offsets: z.array(z.number().finite().min(-300).max(300)).max(10).nullable().default(null),
     notes: z.string().trim().max(500).nullable().default(null),
   })
   .refine((a) => a.successes <= a.attempts, {

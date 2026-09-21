@@ -9,11 +9,16 @@ import { serverClient, supabaseConfigured } from "@/lib/db/supabase";
 export async function middleware(request: NextRequest) {
   if (!supabaseConfigured()) return NextResponse.next();
 
-  const response = NextResponse.next({ request });
+  let response = NextResponse.next({ request });
   const supabase = serverClient({
     getAll: () => request.cookies.getAll(),
     set: (name, value, options) => {
       response.cookies.set(name, value, options);
+    },
+    setAll: (values) => {
+      for (const { name, value } of values) request.cookies.set(name, value);
+      response = NextResponse.next({ request });
+      for (const { name, value, options } of values) response.cookies.set(name, value, options);
     },
   });
   await supabase?.auth.getUser();

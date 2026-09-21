@@ -104,6 +104,7 @@ describe("swing diagnostic", () => {
     value,
     unit: "in",
     confidence: 0.6,
+    source: "manual",
   });
 
   it("reports an unmeasured metric as missing, never as fine", () => {

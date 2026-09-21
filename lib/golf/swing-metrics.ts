@@ -224,8 +224,10 @@ export type MetricReading = {
    * 15-degree band and a 0.6-inch miss on a 3-inch band rank the same.
    */
   severity: number;
-  /** 0-1 as recorded. Manual entry is never certain, so this is carried through. */
+  /** 0-1 as recorded. Neither entry route is certain, so this is carried through. */
   confidence: number;
+  /** Whether a person typed this number or a model estimated it from video. */
+  source: SwingMeasurement["source"];
   /** Where the value sits inside the band, 0-1, for drawing a position marker. */
   position: number;
   note: string;
@@ -239,6 +241,8 @@ export type SwingDiagnostic = {
   measured: number;
   /** Metrics with no value recorded. Named so the UI can ask for them. */
   missing: SwingMetric[];
+  /** How many of the readings a model estimated rather than a person measured. */
+  estimated: number;
 };
 
 /**
@@ -263,7 +267,7 @@ export function diagnoseSwing(measurements: SwingMeasurement[]): SwingDiagnostic
       missing.push(metric);
       continue;
     }
-    readings.push(read(metric, measurement.value, measurement.confidence));
+    readings.push(read(metric, measurement));
   }
 
   const outOfRange = readings
@@ -276,10 +280,12 @@ export function diagnoseSwing(measurements: SwingMeasurement[]): SwingDiagnostic
     inRange: readings.length - outOfRange.length,
     measured: readings.length,
     missing,
+    estimated: readings.filter((reading) => reading.source === "vision").length,
   };
 }
 
-function read(metric: SwingMetric, value: number, confidence: number): MetricReading {
+function read(metric: SwingMetric, measurement: SwingMeasurement): MetricReading {
+  const value = measurement.value;
   const width = metric.max - metric.min;
   const below = value < metric.min;
   const above = value > metric.max;
@@ -291,7 +297,8 @@ function read(metric: SwingMetric, value: number, confidence: number): MetricRea
     status: below ? "below" : above ? "above" : "in_range",
     deviation: Math.round(deviation * 10) / 10,
     severity: width > 0 ? deviation / width : 0,
-    confidence,
+    confidence: measurement.confidence,
+    source: measurement.source,
     // Clamped so a wild value still draws inside the track rather than escaping it.
     position: Math.max(0, Math.min(1, width > 0 ? (value - metric.min) / width : 0.5)),
     note: below

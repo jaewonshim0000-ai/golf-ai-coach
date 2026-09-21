@@ -1,4 +1,5 @@
 import type { Drill } from "../../types/practice";
+import { QUICK_DRILLS } from "../practice/goals";
 
 /**
  * The drill library. Every drill carries a trackable metric and a success
@@ -8,6 +9,7 @@ import type { Drill } from "../../types/practice";
  * progress engine can compare a contact ratio with a proximity average.
  */
 export const DRILLS: Drill[] = [
+  ...QUICK_DRILLS,
   // ---------------------------------------------------------------- contact
   {
     id: "drill_9_ball_contact",

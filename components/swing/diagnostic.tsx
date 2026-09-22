@@ -34,7 +34,17 @@ export function SwingDiagnostic({
       <div className="flex gap-3 rounded-xl border border-info/30 bg-info-soft p-3.5">
         <Info className="mt-0.5 h-4 w-4 shrink-0 text-info" />
         <p className="text-[12px] leading-[1.55] text-fg-muted">
-          {diagnostic.estimated > 0 ? (
+          {diagnostic.posed > 0 ? (
+            <>
+              <span className="font-medium text-fg">
+                {diagnostic.posed} of these {diagnostic.measured} were read off your body in the
+                video.
+              </span>{" "}
+              A pose detector found your skeleton and measured it here on your device. One camera
+              has to infer depth, so the turns are the softest numbers; type over anything that
+              looks wrong. The bands are general references, not rules.
+            </>
+          ) : diagnostic.estimated > 0 ? (
             <>
               <span className="font-medium text-fg">
                 {diagnostic.estimated} of these {diagnostic.measured} were estimated from video
@@ -164,6 +174,8 @@ function MetricRow({ reading }: { reading: MetricReading }) {
           {metric.label}
           {reading.source === "vision" ? (
             <span className="dsp ml-1.5 text-[9px] tracking-[0.14em] text-fg-subtle">est.</span>
+          ) : reading.source === "pose" ? (
+            <span className="dsp ml-1.5 text-[9px] tracking-[0.14em] text-fg-subtle">pose</span>
           ) : null}
         </span>
         <span

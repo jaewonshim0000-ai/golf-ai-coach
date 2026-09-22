@@ -3,8 +3,17 @@
 import { useEffect, useRef, useState } from "react";
 import { Loader2, Sparkles, Video } from "lucide-react";
 
-import { analyzeSwingAction, saveSwingClipAction, type AnalyzeState } from "@/app/actions";
+import { useRouter } from "next/navigation";
+
+import {
+  analyzeSwingAction,
+  savePoseAction,
+  saveSwingClipAction,
+  type AnalyzeState,
+} from "@/app/actions";
 import { FRAME_COUNT } from "@/lib/ai/vision";
+import { analysePose } from "@/lib/golf/pose";
+import { readSwing } from "@/lib/pose-runner";
 import { clampClip, clipWindow, getClip } from "@/lib/video-store";
 import { cn } from "@/lib/utils";
 import { browserClient } from "@/lib/db/supabase";
@@ -35,6 +44,7 @@ export function SwingVideo({
   analysable = false,
   clipStart = null,
   clipEnd = null,
+  handedness = "right",
   className,
 }: {
   id: string;
@@ -45,8 +55,11 @@ export function SwingVideo({
   /** Trim stored on the swing row, in seconds. */
   clipStart?: number | null;
   clipEnd?: number | null;
+  /** Which way round the player stands, so the target line is the right way. */
+  handedness?: "right" | "left";
   className?: string;
 }) {
+  const router = useRouter();
   const video = useRef<HTMLVideoElement>(null);
   const remote = videoUrl?.startsWith("supabase://swing-videos/") ? videoUrl.slice("supabase://swing-videos/".length) : null;
   const clipId = videoUrl?.startsWith("local://clip/") ? videoUrl.slice("local://clip/".length) : id;
@@ -57,6 +70,7 @@ export function SwingVideo({
   const [draft, setDraft] = useState<[number, number] | null>(null);
   const [analysis, setAnalysis] = useState<AnalyzeState | null>(null);
   const [analysing, setAnalysing] = useState(false);
+  const [progress, setProgress] = useState<string | null>(null);
   /*
     Reading frames off the canvas needs a cross-origin-enabled element, but a
     host that does not send the matching header will refuse to play at all
@@ -97,41 +111,74 @@ export function SwingVideo({
 
   const [start, end] = draft ?? clipWindow(trim[0], trim[1], duration);
 
-  /*
-    Sample the clip evenly rather than guessing where the top of the swing is:
-    the model is told the frames are in order and works out the positions
-    itself, which is more robust than timing assumptions that only hold for a
-    clip trimmed exactly to the swing.
-  */
+  /**
+   * Read the swing.
+   *
+   * The detector runs on this device and measures the body it finds, which is
+   * the real answer and costs nothing per use. It needs a body it can see, so
+   * when it cannot find one - too far away, cropped, filmed from behind a net
+   * - the six-frame estimate takes over and says that is what it is.
+   */
   async function analyse() {
     const element = video.current;
     if (!element || analysing) return;
     setAnalysing(true);
     setAnalysis(null);
+    setProgress("Loading the pose detector");
     const wasTime = element.currentTime;
-    try {
-      const width = element.videoWidth;
-      const height = element.videoHeight;
-      if (!width || !height) throw new Error("The video has not loaded yet.");
 
+    try {
+      if (!element.videoWidth || !element.videoHeight) {
+        throw new Error("The video has not loaded yet.");
+      }
+      const span: [number, number] = end > start ? [start, end] : [0, element.duration];
+
+      let posed: Awaited<ReturnType<typeof readSwing>> = [];
+      try {
+        posed = await readSwing(element, span[0], span[1], (done, total) =>
+          setProgress(`Looking for your body: ${Math.round((done / total) * 100)}%`),
+        );
+      } catch {
+        // No detector - blocked download, no WebGL, an old browser. The
+        // estimate below still works, so this is not the end of the attempt.
+        posed = [];
+      }
+
+      if (posed.length >= 3) {
+        setProgress("Measuring the positions");
+        const analysis = analysePose(posed, handedness);
+        if (analysis && analysis.readings.length > 0) {
+          const saved = await savePoseAction({
+            swing_session_id: id,
+            readings: analysis.readings,
+            skipped: analysis.skipped,
+          });
+          setAnalysis(saved);
+          if (saved.ok) router.refresh();
+          return;
+        }
+      }
+
+      setProgress("No body found; reading the frames instead");
       const canvas = document.createElement("canvas");
-      const scale = Math.min(1, 448 / width);
-      canvas.width = Math.round(width * scale);
-      canvas.height = Math.round(height * scale);
+      const scale = Math.min(1, 448 / element.videoWidth);
+      canvas.width = Math.round(element.videoWidth * scale);
+      canvas.height = Math.round(element.videoHeight * scale);
       const context = canvas.getContext("2d");
       if (!context) throw new Error("This browser cannot read frames from video.");
 
-      const span = end > start ? [start, end] : [0, element.duration];
       const frames: string[] = [];
       for (let index = 0; index < FRAME_COUNT; index += 1) {
-        const at = span[0]! + ((span[1]! - span[0]!) * (index + 0.5)) / FRAME_COUNT;
+        const at = span[0] + ((span[1] - span[0]) * (index + 0.5)) / FRAME_COUNT;
         await seek(element, at);
         context.drawImage(element, 0, 0, canvas.width, canvas.height);
         const data = canvas.toDataURL("image/jpeg", 0.65).split(",")[1];
         if (data) frames.push(data);
       }
 
-      setAnalysis(await analyzeSwingAction({ swing_session_id: id, frames }));
+      const estimated = await analyzeSwingAction({ swing_session_id: id, frames });
+      setAnalysis(estimated);
+      if (estimated.ok) router.refresh();
     } catch (error) {
       setAnalysis({
         ok: false,
@@ -140,10 +187,11 @@ export function SwingVideo({
             ? "This video could not be read for analysis because of its storage settings."
             : error instanceof Error
               ? error.message
-              : "Could not read frames from this video.",
+              : "Could not read this video.",
       });
     } finally {
       element.currentTime = wasTime;
+      setProgress(null);
       setAnalysing(false);
     }
   }
@@ -219,9 +267,10 @@ export function SwingVideo({
             <div className="min-w-0">
               <p className="dsp text-[10px] tracking-[0.17em] text-fg-subtle">Read the swing</p>
               <p className="mt-1 text-[11px] leading-[1.5] text-fg-muted">
-                {crossOrigin
-                  ? `${FRAME_COUNT} frames, estimated by eye. Not a measurement.`
-                  : "This video will play but cannot be read for analysis, because its storage does not allow it."}
+                {!crossOrigin
+                  ? "This video will play but cannot be read, because its storage does not allow it."
+                  : (progress ??
+                    "Finds your body in the video and measures twelve positions on this device.")}
               </p>
             </div>
             <Button
@@ -235,7 +284,7 @@ export function SwingVideo({
               ) : (
                 <Sparkles className="h-3.5 w-3.5" />
               )}
-              {analysing ? "Reading" : "Analyse"}
+              {analysing ? "Reading" : "Measure swing"}
             </Button>
           </div>
           {analysis ? (

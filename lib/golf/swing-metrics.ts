@@ -241,8 +241,10 @@ export type SwingDiagnostic = {
   measured: number;
   /** Metrics with no value recorded. Named so the UI can ask for them. */
   missing: SwingMetric[];
-  /** How many of the readings a model estimated rather than a person measured. */
+  /** How many readings a model estimated by eye from stills. */
   estimated: number;
+  /** How many were read off a pose skeleton found in the video. */
+  posed: number;
 };
 
 /**
@@ -281,6 +283,7 @@ export function diagnoseSwing(measurements: SwingMeasurement[]): SwingDiagnostic
     measured: readings.length,
     missing,
     estimated: readings.filter((reading) => reading.source === "vision").length,
+    posed: readings.filter((reading) => reading.source === "pose").length,
   };
 }
 

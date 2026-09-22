@@ -21,6 +21,7 @@ import {
   visionNote,
 } from "@/lib/ai/vision";
 import { METRICS_BY_ID } from "@/lib/golf/swing-metrics";
+import { POSE_CONFIDENCE_CAP } from "@/lib/golf/pose";
 import { DRILLS_BY_ID } from "@/lib/seed/drills";
 import { loadPlayerState } from "@/lib/player-state";
 import * as repo from "@/lib/db/repo";
@@ -783,7 +784,100 @@ export async function analyzeSwingAction(input: {
   };
 }
 
-// -------------------------------------------------------------------- misc
+/**
+ * Store what the pose detector read.
+ *
+ * The readings arrive from the browser, so every one is checked against the
+ * metric definitions here rather than trusted: an id that is not a known
+ * metric, a value outside what a body can do, or a confidence above what a
+ * single camera can support is dropped. A number a person typed is never
+ * overwritten, because a measurement outranks a reading of a skeleton.
+ */
+const poseSchema = z.object({
+  swing_session_id: z.string().min(1).max(80),
+  readings: z
+    .array(
+      z.object({
+        metric: z.string().min(1).max(60),
+        value: z.number().finite(),
+        confidence: z.number().min(0).max(1),
+      }),
+    )
+    .min(1)
+    .max(24),
+  skipped: z.array(z.string().max(60)).max(24).default([]),
+});
+
+export type PoseState = ActionState & { measurements?: number; skipped?: number; kept?: number };
+
+export async function savePoseAction(input: {
+  swing_session_id: string;
+  readings: { metric: string; value: number; confidence: number }[];
+  skipped: string[];
+}): Promise<PoseState> {
+  const user = await requireUser();
+  const parsed = poseSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, message: "That reading could not be saved." };
+
+  const sessions = await repo.getSwingSessions(user.id);
+  const session = sessions.find((item) => item.id === parsed.data.swing_session_id);
+  if (!session) return { ok: false, message: "That swing session does not exist." };
+
+  const existing = await repo.getSwingMeasurements(user.id);
+  const manual = new Set(
+    existing
+      .filter((row) => row.swing_session_id === session.id && row.source === "manual")
+      .map((row) => row.metric),
+  );
+
+  const seen = new Set<string>();
+  const rows = parsed.data.readings.flatMap((reading) => {
+    const metric = METRICS_BY_ID.get(reading.metric);
+    if (!metric || seen.has(metric.id) || manual.has(metric.id)) return [];
+    // Ten band widths outside the band is a detector that lost the body, not
+    // a swing. The band itself is a reference, so the envelope is generous.
+    const width = metric.max - metric.min;
+    if (reading.value < metric.min - width * 10 || reading.value > metric.max + width * 10) {
+      return [];
+    }
+    seen.add(metric.id);
+    return [
+      {
+        swing_session_id: session.id,
+        phase: metric.phase,
+        metric: metric.id,
+        value: Math.round(reading.value * 10) / 10,
+        unit: metric.unit,
+        confidence: Math.min(reading.confidence, POSE_CONFIDENCE_CAP),
+        source: "pose" as const,
+      },
+    ];
+  });
+
+  if (rows.length === 0) {
+    return { ok: false, message: "Nothing in that swing could be measured." };
+  }
+
+  try {
+    for (const row of rows) await repo.saveSwingMeasurement(row);
+  } catch (error) {
+    return asError(error);
+  }
+
+  revalidatePath(`/swing/${session.id}`);
+  revalidatePath("/swing");
+  revalidatePath("/practice");
+  const heldBack = parsed.data.readings.length - rows.length;
+  return {
+    ok: true,
+    measurements: rows.length,
+    kept: heldBack,
+    skipped: parsed.data.skipped.length,
+    message: `Measured ${rows.length} position${rows.length === 1 ? "" : "s"} from the video.`,
+  };
+}
+
+// -------------------------------------------------------------------- misc// -------------------------------------------------------------------- misc
 
 export async function signOutAction(): Promise<void> {
   await repo.signOut();

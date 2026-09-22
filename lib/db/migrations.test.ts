@@ -17,7 +17,7 @@ test("live schema: atomic practice, persistent results, and cross-user isolation
       create table storage.objects(id text primary key, bucket_id text, name text);
       create function storage.foldername(text) returns text[] language sql as $$ select string_to_array($1, '/') $$;
     `);
-    for (const path of ["supabase/migrations/0001_init.sql", "supabase/migrations/0002_live_practice.sql", "supabase/migrations/0003_swing_vision.sql", "supabase/migrations/0004_swing_clips.sql", "supabase/migrations/0005_delete_account.sql", "supabase/seed/seed.sql"]) {
+    for (const path of ["supabase/migrations/0001_init.sql", "supabase/migrations/0002_live_practice.sql", "supabase/migrations/0003_swing_vision.sql", "supabase/migrations/0004_swing_clips.sql", "supabase/migrations/0005_delete_account.sql", "supabase/migrations/0006_pose_source.sql", "supabase/seed/seed.sql"]) {
       const sql = (await readFile(path, "utf8")).replace('create extension if not exists "pgcrypto";', "");
       await db.exec(sql);
     }
@@ -58,6 +58,14 @@ test("live schema: atomic practice, persistent results, and cross-user isolation
       values ('m_overconfident', 'swing_test', 'top', 'chest_turn_top', 88, 'deg', 0.95, 'vision');`));
     await assert.rejects(db.exec(`insert into swing_measurements(id,swing_session_id,phase,metric,value,unit,confidence,source)
       values ('m_bogus', 'swing_test', 'top', 'chest_turn_top', 88, 'deg', 0.5, 'guessed');`));
+    // A pose reading may be surer than an eyeball estimate, and still not sure.
+    await db.exec(`insert into swing_measurements(id,swing_session_id,phase,metric,value,unit,confidence,source)
+      values ('m_pose', 'swing_test', 'top', 'chest_turn_top', 88, 'deg', 0.75, 'pose');`);
+    await assert.rejects(db.exec(`insert into swing_measurements(id,swing_session_id,phase,metric,value,unit,confidence,source)
+      values ('m_toosure', 'swing_test', 'top', 'pelvis_turn_top', 41, 'deg', 0.9, 'pose');`));
+    // A number a person typed carries no ceiling at all.
+    await db.exec(`insert into swing_measurements(id,swing_session_id,phase,metric,value,unit,confidence,source)
+      values ('m_manual', 'swing_test', 'top', 'pelvis_turn_top', 41, 'deg', 1.0, 'manual');`);
     assert.equal(
       (await db.query<{ source: string }>("select source from swing_measurements")).rows[0]!.source,
       "vision",

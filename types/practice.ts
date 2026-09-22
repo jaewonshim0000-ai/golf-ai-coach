@@ -226,6 +226,9 @@ export type SwingMeasurement = {
   value: number;
   unit: string;
   confidence: number;
-  /** Where the number came from. A model estimate is never a measurement. */
-  source: "manual" | "vision";
+  /**
+   * Where the number came from: typed in by a person, read off a pose
+   * skeleton found in the video, or estimated by a model looking at stills.
+   */
+  source: "manual" | "pose" | "vision";
 };

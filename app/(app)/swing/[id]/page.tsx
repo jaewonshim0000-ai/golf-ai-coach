@@ -66,6 +66,7 @@ export default async function SwingPage({ params }: { params: Promise<{ id: stri
           videoUrl={session.video_url}
           clipStart={session.clip_start}
           clipEnd={session.clip_end}
+          handedness={state.profile?.dominant_hand ?? "right"}
           trimmable
           analysable
         />

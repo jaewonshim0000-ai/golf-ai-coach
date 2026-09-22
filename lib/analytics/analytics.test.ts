@@ -5,7 +5,7 @@ import { DISTANCE_BANDS, PUTT_BANDS, bandStart, distanceBand, puttBand } from ".
 import type { PlayerProfile } from "../../types/player";
 import type { Drill, DrillAttempt, PracticeSession } from "../../types/practice";
 import type { ScoredShot } from "../../types/rounds";
-import { buildSegments, summarizeStrokesGained } from "./aggregate";
+import { buildSegments, scoringTrend, summarizeStrokesGained } from "./aggregate";
 import { improvementSummary, practiceTrends, practiceVolume } from "./practice-progress";
 import { MIN_SAMPLE, identifyWeaknesses } from "./weaknesses";
 
@@ -367,5 +367,26 @@ describe("practiceVolume", () => {
     assert.equal(volume.sessions_planned, 2);
     assert.equal(volume.total_minutes, 50);
     assert.equal(volume.last_14_days, 1);
+  });
+});
+
+describe("scoring line", () => {
+  const round = (id: string, score: number, holes: number) =>
+    ({
+      id,
+      user_id: "u1",
+      course_id: "c1",
+      course_name: "Riverbend",
+      played_on: "2026-09-0" + id,
+      score,
+      holes_played: holes,
+    }) as unknown as Parameters<typeof scoringTrend>[0][number];
+
+  it("plots complete rounds only, so a short round is not a career best", () => {
+    const points = scoringTrend([round("1", 79, 18), round("2", 3, 1), round("3", 41, 9)]);
+    assert.deepEqual(
+      points.map((point) => point.value),
+      [79],
+    );
   });
 });

@@ -138,15 +138,23 @@ export function rebaseSummary(summary: SGSummary, baseline: Baseline): SGSummary
   };
 }
 
+/** Holes in the round the published per-round gaps were measured over. */
+const FULL_ROUND_HOLES = 18;
+
 /**
- * Rebase one round's strokes gained. A round is one round, so it carries the
- * level's whole per-round gap exactly once.
+ * Rebase one round's strokes gained.
+ *
+ * The gap is a whole-round figure, so a round that stopped after three holes
+ * carries three holes' worth of it. Charging the full gap to a partial round
+ * is how one hole came to read as twelve strokes gained against a 10
+ * handicap: a 10-handicap does not lose those strokes in a hole either.
  */
 export function rebaseRound(stats: RoundSummaryStats, baseline: Baseline): RoundSummaryStats {
   if (baseline.id === "tour") return stats;
+  const share = Math.min(1, Math.max(0, stats.holes_played / FULL_ROUND_HOLES));
   const by = {} as Record<SGCategory, number>;
   for (const category of SG_CATEGORIES) {
-    by[category] = round2(stats.sg_by_category[category] - baseline.gap[category]);
+    by[category] = round2(stats.sg_by_category[category] - baseline.gap[category] * share);
   }
   return {
     ...stats,

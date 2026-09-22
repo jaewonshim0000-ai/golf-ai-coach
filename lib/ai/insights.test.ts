@@ -1,7 +1,8 @@
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
 
-import type { HoleResult, RoundSummaryStats } from "../../types/analytics";
+import type { RoundSummaryStats } from "../../types/analytics";
+import type { HoleResult } from "../../types/rounds";
 import { ruleBasedRoundSummary } from "./insights";
 
 function stats(patch: Partial<RoundSummaryStats> = {}): RoundSummaryStats {
@@ -23,8 +24,8 @@ function stats(patch: Partial<RoundSummaryStats> = {}): RoundSummaryStats {
     up_and_down_opportunities: 0,
     sand_saves: 0,
     sand_save_opportunities: 0,
-    worst_hole: { hole_number: 1, strokes_gained: 0.99, par: 4, strokes: 3 },
-    best_hole: { hole_number: 1, strokes_gained: 0.99, par: 4, strokes: 3 },
+    worst_hole: { hole_number: 1, strokes_gained: 0.99 },
+    best_hole: { hole_number: 1, strokes_gained: 0.99 },
     ...patch,
   } as RoundSummaryStats;
 }
@@ -57,7 +58,7 @@ describe("round read-out", () => {
 
   it("names the hole when it actually lost strokes", () => {
     const summary = ruleBasedRoundSummary(
-      stats({ worst_hole: { hole_number: 7, strokes_gained: -2.3, par: 4, strokes: 7 } }),
+      stats({ worst_hole: { hole_number: 7, strokes_gained: -2.3 } }),
       [hole(-1.1)],
     );
     assert.ok(summary.what_cost_you.some((line) => line.includes("Hole 7 cost you 2.30")));

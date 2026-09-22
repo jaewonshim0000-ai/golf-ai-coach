@@ -290,9 +290,13 @@ export function sgTrend(
     });
 }
 
+/**
+ * Scores, over time. Only complete rounds: a nine-hole 41 plotted beside an
+ * eighteen-hole 79 reads as the best round of the year.
+ */
 export function scoringTrend(rounds: Round[]): TrendPoint[] {
   return [...rounds]
-    .filter((r) => r.score !== null)
+    .filter((r) => r.score !== null && r.holes_played >= 18)
     .sort((a, b) => a.played_on.localeCompare(b.played_on))
     .map((r) => ({ date: r.played_on, label: r.course_name, value: r.score as number }));
 }

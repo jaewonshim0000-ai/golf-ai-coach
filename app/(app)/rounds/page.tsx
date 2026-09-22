@@ -167,7 +167,9 @@ export default async function RoundsPage({ searchParams }: { searchParams: Promi
                           {stats.score ?? "—"}
                         </p>
                         <p className="tabular dsp mt-0.5 text-[10px] tracking-[0.08em] text-fg-subtle">
-                          {toParLabel(stats.to_par)}
+                          {stats.holes_played < 18
+                            ? `${stats.holes_played} hole${stats.holes_played === 1 ? "" : "s"}`
+                            : toParLabel(stats.to_par)}
                         </p>
                       </div>
                     </div>

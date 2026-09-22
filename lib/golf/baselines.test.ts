@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 
 import type { SGSummary, Segment } from "../../types/analytics";
 import { SG_CATEGORIES } from "../../types/golf";
-import { BASELINES, baselineForHandicap, getBaseline, rebaseSegment, rebaseSummary } from "./baselines";
+import { BASELINES, baselineForHandicap, getBaseline, rebaseRound, rebaseSegment, rebaseSummary } from "./baselines";
 import { diagnoseSwing } from "./swing-metrics";
 import type { SwingMeasurement } from "../../types/practice";
 
@@ -47,6 +47,25 @@ describe("baselines", () => {
     );
     const sum = SG_CATEGORIES.reduce((n, c) => n + rebased.by_category[c].per_round, 0);
     assert.equal(Math.round(sum * 100) / 100, rebased.per_round);
+  });
+
+  it("charges a partial round only its share of the whole-round gap", () => {
+    const base = {
+      holes_played: 18,
+      sg_by_category: { off_the_tee: 0, approach: 0, around_the_green: 0, putting: 0 },
+      sg_total: 0,
+    } as unknown as Parameters<typeof rebaseRound>[0];
+
+    // A 10 handicap loses 11 strokes a round against Tour, so playing level
+    // with the Tour baseline is 11 strokes gained against a 10 handicap.
+    const full = rebaseRound(base, getBaseline("hcp_10"));
+    assert.equal(full.sg_total, 11);
+
+    const nine = rebaseRound({ ...base, holes_played: 9 }, getBaseline("hcp_10"));
+    assert.equal(nine.sg_total, 5.5);
+
+    const oneHole = rebaseRound({ ...base, holes_played: 1 }, getBaseline("hcp_10"));
+    assert.equal(oneHole.sg_total, 0.61);
   });
 
   it("defaults to the nearest listed level, and to Tour with no handicap", () => {

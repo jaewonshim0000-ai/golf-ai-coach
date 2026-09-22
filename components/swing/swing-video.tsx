@@ -57,6 +57,13 @@ export function SwingVideo({
   const [draft, setDraft] = useState<[number, number] | null>(null);
   const [analysis, setAnalysis] = useState<AnalyzeState | null>(null);
   const [analysing, setAnalysing] = useState(false);
+  /*
+    Reading frames off the canvas needs a cross-origin-enabled element, but a
+    host that does not send the matching header will refuse to play at all
+    with it set. Playback matters more than analysis, so a failure drops the
+    attribute and reloads once, and the analyser says why it went away.
+  */
+  const [crossOrigin, setCrossOrigin] = useState(true);
 
   useEffect(() => {
     let url: string | null = null;
@@ -176,12 +183,19 @@ export function SwingVideo({
       <video
         ref={video}
         src={src}
-        crossOrigin="anonymous"
+        crossOrigin={crossOrigin ? "anonymous" : undefined}
         controls={trimmable}
         muted={!trimmable}
         playsInline
         preload="metadata"
-        onError={() => setError("This browser could not play the video. Try an MP4 export of your clip.")}
+        onError={(event) => {
+          if (crossOrigin) {
+            setCrossOrigin(false);
+            event.currentTarget.load();
+            return;
+          }
+          setError("This browser could not play the video. Try an MP4 export of your clip.");
+        }}
         className={cn("w-full rounded-2xl bg-black object-cover", className ?? "aspect-[3/4]")}
         onLoadedMetadata={(event) => {
           const element = event.currentTarget;
@@ -205,10 +219,17 @@ export function SwingVideo({
             <div className="min-w-0">
               <p className="dsp text-[10px] tracking-[0.17em] text-fg-subtle">Read the swing</p>
               <p className="mt-1 text-[11px] leading-[1.5] text-fg-muted">
-                {FRAME_COUNT} frames, estimated by eye. Not a measurement.
+                {crossOrigin
+                  ? `${FRAME_COUNT} frames, estimated by eye. Not a measurement.`
+                  : "This video will play but cannot be read for analysis, because its storage does not allow it."}
               </p>
             </div>
-            <Button type="button" size="sm" onClick={() => void analyse()} disabled={analysing}>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => void analyse()}
+              disabled={analysing || !crossOrigin}
+            >
               {analysing ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
               ) : (

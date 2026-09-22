@@ -791,6 +791,28 @@ export async function signOutAction(): Promise<void> {
   redirect("/login");
 }
 
+/**
+ * Close the account. The typed confirmation is the guard: this cannot be
+ * undone and there is no trash to recover it from.
+ */
+export async function deleteAccountAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const user = await requireUser();
+  if (String(formData.get("confirm") ?? "").trim().toLowerCase() !== "delete") {
+    return { ok: false, message: 'Type "delete" to confirm.' };
+  }
+  try {
+    await repo.deleteAccount(user.id);
+    await repo.signOut();
+  } catch (error) {
+    return asError(error);
+  }
+  revalidatePath("/", "layout");
+  redirect("/login");
+}
+
 export async function resetDemoAction(): Promise<void> {
   if (repo.mode() !== "demo") return;
   resetDemoStore();

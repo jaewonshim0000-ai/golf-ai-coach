@@ -17,7 +17,7 @@ test("live schema: atomic practice, persistent results, and cross-user isolation
       create table storage.objects(id text primary key, bucket_id text, name text);
       create function storage.foldername(text) returns text[] language sql as $$ select string_to_array($1, '/') $$;
     `);
-    for (const path of ["supabase/migrations/0001_init.sql", "supabase/migrations/0002_live_practice.sql", "supabase/migrations/0003_swing_vision.sql", "supabase/migrations/0004_swing_clips.sql", "supabase/seed/seed.sql"]) {
+    for (const path of ["supabase/migrations/0001_init.sql", "supabase/migrations/0002_live_practice.sql", "supabase/migrations/0003_swing_vision.sql", "supabase/migrations/0004_swing_clips.sql", "supabase/migrations/0005_delete_account.sql", "supabase/seed/seed.sql"]) {
       const sql = (await readFile(path, "utf8")).replace('create extension if not exists "pgcrypto";', "");
       await db.exec(sql);
     }
@@ -68,5 +68,14 @@ test("live schema: atomic practice, persistent results, and cross-user isolation
     await assert.rejects(db.exec("update swing_sessions set clip_start = 3, clip_end = 1 where id = 'swing_test'"));
     await assert.rejects(db.exec("update swing_sessions set clip_start = 1, clip_end = 1.05 where id = 'swing_test'"));
     await db.exec("update swing_sessions set clip_start = null, clip_end = null where id = 'swing_test'");
+
+    // Leaving takes everything with it, and only ever the caller's own row.
+    await db.query("select delete_my_account()");
+    assert.equal((await db.query("select * from swing_sessions")).rows.length, 0);
+    // auth.users is not readable by the app role, so check it as the owner.
+    await db.exec("reset role");
+    assert.equal((await db.query(`select * from auth.users where id = '${user}'`)).rows.length, 0);
+    assert.equal((await db.query(`select * from auth.users where id = '${other}'`)).rows.length, 1);
+    assert.equal((await db.query(`select * from public.users where id = '${user}'`)).rows.length, 0);
   } finally { await db.close(); }
 });

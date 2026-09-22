@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { saveProfileAction, signOutAction } from "@/app/actions";
+import { DeleteAccountButton } from "@/components/auth/delete-account";
 import { ProfileForm } from "@/components/forms/profile-form";
 import { TrendLine } from "@/components/charts";
 import {
@@ -86,11 +87,19 @@ export default async function ProfilePage() {
       <ProfileForm profile={state.profile} action={saveProfileAction} />
 
       {repo.mode() === "supabase" ? (
-        <form action={signOutAction}>
-          <Button type="submit" variant="secondary">
-            Sign out
-          </Button>
-        </form>
+        <Card>
+          <CardHeader>
+            <CardTitle>Account</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-wrap items-start justify-between gap-4">
+            <form action={signOutAction}>
+              <Button type="submit" variant="secondary">
+                Sign out
+              </Button>
+            </form>
+            <DeleteAccountButton />
+          </CardContent>
+        </Card>
       ) : null}
     </div>
   );

@@ -456,6 +456,29 @@ export async function addSwingFinding(
  * if the row went first and the object delete then failed, the file would be
  * left paid for and unreachable, with nothing left pointing at it.
  */
+/**
+ * Delete the account and everything in it. Storage first, because the bucket
+ * does not cascade from the row and an orphaned video is still the player's
+ * data sitting on a server they have left.
+ */
+export async function deleteAccount(userId: string): Promise<void> {
+  const sb = await client();
+  if (!sb) {
+    // Demo mode has one shared player; wiping it is what reset already does.
+    throw new Error("Connect Supabase before deleting an account.");
+  }
+
+  const { data: files } = await sb.storage.from("swing-videos").list(userId, { limit: 1000 });
+  const paths = (files ?? []).map((file) => `${userId}/${file.name}`);
+  if (paths.length > 0) {
+    const { error: storageError } = await sb.storage.from("swing-videos").remove(paths);
+    if (storageError) throw new Error(`deleteAccount: ${storageError.message}`);
+  }
+
+  const { error } = await sb.rpc("delete_my_account");
+  if (error) throw new Error(`deleteAccount: ${error.message}`);
+}
+
 export async function deleteSwingSession(userId: string, sessionId: string): Promise<void> {
   const sb = await client();
   if (!sb) {

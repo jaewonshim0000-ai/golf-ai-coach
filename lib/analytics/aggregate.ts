@@ -48,9 +48,23 @@ const EMPTY_SUMMARY: SGSummary = {
   },
 };
 
+/** Holes the per-round figures are expressed over. */
+const HOLES_PER_ROUND = 18;
+
+/**
+ * Strokes gained per round.
+ *
+ * The denominator is round-equivalents, not rounds: eighteen holes make one,
+ * so nine holes make half and one hole makes a eighteenth. Counting a
+ * one-hole round as a whole round is how playing a single hole lifted a
+ * season average by more than a stroke. For rounds that were played to
+ * eighteen the two are the same number.
+ */
 export function summarizeStrokesGained(shots: ScoredShot[]): SGSummary {
   if (shots.length === 0) return structuredClone(EMPTY_SUMMARY);
   const rounds = new Set(shots.map((s) => s.round_id)).size || 1;
+  const holes = new Set(shots.map((s) => `${s.round_id}:${s.hole_number}`)).size;
+  const roundEquivalents = Math.max(holes / HOLES_PER_ROUND, 1 / HOLES_PER_ROUND);
 
   const summary: SGSummary = {
     total: 0,
@@ -68,11 +82,11 @@ export function summarizeStrokesGained(shots: ScoredShot[]): SGSummary {
   }
 
   summary.total = round2(summary.total);
-  summary.per_round = round2(summary.total / rounds);
+  summary.per_round = round2(summary.total / roundEquivalents);
   for (const category of SG_CATEGORIES) {
     const bucket = summary.by_category[category];
     bucket.total = round2(bucket.total);
-    bucket.per_round = round2(bucket.total / rounds);
+    bucket.per_round = round2(bucket.total / roundEquivalents);
   }
   return summary;
 }

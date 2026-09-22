@@ -102,15 +102,45 @@ describe("summarizeStrokesGained", () => {
     assert.equal(summary.by_category.approach.total, 0);
   });
 
-  it("divides by distinct rounds, not by shots", () => {
+  it("divides by rounds played, not by shots", () => {
+    // Two complete rounds, one stroke lost in each.
     const shots = [
-      scored({ round_id: "r1", strokes_gained: -1 }),
-      scored({ round_id: "r2", strokes_gained: -1 }),
+      ...Array.from({ length: 18 }, (_, hole) =>
+        scored({ round_id: "r1", hole_number: hole + 1, strokes_gained: hole === 0 ? -1 : 0 }),
+      ),
+      ...Array.from({ length: 18 }, (_, hole) =>
+        scored({ round_id: "r2", hole_number: hole + 1, strokes_gained: hole === 0 ? -1 : 0 }),
+      ),
     ];
     const summary = summarizeStrokesGained(shots);
     assert.equal(summary.rounds, 2);
     assert.equal(summary.total, -2);
     assert.equal(summary.per_round, -1);
+  });
+
+  it("counts nine holes as half a round rather than a whole one", () => {
+    const nine = Array.from({ length: 9 }, (_, hole) =>
+      scored({ round_id: "r1", hole_number: hole + 1, strokes_gained: -0.5 }),
+    );
+    const summary = summarizeStrokesGained(nine);
+    assert.equal(summary.rounds, 1);
+    assert.equal(summary.total, -4.5);
+    // -4.5 over half a round is -9 over a full one.
+    assert.equal(summary.per_round, -9);
+  });
+
+  it("does not let one extra hole move a season average", () => {
+    const season = Array.from({ length: 8 }, (_, round) =>
+      Array.from({ length: 18 }, (_, hole) =>
+        scored({ round_id: `r${round}`, hole_number: hole + 1, strokes_gained: -0.5 }),
+      ),
+    ).flat();
+    const before = summarizeStrokesGained(season).per_round;
+    const after = summarizeStrokesGained([
+      ...season,
+      scored({ round_id: "extra", hole_number: 1, strokes_gained: -0.5 }),
+    ]).per_round;
+    assert.ok(Math.abs(after - before) < 0.1, `moved from ${before} to ${after}`);
   });
 });
 

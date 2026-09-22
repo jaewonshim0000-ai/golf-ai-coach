@@ -106,15 +106,22 @@ export function ruleBasedRoundSummary(
   if (stats.penalties > 0) {
     costYou.push(`${stats.penalties} penalty stroke${stats.penalties === 1 ? "" : "s"}.`);
   }
-  if (stats.worst_hole) {
+  /*
+    The weakest hole of the round is only a cost if it actually lost strokes.
+    On a good round it is still the lowest of a set of gains, and listing it
+    under "what cost you" turns a birdie into a fault.
+  */
+  if (stats.worst_hole && stats.worst_hole.strokes_gained < 0) {
     costYou.push(
-      `Hole ${stats.worst_hole.hole_number} was the worst of the day at ${stats.worst_hole.strokes_gained.toFixed(2)} strokes.`,
+      `Hole ${stats.worst_hole.hole_number} cost you ${Math.abs(stats.worst_hole.strokes_gained).toFixed(2)} strokes.`,
     );
   }
 
-  const biggestMiss = holes
+  const weakestShot = holes
     .flatMap((h) => h.shots)
     .sort((a, b) => a.strokes_gained - b.strokes_gained)[0];
+  // Same rule one level down: a shot that gained is not an expensive shot.
+  const biggestMiss = weakestShot && weakestShot.strokes_gained < 0 ? weakestShot : null;
 
   return {
     headline:
@@ -125,7 +132,7 @@ export function ruleBasedRoundSummary(
     what_cost_you: costYou.slice(0, 3),
     takeaway: biggestMiss
       ? `The single most expensive shot was on hole ${biggestMiss.hole_number} from ${Math.round(biggestMiss.starting_distance)} ${biggestMiss.starting_unit} (${biggestMiss.strokes_gained.toFixed(2)} strokes). One round is a small sample, so treat this as one data point rather than a verdict.`
-      : "One round is a small sample. The picture gets reliable after three or four.",
+      : "No single shot stood out as costly. One round is a small sample, so treat this as one data point rather than a verdict.",
   };
 }
 

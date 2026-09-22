@@ -65,8 +65,16 @@ export function clampClip(start: number, end: number, duration: number): [number
   return [Math.round(lo * 10) / 10, Math.round(hi * 10) / 10];
 }
 
-/** The window to actually play: a stored trim, or the whole clip. */
-export function clipWindow(clip: Clip | null, duration: number): [number, number] {
-  if (!clip || clip.end <= clip.start) return [0, duration];
-  return [clip.start, clip.end];
+/**
+ * The window to actually play: a stored trim, or the whole clip. The trim now
+ * lives on the swing row rather than beside the blob, so it is the same trim
+ * on every device the player signs in from.
+ */
+export function clipWindow(
+  start: number | null,
+  end: number | null,
+  duration: number,
+): [number, number] {
+  if (start === null || end === null || end <= start) return [0, duration];
+  return [start, end];
 }

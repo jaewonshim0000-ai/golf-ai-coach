@@ -14,6 +14,7 @@ import type {
 } from "../../types/practice";
 import { DRILLS } from "../seed/drills";
 import { serverClient, supabaseConfigured } from "./supabase";
+import { privateVideoPath } from "../video-upload";
 import { DEMO_USER_ID, newId, store } from "./demo-store";
 
 /**
@@ -448,6 +449,68 @@ export async function addSwingFinding(
   }
   const { error } = await sb.from("swing_findings").insert(row);
   if (error) throw new Error(`addSwingFinding: ${error.message}`);
+}
+
+/**
+ * Delete a swing and everything hanging off it. The stored video goes first:
+ * if the row went first and the object delete then failed, the file would be
+ * left paid for and unreachable, with nothing left pointing at it.
+ */
+export async function deleteSwingSession(userId: string, sessionId: string): Promise<void> {
+  const sb = await client();
+  if (!sb) {
+    const s = store();
+    s.swingSessions = s.swingSessions.filter((session) => session.id !== sessionId);
+    s.swingFindings = s.swingFindings.filter((f) => f.swing_session_id !== sessionId);
+    s.swingMeasurements = s.swingMeasurements.filter((m) => m.swing_session_id !== sessionId);
+    return;
+  }
+
+  const { data, error: readError } = await sb
+    .from("swing_sessions")
+    .select("video_url")
+    .eq("id", sessionId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (readError) throw new Error(`deleteSwingSession: ${readError.message}`);
+  if (!data) return;
+
+  const path = privateVideoPath((data as { video_url: string | null }).video_url ?? "", userId);
+  if (path) {
+    const { error: storageError } = await sb.storage.from("swing-videos").remove([path]);
+    if (storageError) throw new Error(`deleteSwingSession: ${storageError.message}`);
+  }
+
+  // Measurements and findings cascade from the row.
+  const { error } = await sb
+    .from("swing_sessions")
+    .delete()
+    .eq("id", sessionId)
+    .eq("user_id", userId);
+  if (error) throw new Error(`deleteSwingSession: ${error.message}`);
+}
+
+/** Store a trim on the swing itself, so it travels with the video. */
+export async function saveSwingClip(
+  userId: string,
+  sessionId: string,
+  clip: { start: number; end: number } | null,
+): Promise<void> {
+  const patch = { clip_start: clip?.start ?? null, clip_end: clip?.end ?? null };
+  const sb = await client();
+  if (!sb) {
+    const s = store();
+    s.swingSessions = s.swingSessions.map((session) =>
+      session.id === sessionId ? { ...session, ...patch } : session,
+    );
+    return;
+  }
+  const { error } = await sb
+    .from("swing_sessions")
+    .update(patch)
+    .eq("id", sessionId)
+    .eq("user_id", userId);
+  if (error) throw new Error(`saveSwingClip: ${error.message}`);
 }
 
 export async function deleteSwingFinding(userId: string, findingId: string): Promise<void> {

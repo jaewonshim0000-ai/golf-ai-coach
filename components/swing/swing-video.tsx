@@ -3,9 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Loader2, Sparkles, Video } from "lucide-react";
 
-import { analyzeSwingAction, type AnalyzeState } from "@/app/actions";
+import { analyzeSwingAction, saveSwingClipAction, type AnalyzeState } from "@/app/actions";
 import { FRAME_COUNT } from "@/lib/ai/vision";
-import { clampClip, clipWindow, getClip, putClip, type Clip } from "@/lib/video-store";
+import { clampClip, clipWindow, getClip } from "@/lib/video-store";
 import { cn } from "@/lib/utils";
 import { browserClient } from "@/lib/db/supabase";
 import { Button } from "@/components/ui/primitives";
@@ -33,6 +33,8 @@ export function SwingVideo({
   videoUrl,
   trimmable = false,
   analysable = false,
+  clipStart = null,
+  clipEnd = null,
   className,
 }: {
   id: string;
@@ -40,6 +42,9 @@ export function SwingVideo({
   trimmable?: boolean;
   /** Show the frame-analysis control under the player. */
   analysable?: boolean;
+  /** Trim stored on the swing row, in seconds. */
+  clipStart?: number | null;
+  clipEnd?: number | null;
   className?: string;
 }) {
   const video = useRef<HTMLVideoElement>(null);
@@ -47,7 +52,7 @@ export function SwingVideo({
   const clipId = videoUrl?.startsWith("local://clip/") ? videoUrl.slice("local://clip/".length) : id;
   const [src, setSrc] = useState<string | null>(videoUrl?.startsWith("https://") ? videoUrl : null);
   const [error, setError] = useState<string | null>(null);
-  const [clip, setClip] = useState<Clip | null>(null);
+  const [trim, setTrim] = useState<[number | null, number | null]>([clipStart, clipEnd]);
   const [duration, setDuration] = useState(0);
   const [draft, setDraft] = useState<[number, number] | null>(null);
   const [analysis, setAnalysis] = useState<AnalyzeState | null>(null);
@@ -74,7 +79,6 @@ export function SwingVideo({
         if (!live || !found) return;
         url = URL.createObjectURL(found.blob);
         setSrc(url);
-        setClip(found);
       })
       // No IndexedDB (private window, storage blocked): fall back to the URL.
       .catch(() => undefined);
@@ -84,7 +88,7 @@ export function SwingVideo({
     };
   }, [id, clipId, remote]);
 
-  const [start, end] = draft ?? clipWindow(clip, duration);
+  const [start, end] = draft ?? clipWindow(trim[0], trim[1], duration);
 
   /*
     Sample the clip evenly rather than guessing where the top of the swing is:
@@ -138,15 +142,19 @@ export function SwingVideo({
   }
 
   async function saveTrim(next: [number, number]) {
-    if (!clip) return;
     const [lo, hi] = clampClip(next[0], next[1], duration);
-    const updated = { ...clip, start: lo, end: hi };
-    try {
-      await putClip(updated);
-      setClip(updated);
-      setDraft(null);
+    const previous = trim;
+    setTrim([lo, hi]);
+    setDraft(null);
+    const result = await saveSwingClipAction({ swing_session_id: id, start: lo, end: hi });
+    if (result.ok) {
       setError(null);
-    } catch { setError("Could not save the trim. Please try again."); }
+      return;
+    }
+    // Put the handles back where they were rather than showing a trim that
+    // exists only in this tab.
+    setTrim(previous);
+    setError(result.message ?? "Could not save the trim. Please try again.");
   }
 
   if (!src) {
@@ -179,7 +187,7 @@ export function SwingVideo({
           const element = event.currentTarget;
           setDuration(element.duration);
           // Park on the first frame of the clip so a card shows the swing, not black.
-          element.currentTime = clip?.start ?? 0.05;
+          element.currentTime = trim[0] ?? 0.05;
         }}
         onTimeUpdate={(event) => {
           const element = event.currentTarget;
@@ -230,7 +238,7 @@ export function SwingVideo({
         </div>
       ) : null}
 
-      {trimmable && clip ? (
+      {trimmable ? (
         <div className="rounded-xl border border-border bg-surface-2 p-3">
           <div className="flex items-center justify-between">
             <p className="dsp text-[10px] tracking-[0.17em] text-fg-subtle">Edit length</p>
@@ -255,7 +263,7 @@ export function SwingVideo({
             />
           </div>
           <p className="mt-2 text-[10.5px] leading-[1.5] text-fg-subtle">
-            Clip and trim are stored on this device only.
+            Saved with the swing, so the same trim plays on every device.
           </p>
         </div>
       ) : null}

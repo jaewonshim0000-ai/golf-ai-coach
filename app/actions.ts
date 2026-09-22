@@ -502,6 +502,8 @@ export async function createSwingSessionAction(
       swing_pattern: parsed.data.swing_pattern,
       notes: parsed.data.notes ?? null,
       analysis_status: "manual",
+      clip_start: null,
+      clip_end: null,
     });
   } catch (error) {
     return asError(error);
@@ -575,6 +577,61 @@ export async function deleteSwingFindingAction(
  * Record one swing measurement. Values are entered by a person, so the row is
  * stored with the confidence they chose rather than an assumed certainty.
  */
+/** Delete a swing, its video, its measurements and its findings. */
+export async function deleteSwingSessionAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const user = await requireUser();
+  const id = String(formData.get("swing_session_id") ?? "");
+  if (!id) return { ok: false, message: "Unknown swing." };
+  try {
+    await repo.deleteSwingSession(user.id, id);
+  } catch (error) {
+    return asError(error);
+  }
+  revalidatePath("/", "layout");
+  redirect("/swing");
+}
+
+/**
+ * Save a trim. Both handles are checked here because the values come from a
+ * range input the client can set to anything, and the range they describe is
+ * what later playback obeys.
+ */
+const clipSchema = z.object({
+  swing_session_id: z.string().min(1).max(80),
+  start: z.number().min(0).max(3600),
+  end: z.number().min(0).max(3600),
+});
+
+export async function saveSwingClipAction(input: {
+  swing_session_id: string;
+  start: number;
+  end: number;
+}): Promise<ActionState> {
+  const user = await requireUser();
+  const parsed = clipSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, message: "That trim could not be saved." };
+
+  const { start, end } = parsed.data;
+  // A trim shorter than this is a mis-drag; clearing it plays the whole clip.
+  const clip = end - start >= 0.2 ? { start, end } : null;
+
+  const sessions = await repo.getSwingSessions(user.id);
+  if (!sessions.some((session) => session.id === parsed.data.swing_session_id)) {
+    return { ok: false, message: "That swing session does not exist." };
+  }
+
+  try {
+    await repo.saveSwingClip(user.id, parsed.data.swing_session_id, clip);
+  } catch (error) {
+    return asError(error);
+  }
+  revalidatePath(`/swing/${parsed.data.swing_session_id}`);
+  return { ok: true, message: clip ? "Trim saved." : "Playing the whole clip." };
+}
+
 export async function saveMeasurementAction(
   _prev: ActionState,
   formData: FormData,

@@ -151,6 +151,9 @@ export type SwingSession = {
   swing_pattern: SwingPattern;
   notes: string | null;
   analysis_status: "manual" | "queued" | "processed" | "failed";
+  /** Trim in seconds, stored with the swing so it survives a change of device. */
+  clip_start: number | null;
+  clip_end: number | null;
   created_at: string;
 };
 

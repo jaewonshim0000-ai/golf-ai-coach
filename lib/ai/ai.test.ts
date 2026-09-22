@@ -115,6 +115,8 @@ describe("AI output schemas", () => {
       video_url: null,
       camera_angle: "down_the_line",
       club: "7_iron",
+      clip_start: null,
+      clip_end: null,
       shot_type: "full",
       swing_pattern: "draw",
       notes: null,

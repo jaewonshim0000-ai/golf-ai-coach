@@ -5,6 +5,7 @@ import { ArrowLeft, Target } from "lucide-react";
 import { SwingDiagnostic } from "@/components/swing/diagnostic";
 import { MeasurementForm } from "@/components/swing/measurement-form";
 import { SwingVideo } from "@/components/swing/swing-video";
+import { DeleteSwingButton } from "@/components/swing/delete-swing";
 import {
   Badge,
   ButtonLink,
@@ -60,7 +61,14 @@ export default async function SwingPage({ params }: { params: Promise<{ id: stri
       />
 
       <div className="relative grid gap-5 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">
-        <SwingVideo id={session.id} videoUrl={session.video_url} trimmable analysable />
+        <SwingVideo
+          id={session.id}
+          videoUrl={session.video_url}
+          clipStart={session.clip_start}
+          clipEnd={session.clip_end}
+          trimmable
+          analysable
+        />
 
         <div className="space-y-5">
           {/* The one thing to fix. Everything else on this screen sits below it. */}
@@ -178,6 +186,10 @@ export default async function SwingPage({ params }: { params: Promise<{ id: stri
 
       <SwingDiagnostic session={session} measurements={measurements} />
       <MeasurementForm sessionId={session.id} />
+
+      <div className="flex justify-end pt-2">
+        <DeleteSwingButton swingSessionId={session.id} />
+      </div>
     </div>
   );
 }

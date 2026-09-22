@@ -2,33 +2,30 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 
-import { AuthForm } from "@/components/auth/auth-form";
+import { ResetForm } from "@/components/auth/reset-form";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/primitives";
 import { mode } from "@/lib/db/repo";
 
-export const metadata: Metadata = { title: "Sign in" };
+export const metadata: Metadata = { title: "Reset password" };
 export const dynamic = "force-dynamic";
 
-export default function LoginPage() {
+export default function ResetPage() {
   if (mode() === "setup") redirect("/setup");
   if (mode() === "demo") redirect("/practice");
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Sign in</CardTitle>
+        <CardTitle className="text-base">Reset your password</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <AuthForm mode="login" />
-        <p className="text-center text-xs text-fg-muted">
-          No account yet?{" "}
-          <Link href="/signup" className="text-accent hover:underline">
-            Create one
-          </Link>
+        <p className="text-xs leading-relaxed text-fg-muted">
+          We will email you a link. Open it on this device and you can set a new password.
         </p>
+        <ResetForm mode="request" />
         <p className="text-center text-xs text-fg-muted">
-          <Link href="/reset" className="text-accent hover:underline">
-            Forgot your password?
+          <Link href="/login" className="text-accent hover:underline">
+            Back to sign in
           </Link>
         </p>
       </CardContent>

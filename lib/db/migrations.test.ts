@@ -17,7 +17,7 @@ test("live schema: atomic practice, persistent results, and cross-user isolation
       create table storage.objects(id text primary key, bucket_id text, name text);
       create function storage.foldername(text) returns text[] language sql as $$ select string_to_array($1, '/') $$;
     `);
-    for (const path of ["supabase/migrations/0001_init.sql", "supabase/migrations/0002_live_practice.sql", "supabase/migrations/0003_swing_vision.sql", "supabase/seed/seed.sql"]) {
+    for (const path of ["supabase/migrations/0001_init.sql", "supabase/migrations/0002_live_practice.sql", "supabase/migrations/0003_swing_vision.sql", "supabase/migrations/0004_swing_clips.sql", "supabase/seed/seed.sql"]) {
       const sql = (await readFile(path, "utf8")).replace('create extension if not exists "pgcrypto";', "");
       await db.exec(sql);
     }
@@ -62,5 +62,11 @@ test("live schema: atomic practice, persistent results, and cross-user isolation
       (await db.query<{ source: string }>("select source from swing_measurements")).rows[0]!.source,
       "vision",
     );
+
+    // A trim is a range or it is nothing: no inverted or hairline clips.
+    await db.exec("update swing_sessions set clip_start = 0.4, clip_end = 2.1 where id = 'swing_test'");
+    await assert.rejects(db.exec("update swing_sessions set clip_start = 3, clip_end = 1 where id = 'swing_test'"));
+    await assert.rejects(db.exec("update swing_sessions set clip_start = 1, clip_end = 1.05 where id = 'swing_test'"));
+    await db.exec("update swing_sessions set clip_start = null, clip_end = null where id = 'swing_test'");
   } finally { await db.close(); }
 });

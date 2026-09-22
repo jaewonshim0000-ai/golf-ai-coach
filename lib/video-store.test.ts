@@ -1,9 +1,7 @@
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
 
-import { clampClip, clipWindow, type Clip } from "./video-store";
-
-const clip = (start: number, end: number) => ({ id: "s1", blob: null, start, end }) as unknown as Clip;
+import { clampClip, clipWindow } from "./video-store";
 
 describe("clip trimming", () => {
   it("keeps a sane trim as given", () => {
@@ -24,8 +22,8 @@ describe("clip trimming", () => {
   });
 
   it("plays the whole clip when nothing is trimmed", () => {
-    assert.deepEqual(clipWindow(null, 4), [0, 4]);
-    assert.deepEqual(clipWindow(clip(0, 0), 4), [0, 4]);
-    assert.deepEqual(clipWindow(clip(1, 2.5), 4), [1, 2.5]);
+    assert.deepEqual(clipWindow(null, null, 4), [0, 4]);
+    assert.deepEqual(clipWindow(0, 0, 4), [0, 4]);
+    assert.deepEqual(clipWindow(1, 2.5, 4), [1, 2.5]);
   });
 });

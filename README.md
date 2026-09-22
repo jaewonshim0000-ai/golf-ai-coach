@@ -18,9 +18,10 @@ Without a database connection, the app shows a setup screen. For disposable samp
    - `supabase/migrations/0001_init.sql` (new projects only).
    - `supabase/migrations/0002_live_practice.sql` (new and existing projects; apply once).
    - `supabase/migrations/0003_swing_vision.sql` (new and existing projects; apply once).
+   - `supabase/migrations/0004_swing_clips.sql` (new and existing projects; apply once).
    - `supabase/seed/seed.sql` (reference drills and swing bands only; safe to re-run).
 3. Copy `.env.example` to `.env.local` and set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` from the project's connection settings. Use the public anon key, never a service-role key. Keep `ENABLE_DEMO_MODE=false`.
-4. In Supabase Authentication URL Configuration, set the Site URL to the deployed app and allow its `/auth/callback` URL. Add `http://localhost:3000/auth/callback` for local development. Email/password sign-in must be enabled.
+4. In Supabase Authentication URL Configuration, set the Site URL to the deployed app and allow its `/auth/callback` URL. Add `http://localhost:3000/auth/callback` for local development. Email/password sign-in must be enabled, and password recovery emails must be enabled for the **Forgot your password?** link to work.
 5. Add the same environment variables to the existing Vercel project, then rebuild and redeploy. Public environment variables must be present at build time.
 6. Create your account, confirm your email if required, and complete the profile. New accounts start empty. Do **not** run `supabase/seed/demo-player.sql` for real users.
 
@@ -54,7 +55,7 @@ This is estimation by eye, not pose estimation. The app keeps that distinction r
 - a value you type by hand is a measurement, outranks any estimate, and is never overwritten by re-running the analysis;
 - the diagnostic marks estimated rows `est.` and says how many of the readings came from the model.
 
-Demo clips and demo trim settings use IndexedDB on the recording device. Cloud clips play in full; cloud trimming is not implemented.
+Trim is stored on the swing itself, so the same clip range plays on every device you sign in from. **Delete swing** removes the stored video, its measurements and its findings; the file is deleted from storage before the row, so a failure never leaves a paid-for file with nothing pointing at it. Demo clips (no database connected) keep the video blob in IndexedDB on the recording device.
 
 ## Coaching
 

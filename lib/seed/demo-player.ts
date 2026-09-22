@@ -689,6 +689,8 @@ function buildDemoData(today: Date): DemoData {
       swing_pattern: "draw",
       notes: "Filmed after the range session. Felt like I was rushing from the top.",
       analysis_status: "manual",
+      clip_start: null,
+      clip_end: null,
       created_at: `${swingDate}T18:00:00.000Z`,
     },
     {
@@ -701,6 +703,8 @@ function buildDemoData(today: Date): DemoData {
       swing_pattern: "draw",
       notes: null,
       analysis_status: "manual",
+      clip_start: null,
+      clip_end: null,
       created_at: `${daysAgo(23, today)}T18:00:00.000Z`,
     },
   ];

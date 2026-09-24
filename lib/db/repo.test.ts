@@ -8,6 +8,7 @@ process.env.ENABLE_DEMO_MODE = "true";
 import { resetDemoStore, store } from "./demo-store";
 import {
   DEMO_USER_ID,
+  deletePracticeSession,
   deleteSwingSession,
   getSwingSessions,
   saveSwingClip,
@@ -68,5 +69,22 @@ describe("swing storage", () => {
     const kept = store().swingSessions.filter((session) => session.id !== "swing_1").length;
     await deleteSwingSession(DEMO_USER_ID, "swing_1");
     assert.equal(store().swingSessions.length, kept);
+  });
+});
+
+describe("practice storage", () => {
+  beforeEach(() => resetDemoStore());
+
+  it("deletes a session with its blocks and recorded attempts", async () => {
+    const sessionId = store().practiceSessions.find((session) =>
+      store().drillAttempts.some((attempt) => attempt.session_id === session.id),
+    )?.id;
+    assert.ok(sessionId);
+
+    await deletePracticeSession(DEMO_USER_ID, sessionId);
+
+    assert.equal(store().practiceSessions.some((session) => session.id === sessionId), false);
+    assert.equal(store().practiceItems.some((item) => item.session_id === sessionId), false);
+    assert.equal(store().drillAttempts.some((attempt) => attempt.session_id === sessionId), false);
   });
 });

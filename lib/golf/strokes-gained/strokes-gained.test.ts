@@ -404,6 +404,17 @@ describe("summarizeRound", () => {
     assert.equal(summary.best_hole, null);
   });
 
+  it("keeps the total and hole count for a score-only round", () => {
+    const summary = summarizeRound(
+      { ...round, holes_played: 9, score: 42, hole_scores: [4, 5, 4, 5, 5, 4, 5, 5, 5] },
+      [],
+    );
+    assert.equal(summary.holes_played, 9);
+    assert.equal(summary.score, 42);
+    assert.equal(summary.to_par, null, "par is not invented without shot or course detail");
+    assert.equal(summary.sg_total, 0);
+  });
+
   it("splits strokes gained across all four categories", () => {
     const summary = summarizeRound(round, [
       shot({ hole_number: 1, shot_number: 1, ending_location: "fairway", ending_distance: 150 }),

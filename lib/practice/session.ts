@@ -2,7 +2,7 @@ import type { Weakness } from "../../types/analytics";
 import type { PlayerProfile, PracticeFacility } from "../../types/player";
 import type { Drill, DrillCategory, PracticeBlock, Skill } from "../../types/practice";
 import { DRILLS } from "../seed/drills";
-import { QUICK_DRILLS } from "./goals";
+import { QUICK_DRILLS, goalForWeakness } from "./goals";
 
 /**
  * Today's session.
@@ -118,7 +118,9 @@ export function suggestSession(
     skills.length > 0 && skills.every(meetingTarget) ? "pressure" : "technical";
 
   const duration = 10;
-  const chosen = QUICK_DRILLS.find((drill) => skills.includes(drill.skill_trained)) ?? QUICK_DRILLS[1]!;
+  // The same goal the plan builder recommends, so the two never disagree.
+  const goal = goalForWeakness(target);
+  const chosen = QUICK_DRILLS.find((drill) => drill.id === `drill_${goal}`) ?? QUICK_DRILLS[1]!;
   const drills = [chosen];
   if (drills.length === 0) return null;
 
@@ -126,7 +128,7 @@ export function suggestSession(
     title: chosen.name,
     objective: target
       ? `Aimed at the ${target.strokes_lost_per_round.toFixed(2)} strokes a round you are losing here.`
-      : "Start with ten balls at one target. Choose another goal whenever you like.",
+      : "Start with a 15-minute plan on one goal. Choose another whenever you like.",
     block,
     duration,
     drills,

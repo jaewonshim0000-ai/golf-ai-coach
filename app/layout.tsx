@@ -21,6 +21,10 @@ export const metadata: Metadata = {
   },
   description:
     "A persistent golf intelligence system: strokes gained, practice tracking and swing findings combined into one development priority.",
+  manifest: "/manifest.webmanifest",
+  applicationName: "Golf AI Coach",
+  appleWebApp: { capable: true, title: "Golf Coach", statusBarStyle: "black-translucent" },
+  formatDetection: { telephone: false },
 };
 
 export const viewport: Viewport = {

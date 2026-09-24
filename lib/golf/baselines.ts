@@ -151,7 +151,9 @@ const FULL_ROUND_HOLES = 18;
  */
 export function rebaseRound(stats: RoundSummaryStats, baseline: Baseline): RoundSummaryStats {
   if (baseline.id === "tour") return stats;
-  const share = Math.min(1, Math.max(0, stats.holes_played / FULL_ROUND_HOLES));
+  // Only the holes strokes gained was measured on: a scorecard round has a
+  // score for every hole and strokes gained for none, so it owes no gap.
+  const share = Math.min(1, Math.max(0, stats.sg_holes / FULL_ROUND_HOLES));
   const by = {} as Record<SGCategory, number>;
   for (const category of SG_CATEGORIES) {
     by[category] = round2(stats.sg_by_category[category] - baseline.gap[category] * share);

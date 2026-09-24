@@ -27,6 +27,7 @@ const DEFAULT_YARDS = [400, 370, 165, 510, 425, 390, 150, 530, 415, 395, 185, 44
 export function NewRoundForm({ courses }: { courses: Course[] }) {
   const [state, formAction, pending] = useActionState(createRoundAction, IDLE);
   const [adding, setAdding] = useState(courses.length === 0);
+  const [entryMode, setEntryMode] = useState<"shots" | "scorecard">("shots");
   const errors = state.errors ?? {};
   const today = new Date().toISOString().slice(0, 10);
 
@@ -34,6 +35,7 @@ export function NewRoundForm({ courses }: { courses: Course[] }) {
     <div className="space-y-4">
       {!adding ? (
         <form action={formAction} className="space-y-4">
+          <input type="hidden" name="entry_mode" value={entryMode} />
           <Card>
             <CardHeader className="flex-row items-center justify-between gap-3">
               <CardTitle>Round details</CardTitle>
@@ -58,6 +60,19 @@ export function NewRoundForm({ courses }: { courses: Course[] }) {
               <Field label="Tees" error={errors.tees}>
                 <Input name="tees" placeholder="White" maxLength={40} />
               </Field>
+              <div className="sm:col-span-2">
+                <p className="mb-2 text-xs font-medium text-fg-muted">How do you want to log it?</p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <button type="button" aria-pressed={entryMode === "shots"} onClick={() => setEntryMode("shots")} className={cn("rounded-xl border p-3 text-left transition-colors", entryMode === "shots" ? "border-accent bg-accent-soft" : "border-border-strong bg-surface-2")}>
+                    <span className="block text-sm font-semibold">Track every shot</span>
+                    <span className="mt-0.5 block text-xs text-fg-muted">Best for strokes gained and coaching.</span>
+                  </button>
+                  <button type="button" aria-pressed={entryMode === "scorecard"} onClick={() => setEntryMode("scorecard")} className={cn("rounded-xl border p-3 text-left transition-colors", entryMode === "scorecard" ? "border-accent bg-accent-soft" : "border-border-strong bg-surface-2")}>
+                    <span className="block text-sm font-semibold">Live scorecard</span>
+                    <span className="mt-0.5 block text-xs text-fg-muted">Score, putts, fairway and penalties, hole by hole.</span>
+                  </button>
+                </div>
+              </div>
               <div className="sm:col-span-2">
                 <p className="mb-2 text-xs font-medium text-fg-muted">Conditions</p>
                 <div className="flex flex-wrap gap-2">
@@ -85,7 +100,7 @@ export function NewRoundForm({ courses }: { courses: Course[] }) {
 
           <Button type="submit" disabled={pending}>
             {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            Start recording shots
+            {entryMode === "scorecard" ? "Start scorecard" : "Start recording shots"}
           </Button>
         </form>
       ) : (
@@ -116,7 +131,9 @@ function ConditionChip({ value }: { value: string }) {
 
 function AddCourseForm({ onDone, canCancel }: { onDone: () => void; canCancel: boolean }) {
   const [state, formAction, pending] = useActionState(createCourseAction, IDLE);
+  const [holeCount, setHoleCount] = useState<9 | 18>(18);
   const errors = state.errors ?? {};
+  const holeIndexes = Array.from({ length: holeCount }, (_, index) => index);
 
   // The action revalidates the course list; drop back to the round form so the
   // new course can be picked.
@@ -130,10 +147,15 @@ function AddCourseForm({ onDone, canCancel }: { onDone: () => void; canCancel: b
         <CardHeader>
           <CardTitle>Add a course</CardTitle>
           <p className="mt-0.5 text-xs text-fg-muted">
-            Par and yardage per hole. Defaults are a typical par 72 you can edit.
+            Par and yardage per hole. Pick nine or eighteen, then adjust the defaults.
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="flex gap-2">
+            {([9, 18] as const).map((count) => (
+              <Button key={count} type="button" size="sm" variant={holeCount === count ? "subtle" : "secondary"} onClick={() => setHoleCount(count)}>{count} holes</Button>
+            ))}
+          </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Course name" error={errors.name}>
               <Input name="name" required minLength={2} maxLength={120} placeholder="Riverbend Golf Club" />
@@ -148,7 +170,7 @@ function AddCourseForm({ onDone, canCancel }: { onDone: () => void; canCancel: b
               <thead>
                 <tr className="text-left text-[11px] uppercase tracking-wider text-fg-subtle">
                   <th className="pb-2">Hole</th>
-                  {DEFAULT_PARS.map((_, index) => (
+                  {holeIndexes.map((index) => (
                     <th key={index} className="pb-2 text-center font-medium">
                       {index + 1}
                     </th>
@@ -158,14 +180,14 @@ function AddCourseForm({ onDone, canCancel }: { onDone: () => void; canCancel: b
               <tbody>
                 <tr>
                   <th className="py-1 text-left text-xs font-medium text-fg-muted">Par</th>
-                  {DEFAULT_PARS.map((par, index) => (
+                  {holeIndexes.map((index) => (
                     <td key={index} className="px-0.5 py-1">
                       <Input
                         name="par"
                         type="number"
                         min={3}
                         max={6}
-                        defaultValue={par}
+                        defaultValue={DEFAULT_PARS[index]}
                         className="tabular h-8 px-1 text-center text-xs"
                         aria-label={`Par for hole ${index + 1}`}
                       />
@@ -174,14 +196,14 @@ function AddCourseForm({ onDone, canCancel }: { onDone: () => void; canCancel: b
                 </tr>
                 <tr>
                   <th className="py-1 text-left text-xs font-medium text-fg-muted">Yards</th>
-                  {DEFAULT_YARDS.map((yards, index) => (
+                  {holeIndexes.map((index) => (
                     <td key={index} className="px-0.5 py-1">
                       <Input
                         name="yards"
                         type="number"
                         min={60}
                         max={700}
-                        defaultValue={yards}
+                        defaultValue={DEFAULT_YARDS[index]}
                         className="tabular h-8 px-1 text-center text-xs"
                         aria-label={`Yards for hole ${index + 1}`}
                       />

@@ -123,6 +123,8 @@ export type PracticeItem = {
   /** Target on the drill metric for this session specifically. */
   target_value: number;
   objective: string;
+  /** The band this block is scored against, in its goal's unit. Null for counted drills. */
+  tolerance?: number | null;
 };
 
 export type DrillAttempt = {
@@ -137,6 +139,8 @@ export type DrillAttempt = {
   score: number;
   raw_value: number | null;
   shot_offsets?: number[] | null;
+  /** Where each ball finished on the target, [left(-)/right(+), short(-)/long(+)]. */
+  shot_points?: [number, number][] | null;
   notes: string | null;
   completed_at: string;
 };

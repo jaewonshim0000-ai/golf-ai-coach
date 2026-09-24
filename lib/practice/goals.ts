@@ -51,3 +51,93 @@ export function dispersion(values: number[], tolerance: number) {
     spread: Math.max(...values) - Math.min(...values),
   };
 }
+
+export type PracticeGoal = (typeof PRACTICE_GOALS)[number];
+export type GoalId = PracticeGoal["id"];
+
+/** Short names for titles and chips. */
+export const GOAL_SHORT: Record<GoalId, string> = {
+  driver_accuracy: "Driver",
+  iron_accuracy: "Irons",
+  wedge_accuracy: "Wedges",
+  chip_accuracy: "Chipping",
+  putting_conversion: "Putting",
+};
+
+/** The bands a goal can be scored against, loosest first, in the goal's unit. */
+export const TOLERANCE_LADDER: Record<GoalId, number[]> = {
+  driver_accuracy: [25, 20, 15, 12, 10, 8],
+  iron_accuracy: [15, 12, 10, 8, 6, 5],
+  wedge_accuracy: [10, 8, 6, 5, 4, 3],
+  chip_accuracy: [10, 8, 6, 5, 4, 3],
+  putting_conversion: [],
+};
+
+/**
+ * The number a ball is scored on: the sideways miss for a full swing, the
+ * distance from the hole for a chip. Points are [left/right, short/long].
+ */
+export function offsetFor(goal: PracticeGoal, point: [number, number]): number {
+  const value = goal.id === "chip_accuracy" ? Math.hypot(point[0], point[1]) : point[0];
+  return Math.round(value * 10) / 10;
+}
+
+/**
+ * Today's band: the tightest one the last session would still have passed at
+ * seven in ten. Hit it and the next session asks for more; have a bad day and
+ * it gives some back. So the target tracks the player instead of sitting at a
+ * number that is either trivial or hopeless for them.
+ */
+export function earnedTolerance(
+  goal: PracticeGoal,
+  lastOffsets: number[] | null | undefined,
+): number | null {
+  if (goal.tolerance === null) return null;
+  const ladder = TOLERANCE_LADDER[goal.id];
+  if (!lastOffsets?.length) return goal.tolerance;
+  const needed = Math.ceil(lastOffsets.length * 0.7);
+  const earned = [...ladder]
+    .reverse()
+    .find((band) => lastOffsets.filter((value) => Math.abs(value) <= band).length >= needed);
+  return earned ?? ladder[0]!;
+}
+
+/** Which way the misses lean, from tapped points. Null with nothing to read. */
+export function missPattern(points: [number, number][], goal: PracticeGoal, tolerance: number) {
+  if (points.length === 0) return null;
+  const offsets = points.map((point) => offsetFor(goal, point));
+  const mean = (values: number[]) => values.reduce((sum, value) => sum + value, 0) / values.length;
+  const lateral = mean(points.map(([x]) => x));
+  const depth = mean(points.map(([, y]) => y));
+  const xs = points.map(([x]) => x);
+  const unit = goal.unit === "feet" ? "ft" : "yd";
+  const lean = (value: number, negative: string, positive: string) =>
+    Math.abs(value) < tolerance / 4
+      ? null
+      : `${Math.abs(value).toFixed(1)} ${unit} ${value < 0 ? negative : positive}`;
+  const leans = [lean(lateral, "left", "right"), lean(depth, "short", "long")].filter(Boolean);
+  return {
+    count: points.length,
+    successes: offsets.filter((value) => Math.abs(value) <= tolerance).length,
+    averageMiss: mean(offsets.map(Math.abs)),
+    lateral,
+    depth,
+    spread: Math.max(...xs) - Math.min(...xs),
+    summary:
+      leans.length === 0
+        ? "No lean: the misses are centred on the target."
+        : `Leaning ${leans.join(" and ")} on average.`,
+  };
+}
+
+/** The goal that attacks a weakness, by where on the course it costs strokes. */
+export function goalForWeakness(weakness: { category: string; key: string } | null): GoalId {
+  if (!weakness) return "iron_accuracy";
+  if (weakness.category === "off_the_tee") return "driver_accuracy";
+  if (weakness.category === "putting") return "putting_conversion";
+  if (weakness.category === "around_the_green") return "chip_accuracy";
+  const start = parseInt(weakness.key, 10);
+  return (Number.isFinite(start) && start < 100) || /^(pw|gw|sw|lw)$/.test(weakness.key)
+    ? "wedge_accuracy"
+    : "iron_accuracy";
+}

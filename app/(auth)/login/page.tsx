@@ -9,9 +9,13 @@ import { mode } from "@/lib/db/repo";
 export const metadata: Metadata = { title: "Sign in" };
 export const dynamic = "force-dynamic";
 
-export default function LoginPage() {
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   if (mode() === "setup") redirect("/setup");
   if (mode() === "demo") redirect("/practice");
+  const search = await searchParams;
+  const initialError = search.error === "auth"
+    ? "That sign-in link is invalid or has expired. Please try again."
+    : null;
 
   return (
     <Card>
@@ -19,7 +23,7 @@ export default function LoginPage() {
         <CardTitle className="text-base">Sign in</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <AuthForm mode="login" />
+        <AuthForm mode="login" initialError={initialError} />
         <p className="text-center text-xs text-fg-muted">
           No account yet?{" "}
           <Link href="/signup" className="text-accent hover:underline">

@@ -11,10 +11,10 @@ import { Button, Field, Input } from "@/components/ui/primitives";
  * Email + password auth against Supabase. Only rendered when Supabase is
  * configured - in demo mode the page shows the demo entry point instead.
  */
-export function AuthForm({ mode }: { mode: "login" | "signup" }) {
+export function AuthForm({ mode, initialError = null }: { mode: "login" | "signup"; initialError?: string | null }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(initialError);
   const [notice, setNotice] = useState<string | null>(null);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -31,7 +31,13 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
     const data = new FormData(event.currentTarget);
     const email = String(data.get("email") ?? "").trim();
     const password = String(data.get("password") ?? "");
+    const passwordConfirmation = String(data.get("password_confirmation") ?? "");
     const name = String(data.get("name") ?? "").trim();
+
+    if (mode === "signup" && password !== passwordConfirmation) {
+      setError("Passwords do not match.");
+      return;
+    }
 
     setPending(true);
     try {
@@ -83,6 +89,18 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
           minLength={8}
         />
       </Field>
+
+      {mode === "signup" ? (
+        <Field label="Confirm password">
+          <Input
+            name="password_confirmation"
+            type="password"
+            autoComplete="new-password"
+            required
+            minLength={8}
+          />
+        </Field>
+      ) : null}
 
       {error ? (
         <p role="alert" className="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad">

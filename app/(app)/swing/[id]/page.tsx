@@ -5,6 +5,7 @@ import { ArrowLeft, Target } from "lucide-react";
 import { SwingDiagnostic } from "@/components/swing/diagnostic";
 import { MeasurementForm } from "@/components/swing/measurement-form";
 import { SwingVideo } from "@/components/swing/swing-video";
+import { SwingModel } from "@/components/swing/swing-model";
 import { DeleteSwingButton } from "@/components/swing/delete-swing";
 import {
   Badge,
@@ -37,6 +38,7 @@ export default async function SwingPage({ params }: { params: Promise<{ id: stri
   const session = state.swingSessions.find((candidate) => candidate.id === id);
   if (!session) notFound();
 
+  const model = await repo.getSwingModel(user.id, session.id);
   const measurements = state.swingMeasurements.filter((m) => m.swing_session_id === session.id);
   const findings = state.swingFindings.filter((f) => f.swing_session_id === session.id);
   const diagnostic = diagnoseSwing(measurements);
@@ -66,7 +68,6 @@ export default async function SwingPage({ params }: { params: Promise<{ id: stri
           videoUrl={session.video_url}
           clipStart={session.clip_start}
           clipEnd={session.clip_end}
-          handedness={state.profile?.dominant_hand ?? "right"}
           trimmable
           analysable
         />
@@ -184,6 +185,8 @@ export default async function SwingPage({ params }: { params: Promise<{ id: stri
           </Card>
         </div>
       </div>
+
+      {model ? <SwingModel model={model} /> : null}
 
       <SwingDiagnostic session={session} measurements={measurements} />
       <MeasurementForm sessionId={session.id} />

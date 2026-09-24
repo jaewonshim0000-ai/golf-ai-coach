@@ -19,8 +19,14 @@ import type { PoseFrame } from "./golf/pose";
 
 const VERSION = "1.0.1";
 const WASM_BASE = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${VERSION}/wasm`;
+/*
+  The full model rather than lite: the 3D model is only as good as the depth
+  the detector infers, and full is markedly better at it for ~4 MB more.
+  ponytail: heavy is better again at ~30 MB and several times slower on a
+  phone; worth it only if the depth still looks soft on real clips.
+*/
 const MODEL =
-  "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
+  "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task";
 
 /**
  * How many frames to sample across the swing.

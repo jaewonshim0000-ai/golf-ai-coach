@@ -8,6 +8,7 @@ import type {
   SwingMeasurement,
   SwingSession,
 } from "../../types/practice";
+import type { PoseModel } from "../golf/pose";
 import { demoData, DEMO_USER_ID } from "../seed/demo-player";
 
 /**
@@ -30,6 +31,8 @@ export type DemoStore = {
   swingSessions: SwingSession[];
   swingFindings: SwingFinding[];
   swingMeasurements: SwingMeasurement[];
+  /** 3D swing models by swing id. */
+  swingModels: Record<string, PoseModel>;
 };
 
 declare global {
@@ -52,6 +55,7 @@ function create(): DemoStore {
     swingSessions: [...data.swingSessions],
     swingFindings: [...data.swingFindings],
     swingMeasurements: [...data.swingMeasurements],
+    swingModels: {},
   };
 }
 

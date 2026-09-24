@@ -13,6 +13,8 @@ import {
 } from "../../types/golf";
 import { GOALS, PRACTICE_FACILITIES } from "../../types/player";
 import { CERTAINTY_LEVELS, SWING_CATEGORIES, SKILLS } from "../../types/practice";
+import { PRACTICE_GOALS, type GoalId } from "../practice/goals";
+import { PLAN_LENGTHS, type PlanLength } from "../practice/plan";
 
 /** Input validation at the trust boundary. Every server action parses through here. */
 
@@ -90,19 +92,38 @@ export type ShotInput = z.infer<typeof shotSchema>;
 export const courseSchema = z.object({
   name: z.string().trim().min(2).max(120),
   city: z.string().trim().max(80).optional(),
-  pars: z.array(z.coerce.number().int().min(3).max(6)).length(18),
-  yards: z.array(z.coerce.number().int().min(60).max(700)).length(18),
+  pars: z.array(z.coerce.number().int().min(3).max(6)).refine((values) => values.length === 9 || values.length === 18, "Choose 9 or 18 holes"),
+  yards: z.array(z.coerce.number().int().min(60).max(700)).refine((values) => values.length === 9 || values.length === 18, "Choose 9 or 18 holes"),
+}).refine((course) => course.pars.length === course.yards.length, {
+  message: "Par and yardage must be entered for every hole",
+  path: ["yards"],
 });
 export type CourseInput = z.infer<typeof courseSchema>;
 
+/** One hole of a live scorecard, saved as it is played. */
+export const holeSchema = z
+  .object({
+    round_id: z.string().min(1).max(80),
+    hole_number: z.coerce.number().int().min(1).max(18),
+    score: z.coerce.number().int().min(1).max(20),
+    putts: z.coerce.number().int().min(0).max(10).nullable(),
+    fairway: z.enum(["hit", "left", "right"]).nullable(),
+    penalties: z.coerce.number().int().min(0).max(10),
+  })
+  // Penalties are strokes you did not swing, and every putt is one you did.
+  .refine((hole) => hole.penalties < hole.score, { message: "More penalties than strokes", path: ["penalties"] })
+  .refine((hole) => hole.putts === null || hole.putts <= hole.score - hole.penalties, {
+    message: "More putts than strokes",
+    path: ["putts"],
+  });
+export type HoleInput = z.infer<typeof holeSchema>;
+
 export const practiceSessionSchema = z.object({
-  title: z.string().trim().min(2).max(90),
+  minutes: z.coerce.number().refine((value): value is PlanLength => (PLAN_LENGTHS as readonly number[]).includes(value), "Choose 15, 30 or 60 minutes"),
+  goal: z.enum(PRACTICE_GOALS.map((goal) => goal.id) as [GoalId, ...GoalId[]]),
   location: z.string().trim().max(90).optional(),
-  focus: z.string().trim().min(2).max(60),
-  planned_duration: z.coerce.number().int().min(10).max(240),
   energy_level: z.coerce.number().int().min(1).max(5).optional(),
   scheduled_for: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  drill_ids: z.array(z.string().min(1)).length(1, "Choose one practice goal"),
 });
 export type PracticeSessionInput = z.infer<typeof practiceSessionSchema>;
 
@@ -113,7 +134,12 @@ export const drillAttemptSchema = z
     drill_id: z.string().min(1),
     attempts: z.coerce.number().int().min(1).max(500),
     successes: z.coerce.number().int().min(0).max(500),
-    shot_offsets: z.array(z.number().finite().min(-300).max(300)).max(10).nullable().default(null),
+    shot_offsets: z.array(z.number().finite().min(-300).max(300)).max(40).nullable().default(null),
+    shot_points: z
+      .array(z.tuple([z.number().finite().min(-300).max(300), z.number().finite().min(-300).max(300)]))
+      .max(40)
+      .nullable()
+      .default(null),
     notes: z.string().trim().max(500).nullable().default(null),
   })
   .refine((a) => a.successes <= a.attempts, {
@@ -164,3 +190,20 @@ export const measurementSchema = z.object({
   value: z.coerce.number().finite().min(-90).max(180),
   confidence: z.coerce.number().min(0).max(1).default(0.6),
 });
+
+/**
+ * A 3D swing model sent up from the browser. Detector output in metres around
+ * the hips, so anything outside a few metres is not a body; the frame count
+ * matches what the pose runner samples, with room to spare.
+ */
+const coordinate = z.number().finite().min(-5).max(5);
+export const poseModelSchema = z
+  .object({
+    swing_session_id: z.string().min(1).max(80),
+    t: z.array(z.number().finite().min(0).max(3600)).min(3).max(64),
+    frames: z
+      .array(z.array(z.tuple([coordinate, coordinate, coordinate, z.number().min(0).max(1)])).length(33))
+      .min(3)
+      .max(64),
+  })
+  .refine((model) => model.t.length === model.frames.length, "One time per frame.");

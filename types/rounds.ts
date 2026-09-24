@@ -34,10 +34,23 @@ export type Round = {
   tees: string | null;
   holes_played: number;
   score: number | null;
+  /** Hole totals for a fast score-only round. Shot-tracked rounds leave this null. */
+  hole_scores?: number[] | null;
+  /** The live scorecard, one entry per hole, null until the hole is played. */
+  hole_stats?: (HoleStat | null)[] | null;
   conditions: Condition[];
   notes: string | null;
   status: "in_progress" | "complete";
   created_at: string;
+};
+
+export type HoleStat = {
+  score: number;
+  /** Null when the player did not count them. */
+  putts: number | null;
+  /** Tee shot on a par 4 or 5. Null on a par 3 or when not recorded. */
+  fairway: "hit" | "left" | "right" | null;
+  penalties: number;
 };
 
 export type Shot = {

@@ -455,3 +455,75 @@ export const PHASE_OF: Record<string, SwingPhase> = {
   pelvis_thrust_impact: "impact",
   head_sway_impact: "impact",
 };
+
+/**
+ * The 3D model of the swing: the skeleton the detector found in every sampled
+ * frame, kept so the swing can be replayed and turned round, and so the
+ * measurements are read off the same model the player is looking at.
+ *
+ * Compact on purpose - [x, y, z, visibility] per landmark, rounded to the
+ * millimetre - because it is stored with the swing and a clip is ~40 KB.
+ */
+export type PackedLandmark = [number, number, number, number];
+
+export type PoseModel = {
+  v: 1;
+  handedness: "right" | "left";
+  phases: SwingPhases;
+  /** Seconds from the start of the video, one per frame. */
+  t: number[];
+  frames: PackedLandmark[][];
+};
+
+const mm = (value: number) => Math.round(value * 1000) / 1000;
+
+export function packFrames(frames: PoseFrame[]): { t: number[]; frames: PackedLandmark[][] } {
+  return {
+    t: frames.map((frame) => Math.round(frame.t * 1000) / 1000),
+    frames: frames.map((frame) =>
+      frame.landmarks.map(
+        (point): PackedLandmark => [
+          mm(point.x),
+          mm(point.y),
+          mm(point.z),
+          Math.round((point.visibility ?? 1) * 100) / 100,
+        ],
+      ),
+    ),
+  };
+}
+
+export function unpackFrames(packed: { t: number[]; frames: PackedLandmark[][] }): PoseFrame[] {
+  return packed.frames.map((landmarks, index) => ({
+    t: packed.t[index] ?? index,
+    landmarks: landmarks.map(([x, y, z, visibility]) => ({ x, y, z, visibility })),
+  }));
+}
+
+/**
+ * Where to draw the model: metres in the player's own frame, with the origin
+ * on the ground under the address hips. x runs down the target line, y is up,
+ * and z completes a right-handed set, so a left-hander is drawn as a
+ * left-hander rather than a mirror image of one. `ballSide` says which way
+ * along z the ball is.
+ */
+export function modelSpace(
+  address: PoseFrame,
+  handedness: "right" | "left",
+): { toModel: (point: Vec) => Vec; ballSide: 1 | -1 } | null {
+  const frame = golfFrame(address, handedness);
+  if (!frame) return null;
+  const depth = cross(frame.target, frame.up);
+  const feet = [LM.leftHeel, LM.rightHeel, LM.leftFootIndex, LM.rightFootIndex]
+    .map((index) => address.landmarks[index])
+    .filter((point): point is Landmark => Boolean(point))
+    .map((point) => dot(sub(point, frame.origin), frame.up));
+  const ground = feet.length ? Math.min(...feet) : 0;
+  return {
+    toModel: (point) => {
+      const rel = sub(point, frame.origin);
+      return { x: dot(rel, frame.target), y: dot(rel, frame.up) - ground, z: dot(rel, depth) };
+    },
+    ballSide: dot(frame.ballward, depth) >= 0 ? 1 : -1,
+  };
+}

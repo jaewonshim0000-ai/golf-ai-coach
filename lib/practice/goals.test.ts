@@ -16,12 +16,14 @@ test("every quick goal has ten balls, including wedges, chipping and putting", (
   assert.ok(QUICK_DRILLS.every((drill) => drill.recommended_reps === 10));
 });
 
-test("practice accepts exactly one goal and rejects invalid shot estimates", () => {
-  const practice = { title: "Wedges", focus: "start_line", planned_duration: 10, scheduled_for: "2026-09-20", drill_ids: [QUICK_DRILLS[0]!.id] };
+test("practice takes a known goal and length, and rejects invalid shot data", () => {
+  const practice = { minutes: "30", goal: "wedge_accuracy", scheduled_for: "2026-09-20" };
   assert.ok(practiceSessionSchema.safeParse(practice).success);
-  assert.equal(practiceSessionSchema.safeParse({ ...practice, drill_ids: [] }).success, false);
-  assert.equal(practiceSessionSchema.safeParse({ ...practice, drill_ids: ["a", "b"] }).success, false);
+  assert.equal(practiceSessionSchema.safeParse({ ...practice, minutes: "45" }).success, false);
+  assert.equal(practiceSessionSchema.safeParse({ ...practice, goal: "drill_x" }).success, false);
   const attempt = { session_id: "practice", drill_id: "drill", attempts: 10, successes: 7, shot_offsets: [Infinity] };
   assert.equal(drillAttemptSchema.safeParse(attempt).success, false);
-  assert.equal(drillAttemptSchema.safeParse({ ...attempt, shot_offsets: Array(11).fill(0) }).success, false);
+  assert.equal(drillAttemptSchema.safeParse({ ...attempt, shot_offsets: Array(41).fill(0) }).success, false);
+  assert.equal(drillAttemptSchema.safeParse({ ...attempt, shot_offsets: null, shot_points: [[1, 2, 3]] }).success, false);
+  assert.ok(drillAttemptSchema.safeParse({ ...attempt, shot_offsets: null, shot_points: [[1, -2]] }).success);
 });

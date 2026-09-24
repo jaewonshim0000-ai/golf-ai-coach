@@ -38,6 +38,7 @@ import {
   rebaseSummary,
 } from "@/lib/golf/baselines";
 import { summarizeRound } from "@/lib/golf/strokes-gained";
+import { classicStats, classicTrends, holeLines } from "@/lib/analytics/classic";
 import * as repo from "@/lib/db/repo";
 import { loadPlayerState } from "@/lib/player-state";
 import { cn, formatDate, relativeDays, signed, toParLabel } from "@/lib/utils";
@@ -78,7 +79,24 @@ function toFilters(search: Search): Filters {
 export default async function RoundsPage({ searchParams }: { searchParams: Promise<Search> }) {
   const user = await repo.currentUser();
   if (!user) return null;
-  const [state, search] = await Promise.all([loadPlayerState(user.id), searchParams]);
+  const [state, search, courses] = await Promise.all([
+    loadPlayerState(user.id),
+    searchParams,
+    repo.getCourses(user.id),
+  ]);
+
+  // The classic numbers, from every round whichever way it was logged.
+  const perRound = state.rounds.map((round) => ({
+    round,
+    lines: holeLines(
+      round,
+      courses.find((course) => course.id === round.course_id)?.holes ?? [],
+      state.shotsByRound.get(round.id) ?? [],
+    ),
+  }));
+  const classic = classicStats(perRound.flatMap(({ lines }) => lines));
+  const trends = classicTrends(perRound);
+  const linesFor = new Map(perRound.map(({ round, lines }) => [round.id, lines]));
 
   const baseline = search.baseline
     ? getBaseline(search.baseline)
@@ -137,6 +155,44 @@ export default async function RoundsPage({ searchParams }: { searchParams: Promi
             </CardContent>
           </Card>
 
+          <SectionHeading
+            title="Your numbers"
+            description={`Across ${classic.holes} holes, from scorecards and shot tracking alike.`}
+          />
+          <Card>
+            <CardContent className="grid grid-cols-3 gap-x-3 gap-y-4 p-5 lg:grid-cols-5">
+              <Stat label="Fairways" value={pct(classic.fairways.pct)} sub={`${classic.fairways.made}/${classic.fairways.chances}`} />
+              <Stat label="Greens" value={pct(classic.greens.pct)} sub={`${classic.greens.made}/${classic.greens.chances}`} />
+              <Stat label="Putts / round" value={one(classic.puttsPerRound)} sub={`${one(classic.threePuttsPerRound)} three-putts`} />
+              <Stat label="Scrambling" value={pct(classic.scrambling.pct)} sub={`${classic.scrambling.made}/${classic.scrambling.chances}`} />
+              <Stat label="Penalties / round" value={one(classic.penaltiesPerRound)} />
+            </CardContent>
+            {classic.holes > 0 ? (
+              <CardContent className="space-y-3 border-t border-border pt-4">
+                <ScoreMix mix={classic.mix} />
+                <p className="tabular text-[12px] text-fg-muted">
+                  Average score:{" "}
+                  {([3, 4, 5] as const).map((par) => `par ${par}s ${one(classic.parAverage[par])}`).join(" · ")}
+                </p>
+              </CardContent>
+            ) : null}
+          </Card>
+
+          <div className="grid gap-5 md:grid-cols-2">
+            <ChartCard title="Fairways hit">
+              <TrendLine points={trends.fairways} height={110} unit="%" />
+            </ChartCard>
+            <ChartCard title="Greens in regulation">
+              <TrendLine points={trends.greens} height={110} unit="%" />
+            </ChartCard>
+            <ChartCard title="Putts per round">
+              <TrendLine points={trends.putts} height={110} invert />
+            </ChartCard>
+            <ChartCard title="Scrambling">
+              <TrendLine points={trends.scrambling} height={110} unit="%" />
+            </ChartCard>
+          </div>
+
           <SectionHeading title="Logged rounds" />
 
           <div className="grid gap-2.5 md:grid-cols-2">
@@ -145,6 +201,14 @@ export default async function RoundsPage({ searchParams }: { searchParams: Promi
                 summarizeRound(round, state.shotsByRound.get(round.id) ?? []),
                 baseline,
               );
+              const lines = linesFor.get(round.id) ?? [];
+              const card = classicStats(lines);
+              const tracked = stats.sg_holes > 0;
+              const toPar = tracked
+                ? stats.to_par
+                : lines.length
+                  ? lines.reduce((sum, line) => sum + line.score - line.par, 0)
+                  : null;
               return (
                 <MiniCard key={round.id} className="transition-colors hover:border-border-strong">
                   <Link href={`/rounds/${round.id}`} className="block p-3.5">
@@ -169,27 +233,33 @@ export default async function RoundsPage({ searchParams }: { searchParams: Promi
                         <p className="tabular dsp mt-0.5 text-[10px] tracking-[0.08em] text-fg-subtle">
                           {stats.holes_played < 18
                             ? `${stats.holes_played} hole${stats.holes_played === 1 ? "" : "s"}`
-                            : toParLabel(stats.to_par)}
+                            : toParLabel(toPar)}
                         </p>
                       </div>
                     </div>
 
-                    <div className="mt-3 grid grid-cols-5 gap-2">
-                      <SGCell label="SG" value={stats.sg_total} digits={1} />
-                      <SGCell label="Tee" value={stats.sg_by_category.off_the_tee} />
-                      <SGCell label="App" value={stats.sg_by_category.approach} />
-                      <SGCell label="ARG" value={stats.sg_by_category.around_the_green} />
-                      <SGCell label="Putt" value={stats.sg_by_category.putting} />
-                    </div>
+                    {tracked ? (
+                      <div className="mt-3 grid grid-cols-5 gap-2">
+                        <SGCell label="SG" value={stats.sg_total} digits={1} />
+                        <SGCell label="Tee" value={stats.sg_by_category.off_the_tee} />
+                        <SGCell label="App" value={stats.sg_by_category.approach} />
+                        <SGCell label="ARG" value={stats.sg_by_category.around_the_green} />
+                        <SGCell label="Putt" value={stats.sg_by_category.putting} />
+                      </div>
+                    ) : (
+                      <p className="mt-3 text-[11px] text-fg-subtle">Scorecard round · no strokes gained without shots</p>
+                    )}
 
                     <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-border pt-2.5 text-[11px] text-fg-subtle">
                       <span className="tabular">
-                        FIR {stats.fairways_hit}/{stats.fairway_opportunities}
+                        FIR {card.fairways.made}/{card.fairways.chances}
                       </span>
                       <span className="tabular">
-                        GIR {stats.greens_in_regulation}/{stats.holes_played}
+                        GIR {card.greens.made}/{card.greens.chances}
                       </span>
-                      <span className="tabular">Putts {stats.putts}</span>
+                      <span className="tabular">
+                        Putts {lines.reduce((sum, line) => sum + (line.putts ?? 0), 0)}
+                      </span>
                     </div>
                   </Link>
                 </MiniCard>
@@ -266,6 +336,39 @@ export default async function RoundsPage({ searchParams }: { searchParams: Promi
           )}
         </>
       )}
+    </div>
+  );
+}
+
+const pct = (value: number | null) => (value === null ? "—" : `${Math.round(value * 100)}%`);
+const one = (value: number | null) => (value === null ? "—" : value.toFixed(1));
+
+/** Where the holes finished against par, as one stacked bar. */
+function ScoreMix({ mix }: { mix: { under: number; par: number; bogey: number; double: number } }) {
+  const total = mix.under + mix.par + mix.bogey + mix.double;
+  const parts = [
+    { label: "Birdie or better", value: mix.under, className: "bg-good" },
+    { label: "Par", value: mix.par, className: "bg-accent-soft" },
+    { label: "Bogey", value: mix.bogey, className: "bg-warn" },
+    { label: "Double or worse", value: mix.double, className: "bg-bad" },
+  ];
+  return (
+    <div>
+      <div className="flex h-3 overflow-hidden rounded-full" role="img" aria-label={parts.map((part) => `${part.label} ${part.value}`).join(", ")}>
+        {parts.map((part) =>
+          part.value > 0 ? (
+            <span key={part.label} className={part.className} style={{ width: `${(part.value / total) * 100}%` }} />
+          ) : null,
+        )}
+      </div>
+      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-fg-muted">
+        {parts.map((part) => (
+          <span key={part.label} className="flex items-center gap-1.5">
+            <span className={cn("h-2 w-2 rounded-full", part.className)} aria-hidden />
+            {part.label} <span className="tabular font-medium text-fg">{Math.round((part.value / total) * 100)}%</span>
+          </span>
+        ))}
+      </div>
     </div>
   );
 }

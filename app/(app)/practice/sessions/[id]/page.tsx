@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 
 import { SourceBadge } from "@/components/dashboard/sections";
 import { SessionRunner } from "@/components/practice/session-runner";
+import { DeletePracticeSessionButton } from "@/components/practice/delete-session";
 import {
   Badge,
   ButtonLink,
@@ -64,6 +65,10 @@ export default async function PracticeSessionPage({
           </ButtonLink>
         }
       />
+
+      <div className="flex justify-end">
+        <DeletePracticeSessionButton sessionId={bundle.session.id} />
+      </div>
 
       <Card>
         <CardHeader className="flex-row items-center justify-between gap-3">

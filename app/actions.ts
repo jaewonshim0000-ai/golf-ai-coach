@@ -1,5 +1,6 @@
 "use server";
-import { dispersion, practiceGoal } from "@/lib/practice/goals";
+import { dispersion, offsetFor, practiceGoal } from "@/lib/practice/goals";
+import { buildPlan } from "@/lib/practice/plan";
 import { cookies } from "next/headers";
 import { serverClient } from "@/lib/db/supabase";
 import { privateVideoPath } from "@/lib/video-upload";
@@ -11,7 +12,7 @@ import { z } from "zod";
 import type { Condition, MissDirection } from "@/types/golf";
 import type { Goal, PracticeFacility } from "@/types/player";
 import type { Club } from "@/types/golf";
-import type { PracticeItem } from "@/types/practice";
+import type { HoleStat } from "@/types/rounds";
 import { ASK_IDLE, askCoach, type AskState } from "@/lib/ai/ask";
 import {
   FRAME_COUNT,
@@ -21,7 +22,12 @@ import {
   visionNote,
 } from "@/lib/ai/vision";
 import { METRICS_BY_ID } from "@/lib/golf/swing-metrics";
-import { POSE_CONFIDENCE_CAP } from "@/lib/golf/pose";
+import {
+  POSE_CONFIDENCE_CAP,
+  analysePose,
+  unpackFrames,
+  type PackedLandmark,
+} from "@/lib/golf/pose";
 import { DRILLS_BY_ID } from "@/lib/seed/drills";
 import { loadPlayerState } from "@/lib/player-state";
 import * as repo from "@/lib/db/repo";
@@ -32,9 +38,11 @@ import {
   drillAttemptSchema,
   fieldErrors,
   measurementSchema,
+  poseModelSchema,
   practiceSessionSchema,
   profileSchema,
   roundSchema,
+  holeSchema,
   shotSchema,
   swingFindingSchema,
   swingSessionSchema,
@@ -189,6 +197,7 @@ export async function createRoundAction(
   if (!parsed.success) return fail(parsed.error);
 
   let roundId: string;
+  const entryMode = formData.get("entry_mode") === "scorecard" ? "scorecard" : "shots";
   try {
     const courses = await repo.getCourses(user.id);
     const course = courses.find((c) => c.id === parsed.data.course_id);
@@ -202,6 +211,9 @@ export async function createRoundAction(
       tees: parsed.data.tees ?? null,
       holes_played: 0,
       score: null,
+      hole_scores: null,
+      // An empty card marks the round as scored hole by hole from the start.
+      hole_stats: entryMode === "scorecard" ? course.holes.map(() => null) : null,
       conditions: parsed.data.conditions as Condition[],
       notes: parsed.data.notes ?? null,
       status: "in_progress",
@@ -212,7 +224,94 @@ export async function createRoundAction(
   }
 
   revalidatePath("/rounds");
-  redirect(`/rounds/${roundId}/play`);
+  redirect(entryMode === "scorecard" ? `/rounds/${roundId}/score` : `/rounds/${roundId}/play`);
+}
+
+export type HoleState = ActionState & { hole_stats?: (HoleStat | null)[] };
+
+/**
+ * Save one hole of a live scorecard. Each hole is stored as it is played, so a
+ * flat phone on the back nine loses nothing, and the round's score is always
+ * the sum of the holes that exist.
+ */
+export async function saveHoleAction(input: {
+  round_id: string;
+  hole_number: number;
+  score: number;
+  putts: number | null;
+  fairway: "hit" | "left" | "right" | null;
+  penalties: number;
+}): Promise<HoleState> {
+  const user = await requireUser();
+  const parsed = holeSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, message: parsed.error.issues[0]?.message ?? "Check the hole." };
+  }
+
+  let stats: (HoleStat | null)[];
+  try {
+    const [round, courses, shots] = await Promise.all([
+      repo.getRound(user.id, parsed.data.round_id),
+      repo.getCourses(user.id),
+      repo.getShots(user.id, parsed.data.round_id),
+    ]);
+    if (!round) return { ok: false, message: "Round not found." };
+    if (shots.length > 0) {
+      return { ok: false, message: "This round is shot-tracked. Keep scoring it from the shot tracker." };
+    }
+    const course = courses.find((item) => item.id === round.course_id);
+    const hole = course?.holes[parsed.data.hole_number - 1];
+    if (!course || !hole) return { ok: false, message: "That hole is not on this course." };
+
+    stats = course.holes.map(
+      (_, index) =>
+        round.hole_stats?.[index] ??
+        (round.hole_scores?.[index]
+          ? { score: round.hole_scores[index]!, putts: null, fairway: null, penalties: 0 }
+          : null),
+    );
+    stats[hole.hole_number - 1] = {
+      score: parsed.data.score,
+      putts: parsed.data.putts,
+      fairway: hole.par >= 4 ? parsed.data.fairway : null,
+      penalties: parsed.data.penalties,
+    };
+    const played = stats.filter((stat): stat is HoleStat => stat !== null);
+    await repo.updateRound(user.id, round.id, {
+      hole_stats: stats,
+      holes_played: played.length,
+      score: played.reduce((sum, stat) => sum + stat.score, 0),
+      hole_scores: played.length === stats.length ? played.map((stat) => stat.score) : null,
+    });
+  } catch (error) {
+    return asError(error);
+  }
+
+  revalidatePath(`/rounds/${parsed.data.round_id}`);
+  revalidatePath("/rounds");
+  return { ok: true, hole_stats: stats };
+}
+
+export async function finishScorecardAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const user = await requireUser();
+  const roundId = String(formData.get("round_id") ?? "");
+  try {
+    const [round, courses] = await Promise.all([repo.getRound(user.id, roundId), repo.getCourses(user.id)]);
+    if (!round) return { ok: false, message: "Round not found." };
+    const course = courses.find((item) => item.id === round.course_id);
+    const missing = (course?.holes ?? []).filter((_, index) => !round.hole_stats?.[index]);
+    if (!course || missing.length > 0) {
+      return { ok: false, message: `Score hole ${missing[0]?.hole_number ?? 1} before finishing.` };
+    }
+    await repo.updateRound(user.id, round.id, { status: "complete" });
+  } catch (error) {
+    return asError(error);
+  }
+  revalidatePath("/", "layout");
+  redirect(`/rounds/${roundId}`);
 }
 
 export async function addShotAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
@@ -314,43 +413,30 @@ export async function createPracticeSessionAction(
 ): Promise<ActionState> {
   const user = await requireUser();
   const parsed = practiceSessionSchema.safeParse({
-    title: formData.get("title"),
+    minutes: formData.get("minutes"),
+    goal: formData.get("goal"),
     location: formData.get("location") || undefined,
-    focus: formData.get("focus"),
-    planned_duration: formData.get("planned_duration"),
     energy_level: formData.get("energy_level") || undefined,
     scheduled_for: formData.get("scheduled_for"),
-    drill_ids: list(formData, "drill_ids"),
   });
   if (!parsed.success) return fail(parsed.error);
 
-  const unknown = parsed.data.drill_ids.filter((id) => !DRILLS_BY_ID.has(id));
-  if (unknown.length > 0) return { ok: false, message: `Unknown drill: ${unknown[0]}` };
-
   let sessionId: string;
   try {
-    const items: Omit<PracticeItem, "id" | "session_id">[] = parsed.data.drill_ids.map(
-      (drillId, index) => {
-        const drill = DRILLS_BY_ID.get(drillId)!;
-        return {
-          drill_id: drillId,
-          block: "skill",
-          order_index: index,
-          duration: 10,
-          target_reps: 10,
-          target_value: drill.success_threshold,
-          objective: `${drill.metric_to_track}: aim for ${Math.ceil(drill.success_threshold * 10)} of 10.`,
-        };
-      },
-    );
+    // The band for today's test is the one the last test earned.
+    const last = (await repo.getDrillAttempts(user.id))
+      .filter((attempt) => attempt.drill_id === `drill_${parsed.data.goal}` && attempt.shot_offsets?.length)
+      .sort((a, b) => a.completed_at.localeCompare(b.completed_at))
+      .at(-1);
+    const plan = buildPlan(parsed.data.minutes, parsed.data.goal, last?.shot_offsets);
 
     const session = await repo.createPracticeSession(
       {
         user_id: user.id,
-        title: DRILLS_BY_ID.get(parsed.data.drill_ids[0]!)!.name,
+        title: plan.title,
         location: parsed.data.location ?? null,
-        focus: DRILLS_BY_ID.get(parsed.data.drill_ids[0]!)!.category,
-        planned_duration: 10,
+        focus: plan.focus,
+        planned_duration: parsed.data.minutes,
         actual_duration: null,
         energy_level: parsed.data.energy_level ?? null,
         status: "in_progress",
@@ -358,7 +444,7 @@ export async function createPracticeSessionAction(
         completed_at: null,
         reflection: null,
       },
-      items,
+      plan.items,
     );
     sessionId = session.id;
   } catch (error) {
@@ -374,10 +460,10 @@ export async function recordAttemptAction(
   formData: FormData,
 ): Promise<ActionState> {
   const user = await requireUser();
-  let offsets: unknown = null;
+  let points: unknown = null;
   try {
-    const raw = formData.get("shot_offsets");
-    offsets = raw ? JSON.parse(String(raw)) : null;
+    const raw = formData.get("shot_points");
+    points = raw ? JSON.parse(String(raw)) : null;
   } catch {
     return { ok: false, message: "Please enter valid shot estimates." };
   }
@@ -387,7 +473,7 @@ export async function recordAttemptAction(
     drill_id: formData.get("drill_id"),
     attempts: formData.get("attempts"),
     successes: formData.get("successes"),
-    shot_offsets: offsets,
+    shot_points: points,
     notes: formData.get("notes") || null,
   });
   if (!parsed.success) return fail(parsed.error);
@@ -405,14 +491,16 @@ export async function recordAttemptAction(
     if (goal && parsed.data.attempts !== item.target_reps) {
       return { ok: false, message: `This goal uses ${item.target_reps} balls.` };
     }
-    const estimates = parsed.data.shot_offsets;
-    if (goal?.tolerance != null && (!estimates || estimates.length !== item.target_reps)) {
-      return { ok: false, message: `Enter all ${item.target_reps} shot estimates before saving.` };
+    // Scored against the band stored with the block, not today's default, so
+    // a result means the same thing however far the target has moved since.
+    const tolerance = goal ? (item.tolerance ?? goal.tolerance) : null;
+    const plotted = parsed.data.shot_points;
+    if (goal && tolerance !== null && (!plotted || plotted.length !== item.target_reps)) {
+      return { ok: false, message: `Plot all ${item.target_reps} balls before saving.` };
     }
-    if (goal?.id === "chip_accuracy" && estimates?.some((value) => value < 0)) {
-      return { ok: false, message: "Distance from the hole cannot be negative." };
-    }
-    const summary = goal?.tolerance != null && estimates ? dispersion(estimates, goal.tolerance) : null;
+    const estimates =
+      goal && tolerance !== null && plotted ? plotted.map((point) => offsetFor(goal, point)) : null;
+    const summary = tolerance !== null && estimates ? dispersion(estimates, tolerance) : null;
     const attempts = summary?.count ?? parsed.data.attempts;
     const successes = summary?.successes ?? parsed.data.successes;
     await repo.recordDrillAttempt({
@@ -425,6 +513,7 @@ export async function recordAttemptAction(
       score: Math.round((successes / attempts) * 1000) / 1000,
       raw_value: summary?.averageMiss ?? null,
       shot_offsets: estimates,
+      shot_points: plotted,
       notes: parsed.data.notes,
       completed_at: new Date().toISOString(),
     });
@@ -447,8 +536,12 @@ export async function completeSessionAction(
 
   try {
     const practice = await repo.getPracticeSession(user.id, sessionId);
-    if (!practice || practice.items.length === 0 || practice.items.some((item) => !practice.attempts.some((attempt) => attempt.practice_item_id === item.id))) {
-      return { ok: false, message: "Save your result before finishing practice." };
+    // The skill block is the test the next plan is built from. The others are
+    // worth logging, but a skipped warm-up should not hold the session open.
+    const logged = (itemId: string) => practice?.attempts.some((attempt) => attempt.practice_item_id === itemId);
+    const tests = practice?.items.filter((item) => item.block === "skill") ?? [];
+    if (!practice || practice.attempts.length === 0 || !tests.every((item) => logged(item.id))) {
+      return { ok: false, message: "Save your test result before finishing practice." };
     }
     if (practice.session.status === "complete") return { ok: false, message: "Practice is already complete." };
     if (!Number.isFinite(duration) || duration < 1 || duration > 300 || reflection.length > 1000) {
@@ -466,6 +559,26 @@ export async function completeSessionAction(
 
   revalidatePath("/", "layout");
   redirect(`/practice/sessions/${sessionId}`);
+}
+
+export async function deletePracticeSessionAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const user = await requireUser();
+  const sessionId = String(formData.get("session_id") ?? "");
+  if (!sessionId) return { ok: false, message: "Missing practice session." };
+
+  try {
+    const practice = await repo.getPracticeSession(user.id, sessionId);
+    if (!practice) return { ok: false, message: "Practice session not found." };
+    await repo.deletePracticeSession(user.id, sessionId);
+  } catch (error) {
+    return asError(error);
+  }
+
+  revalidatePath("/", "layout");
+  redirect("/practice");
 }
 
 // ------------------------------------------------------------------- swing
@@ -785,68 +898,66 @@ export async function analyzeSwingAction(input: {
 }
 
 /**
- * Store what the pose detector read.
+ * Build the 3D model of a swing and measure it.
  *
- * The readings arrive from the browser, so every one is checked against the
- * metric definitions here rather than trusted: an id that is not a known
- * metric, a value outside what a body can do, or a confidence above what a
- * single camera can support is dropped. A number a person typed is never
- * overwritten, because a measurement outranks a reading of a skeleton.
+ * The browser sends only the skeleton it found in each frame. Everything
+ * after that happens here, off the stored model: the phases are found, the
+ * positions are measured, and the model is kept so the page can replay the
+ * exact body the numbers came from. Handedness comes from the profile rather
+ * than the request. A number a person typed is never overwritten, because a
+ * measurement outranks a reading of a skeleton.
  */
-const poseSchema = z.object({
-  swing_session_id: z.string().min(1).max(80),
-  readings: z
-    .array(
-      z.object({
-        metric: z.string().min(1).max(60),
-        value: z.number().finite(),
-        confidence: z.number().min(0).max(1),
-      }),
-    )
-    .min(1)
-    .max(24),
-  skipped: z.array(z.string().max(60)).max(24).default([]),
-});
+export type PoseState = ActionState & {
+  measurements?: number;
+  skipped?: number;
+  /** No swing was found in the skeleton, so there is nothing to keep. */
+  noSwing?: boolean;
+};
 
-export type PoseState = ActionState & { measurements?: number; skipped?: number; kept?: number };
-
-export async function savePoseAction(input: {
+export async function savePoseModelAction(input: {
   swing_session_id: string;
-  readings: { metric: string; value: number; confidence: number }[];
-  skipped: string[];
+  t: number[];
+  frames: PackedLandmark[][];
 }): Promise<PoseState> {
   const user = await requireUser();
-  const parsed = poseSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, message: "That reading could not be saved." };
+  const parsed = poseModelSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, message: "That swing model could not be read." };
 
-  const sessions = await repo.getSwingSessions(user.id);
+  const [sessions, profile, existing] = await Promise.all([
+    repo.getSwingSessions(user.id),
+    repo.getProfile(user.id),
+    repo.getSwingMeasurements(user.id),
+  ]);
   const session = sessions.find((item) => item.id === parsed.data.swing_session_id);
   if (!session) return { ok: false, message: "That swing session does not exist." };
 
-  const existing = await repo.getSwingMeasurements(user.id);
+  const handedness = profile?.dominant_hand ?? "right";
+  const analysis = analysePose(unpackFrames(parsed.data), handedness);
+  if (!analysis || analysis.readings.length === 0) {
+    return { ok: false, noSwing: true, message: "No swing could be found in that body." };
+  }
+
   const manual = new Set(
     existing
       .filter((row) => row.swing_session_id === session.id && row.source === "manual")
       .map((row) => row.metric),
   );
 
-  const seen = new Set<string>();
-  const rows = parsed.data.readings.flatMap((reading) => {
+  const rows = analysis.readings.flatMap((reading) => {
     const metric = METRICS_BY_ID.get(reading.metric);
-    if (!metric || seen.has(metric.id) || manual.has(metric.id)) return [];
+    if (!metric || manual.has(metric.id)) return [];
     // Ten band widths outside the band is a detector that lost the body, not
     // a swing. The band itself is a reference, so the envelope is generous.
     const width = metric.max - metric.min;
     if (reading.value < metric.min - width * 10 || reading.value > metric.max + width * 10) {
       return [];
     }
-    seen.add(metric.id);
     return [
       {
         swing_session_id: session.id,
         phase: metric.phase,
         metric: metric.id,
-        value: Math.round(reading.value * 10) / 10,
+        value: reading.value,
         unit: metric.unit,
         confidence: Math.min(reading.confidence, POSE_CONFIDENCE_CAP),
         source: "pose" as const,
@@ -854,11 +965,14 @@ export async function savePoseAction(input: {
     ];
   });
 
-  if (rows.length === 0) {
-    return { ok: false, message: "Nothing in that swing could be measured." };
-  }
-
   try {
+    await repo.saveSwingModel(user.id, session.id, {
+      v: 1,
+      handedness,
+      phases: analysis.phases,
+      t: parsed.data.t,
+      frames: parsed.data.frames,
+    });
     for (const row of rows) await repo.saveSwingMeasurement(row);
   } catch (error) {
     return asError(error);
@@ -867,13 +981,15 @@ export async function savePoseAction(input: {
   revalidatePath(`/swing/${session.id}`);
   revalidatePath("/swing");
   revalidatePath("/practice");
-  const heldBack = parsed.data.readings.length - rows.length;
+  const heldBack = analysis.readings.length - rows.length;
   return {
     ok: true,
     measurements: rows.length,
-    kept: heldBack,
-    skipped: parsed.data.skipped.length,
-    message: `Measured ${rows.length} position${rows.length === 1 ? "" : "s"} from the video.`,
+    skipped: heldBack,
+    message:
+      rows.length === 0
+        ? "Built the 3D model."
+        : `Built the 3D model and measured ${rows.length} position${rows.length === 1 ? "" : "s"} on it.`,
   };
 }
 

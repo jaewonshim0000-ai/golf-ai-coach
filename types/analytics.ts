@@ -123,6 +123,8 @@ export type RoundSummaryStats = {
   score: number | null;
   to_par: number | null;
   holes_played: number;
+  /** Holes with shots behind them - the holes strokes gained actually covers. */
+  sg_holes: number;
   sg_total: number;
   sg_by_category: Record<SGCategory, number>;
   fairways_hit: number;

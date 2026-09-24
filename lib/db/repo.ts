@@ -15,6 +15,7 @@ import type {
 import { DRILLS } from "../seed/drills";
 import { serverClient, supabaseConfigured } from "./supabase";
 import { privateVideoPath } from "../video-upload";
+import type { PoseModel } from "../golf/pose";
 import { DEMO_USER_ID, newId, store } from "./demo-store";
 
 /**
@@ -358,6 +359,23 @@ export async function updatePracticeSession(
   if (error) throw new Error(`updatePracticeSession: ${error.message}`);
 }
 
+export async function deletePracticeSession(userId: string, sessionId: string): Promise<void> {
+  const sb = await client();
+  if (!sb) {
+    const s = store();
+    s.practiceSessions = s.practiceSessions.filter((session) => session.id !== sessionId);
+    s.practiceItems = s.practiceItems.filter((item) => item.session_id !== sessionId);
+    s.drillAttempts = s.drillAttempts.filter((attempt) => attempt.session_id !== sessionId);
+    return;
+  }
+  const { error } = await sb
+    .from("practice_sessions")
+    .delete()
+    .eq("id", sessionId)
+    .eq("user_id", userId);
+  if (error) throw new Error(`deletePracticeSession: ${error.message}`);
+}
+
 export async function getDrillAttempts(userId: string): Promise<DrillAttempt[]> {
   const sb = await client();
   if (!sb) {
@@ -398,7 +416,11 @@ export async function getSwingSessions(userId: string): Promise<SwingSession[]> 
   return unwrap(
     await sb
       .from("swing_sessions")
-      .select("*")
+      // Everything but the 3D model, which is ~40 KB a swing and only the
+      // swing's own page draws it.
+      .select(
+        "id,user_id,video_url,camera_angle,club,shot_type,swing_pattern,notes,analysis_status,clip_start,clip_end,created_at",
+      )
       .eq("user_id", userId)
       .order("created_at", { ascending: false }),
     "getSwingSessions",
@@ -486,6 +508,7 @@ export async function deleteSwingSession(userId: string, sessionId: string): Pro
     s.swingSessions = s.swingSessions.filter((session) => session.id !== sessionId);
     s.swingFindings = s.swingFindings.filter((f) => f.swing_session_id !== sessionId);
     s.swingMeasurements = s.swingMeasurements.filter((m) => m.swing_session_id !== sessionId);
+    delete s.swingModels[sessionId];
     return;
   }
 
@@ -534,6 +557,37 @@ export async function saveSwingClip(
     .eq("id", sessionId)
     .eq("user_id", userId);
   if (error) throw new Error(`saveSwingClip: ${error.message}`);
+}
+
+export async function getSwingModel(userId: string, sessionId: string): Promise<PoseModel | null> {
+  const sb = await client();
+  if (!sb) return store().swingModels[sessionId] ?? null;
+  const { data, error } = await sb
+    .from("swing_sessions")
+    .select("pose_model")
+    .eq("id", sessionId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw new Error(`getSwingModel: ${error.message}`);
+  return ((data as { pose_model: PoseModel | null } | null)?.pose_model ?? null);
+}
+
+export async function saveSwingModel(
+  userId: string,
+  sessionId: string,
+  model: PoseModel,
+): Promise<void> {
+  const sb = await client();
+  if (!sb) {
+    store().swingModels[sessionId] = model;
+    return;
+  }
+  const { error } = await sb
+    .from("swing_sessions")
+    .update({ pose_model: model, analysis_status: "processed" })
+    .eq("id", sessionId)
+    .eq("user_id", userId);
+  if (error) throw new Error(`saveSwingModel: ${error.message}`);
 }
 
 export async function deleteSwingFinding(userId: string, findingId: string): Promise<void> {

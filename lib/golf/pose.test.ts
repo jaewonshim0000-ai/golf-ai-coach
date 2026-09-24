@@ -1,7 +1,17 @@
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
 
-import { LM, analysePose, findPhases, golfFrame, type Landmark, type PoseFrame } from "./pose";
+import {
+  LM,
+  analysePose,
+  findPhases,
+  golfFrame,
+  modelSpace,
+  packFrames,
+  unpackFrames,
+  type Landmark,
+  type PoseFrame,
+} from "./pose";
 
 /**
  * A golfer built to order.
@@ -258,5 +268,37 @@ describe("reading the positions", () => {
       analysis!.readings.some((row) => row.metric === "head_sway_impact"),
       false,
     );
+  });
+});
+
+describe("the stored model", () => {
+  it("survives packing to the millimetre", () => {
+    const frames = swing();
+    const back = unpackFrames(packFrames(frames));
+    assert.equal(back.length, frames.length);
+    near(back[2]!.landmarks[LM.leftShoulder]!.x, frames[2]!.landmarks[LM.leftShoulder]!.x, 0.001);
+    near(read(back, "chest_turn_top"), 90);
+  });
+
+  it("stands the model on the ground, facing down the target line", () => {
+    const space = modelSpace({ t: 0, landmarks: skeleton() }, "right");
+    assert.ok(space);
+    const toe = space!.toModel(skeleton()[LM.leftFootIndex]!);
+    near(toe.y, 0, 0.001);
+    const lead = space!.toModel(skeleton()[LM.leftAnkle]!);
+    assert.ok(lead.x > 0, "lead foot toward the target");
+    assert.equal(space!.ballSide, 1);
+  });
+
+  it("draws a left-hander with the ball on the other side, not mirrored", () => {
+    // A real left-hander: the mirror image, with the labels following the
+    // body, so the right foot is still on the player's right.
+    const body = skeleton();
+    const swap = (index: number) => (index >= 11 && index <= 32 ? index + (index % 2 ? 1 : -1) : index);
+    const lefty = body.map((_, index) => ({ ...body[swap(index)]!, x: -body[swap(index)]!.x }));
+    const space = modelSpace({ t: 0, landmarks: lefty }, "left");
+    assert.ok(space);
+    assert.equal(space!.ballSide, -1);
+    assert.ok(space!.toModel(lefty[LM.rightAnkle]!).x > 0, "lead foot toward the target");
   });
 });

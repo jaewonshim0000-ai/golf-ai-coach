@@ -14,6 +14,7 @@ import { AROUND_GREEN_YARDS } from "@/lib/golf/strokes-gained";
 import {
   Badge,
   Button,
+  ButtonLink,
   Card,
   CardContent,
   Eyebrow,
@@ -265,15 +266,11 @@ export function ShotEntry({
         <div className="hero-scrim pointer-events-none absolute inset-0" />
 
         <div className="relative z-10 flex items-start justify-between gap-3 p-5 pb-8">
-          <Button
-            type="button"
-            variant="onHero"
-            size="sm"
-            onClick={() => router.push(`/rounds/${round.id}`)}
-          >
-            Back
-          </Button>
-          <HeroPill tone="solid">{round.course_name}</HeroPill>
+          <Button type="button" variant="onHero" size="sm" onClick={() => router.push(`/rounds/${round.id}`)}>Back</Button>
+          <div className="flex items-center gap-2">
+            {shots.length === 0 ? <ButtonLink href={`/rounds/${round.id}/score`} variant="onHero" size="sm">Score only</ButtonLink> : null}
+            <HeroPill tone="solid">{round.course_name}</HeroPill>
+          </div>
         </div>
 
         <div className="relative z-10 flex items-end justify-between gap-3 p-5 pt-0">

@@ -7,12 +7,12 @@ import { useRouter } from "next/navigation";
 
 import {
   analyzeSwingAction,
-  savePoseAction,
+  savePoseModelAction,
   saveSwingClipAction,
   type AnalyzeState,
 } from "@/app/actions";
 import { FRAME_COUNT } from "@/lib/ai/vision";
-import { analysePose } from "@/lib/golf/pose";
+import { packFrames } from "@/lib/golf/pose";
 import { readSwing } from "@/lib/pose-runner";
 import { clampClip, clipWindow, getClip } from "@/lib/video-store";
 import { cn } from "@/lib/utils";
@@ -44,7 +44,6 @@ export function SwingVideo({
   analysable = false,
   clipStart = null,
   clipEnd = null,
-  handedness = "right",
   className,
 }: {
   id: string;
@@ -55,8 +54,6 @@ export function SwingVideo({
   /** Trim stored on the swing row, in seconds. */
   clipStart?: number | null;
   clipEnd?: number | null;
-  /** Which way round the player stands, so the target line is the right way. */
-  handedness?: "right" | "left";
   className?: string;
 }) {
   const router = useRouter();
@@ -145,14 +142,11 @@ export function SwingVideo({
       }
 
       if (posed.length >= 3) {
-        setProgress("Measuring the positions");
-        const analysis = analysePose(posed, handedness);
-        if (analysis && analysis.readings.length > 0) {
-          const saved = await savePoseAction({
-            swing_session_id: id,
-            readings: analysis.readings,
-            skipped: analysis.skipped,
-          });
+        setProgress("Building the 3D model");
+        const saved = await savePoseModelAction({ swing_session_id: id, ...packFrames(posed) });
+        // A body with no swing in it falls through to the estimate below;
+        // anything else - saved, or a real failure - is the answer.
+        if (!saved.noSwing) {
           setAnalysis(saved);
           if (saved.ok) router.refresh();
           return;
@@ -270,7 +264,7 @@ export function SwingVideo({
                 {!crossOrigin
                   ? "This video will play but cannot be read, because its storage does not allow it."
                   : (progress ??
-                    "Finds your body in the video and measures twelve positions on this device.")}
+                    "Builds a 3D model of your body from the video and measures twelve positions on it.")}
               </p>
             </div>
             <Button

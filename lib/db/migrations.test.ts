@@ -17,7 +17,7 @@ test("live schema: atomic practice, persistent results, and cross-user isolation
       create table storage.objects(id text primary key, bucket_id text, name text);
       create function storage.foldername(text) returns text[] language sql as $$ select string_to_array($1, '/') $$;
     `);
-    for (const path of ["supabase/migrations/0001_init.sql", "supabase/migrations/0002_live_practice.sql", "supabase/migrations/0003_swing_vision.sql", "supabase/migrations/0004_swing_clips.sql", "supabase/migrations/0005_delete_account.sql", "supabase/migrations/0006_pose_source.sql", "supabase/seed/seed.sql"]) {
+    for (const path of ["supabase/migrations/0001_init.sql", "supabase/migrations/0002_live_practice.sql", "supabase/migrations/0003_swing_vision.sql", "supabase/migrations/0004_swing_clips.sql", "supabase/migrations/0005_delete_account.sql", "supabase/migrations/0006_pose_source.sql", "supabase/migrations/0007_scorecards.sql", "supabase/migrations/0008_swing_model.sql", "supabase/migrations/0009_plans_plots_scorecards.sql", "supabase/seed/seed.sql"]) {
       const sql = (await readFile(path, "utf8")).replace('create extension if not exists "pgcrypto";', "");
       await db.exec(sql);
     }
@@ -49,6 +49,17 @@ test("live schema: atomic practice, persistent results, and cross-user isolation
     await db.exec(`set request.jwt.claim.sub = '${user}'; update practice_sessions set status = 'complete' where id = 'practice_test';`);
     await assert.rejects(db.exec("update drill_attempts set successes = 9 where id = 'result'"));
 
+    // A plan is several blocks saved together, each scored against its own band.
+    const plan = { ...session, id: "plan_test", status: "in_progress" };
+    const block = (index: number, drill: string, tolerance: number | null) => ({ ...item, id: `plan_item_${index}`, session_id: "plan_test", drill_id: drill, order_index: index, tolerance });
+    await assert.rejects(db.query("select create_practice($1, $2)", [plan, [block(0, "drill_warmup_ladder", null), { ...block(1, "drill_iron_accuracy", 8), session_id: "practice_test" }]]));
+    assert.equal((await db.query("select * from practice_sessions where id = 'plan_test'")).rows.length, 0);
+    await assert.rejects(db.query("select create_practice($1, $2)", [plan, [block(0, "drill_iron_accuracy", 0)]]));
+    await db.query("select create_practice($1, $2)", [plan, [block(0, "drill_warmup_ladder", null), block(1, "drill_iron_accuracy", 8), block(2, "drill_one_ball_pressure", null)]]);
+    assert.equal((await db.query("select * from practice_items where session_id = 'plan_test'")).rows.length, 3);
+    await db.query(`insert into drill_attempts(id,user_id,session_id,practice_item_id,drill_id,attempts,successes,score,shot_offsets,shot_points)
+      values ('plotted', $1, 'plan_test', 'plan_item_1', 'drill_iron_accuracy', 10, 7, 0.7, '[1,-2,3,0,4,-9,2,1,0,12]', '[[1,4],[-2,0],[3,-5],[0,1],[4,2],[-9,3],[2,0],[1,-1],[0,0],[12,6]]')`, [user]);
+
     // A model estimate may never be stored as if a person had measured it.
     await db.exec(`insert into swing_sessions(id,user_id,camera_angle,club,shot_type,swing_pattern,analysis_status)
       values ('swing_test', '${user}', 'down_the_line', '7_iron', 'full swing', 'unknown', 'manual');`);
@@ -76,6 +87,16 @@ test("live schema: atomic practice, persistent results, and cross-user isolation
     await assert.rejects(db.exec("update swing_sessions set clip_start = 3, clip_end = 1 where id = 'swing_test'"));
     await assert.rejects(db.exec("update swing_sessions set clip_start = 1, clip_end = 1.05 where id = 'swing_test'"));
     await db.exec("update swing_sessions set clip_start = null, clip_end = null where id = 'swing_test'");
+    // The 3D model is a skeleton per frame, not a place to park a file.
+    await db.exec(`update swing_sessions set pose_model = '{"v":1,"frames":[]}' where id = 'swing_test'`);
+    await assert.rejects(db.exec(`update swing_sessions set pose_model = '[1,2,3]' where id = 'swing_test'`));
+    await assert.rejects(db.query("update swing_sessions set pose_model = jsonb_build_object('frames', '[]'::jsonb, 'junk', repeat(md5(random()::text), 20000)) where id = 'swing_test'"));
+
+    // A live scorecard has an entry per hole of a 9 or 18 hole course.
+    await db.exec(`insert into courses(id,user_id,name,par,holes) values ('course_test', '${user}', 'Test', 36, '[]')`);
+    await db.exec(`insert into rounds(id,user_id,course_id,course_name,played_on,holes_played,status) values ('round_test', '${user}', 'course_test', 'Test', '2026-09-20', 1, 'in_progress')`);
+    await db.exec(`update rounds set hole_stats = jsonb_build_array('{"score":4,"putts":2,"fairway":"hit","penalties":0}'::jsonb, null, null, null, null, null, null, null, null) where id = 'round_test'`);
+    await assert.rejects(db.exec(`update rounds set hole_stats = '[null, null]' where id = 'round_test'`));
 
     // Leaving takes everything with it, and only ever the caller's own row.
     await db.query("select delete_my_account()");

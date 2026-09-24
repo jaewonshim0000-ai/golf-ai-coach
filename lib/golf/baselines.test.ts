@@ -52,6 +52,7 @@ describe("baselines", () => {
   it("charges a partial round only its share of the whole-round gap", () => {
     const base = {
       holes_played: 18,
+      sg_holes: 18,
       sg_by_category: { off_the_tee: 0, approach: 0, around_the_green: 0, putting: 0 },
       sg_total: 0,
     } as unknown as Parameters<typeof rebaseRound>[0];
@@ -61,11 +62,15 @@ describe("baselines", () => {
     const full = rebaseRound(base, getBaseline("hcp_10"));
     assert.equal(full.sg_total, 11);
 
-    const nine = rebaseRound({ ...base, holes_played: 9 }, getBaseline("hcp_10"));
+    const nine = rebaseRound({ ...base, holes_played: 9, sg_holes: 9 }, getBaseline("hcp_10"));
     assert.equal(nine.sg_total, 5.5);
 
-    const oneHole = rebaseRound({ ...base, holes_played: 1 }, getBaseline("hcp_10"));
+    const oneHole = rebaseRound({ ...base, holes_played: 1, sg_holes: 1 }, getBaseline("hcp_10"));
     assert.equal(oneHole.sg_total, 0.61);
+
+    // A scorecard round: eighteen holes scored, none of them shot-tracked.
+    const scorecard = rebaseRound({ ...base, sg_holes: 0 }, getBaseline("hcp_10"));
+    assert.equal(scorecard.sg_total, 0);
   });
 
   it("defaults to the nearest listed level, and to Tour with no handicap", () => {

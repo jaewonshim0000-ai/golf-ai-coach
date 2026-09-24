@@ -5,6 +5,8 @@ import { ArrowLeft, Pencil } from "lucide-react";
 import { SourceBadge } from "@/components/dashboard/sections";
 import { DeleteRoundButton } from "@/components/rounds/delete-round";
 import { DivergingBars } from "@/components/charts";
+import { ScorecardSummary } from "@/components/rounds/scorecard-summary";
+import { classicStats, holeLines } from "@/lib/analytics/classic";
 import {
   Badge,
   ButtonLink,
@@ -35,7 +37,14 @@ export default async function RoundDetailPage({ params }: { params: Promise<{ id
   const round = await repo.getRound(user.id, id);
   if (!round) notFound();
 
-  const shots = await repo.getShots(user.id, round.id);
+  const [shots, courses] = await Promise.all([
+    repo.getShots(user.id, round.id),
+    repo.getCourses(user.id),
+  ]);
+  const course = courses.find((item) => item.id === round.course_id);
+  // A scorecard round is one with holes on its card and no shots behind them.
+  const lines = shots.length === 0 ? holeLines(round, course?.holes ?? [], []) : [];
+  const scorecard = lines.length > 0 || Boolean(round.hole_stats);
   const holes = buildHoleResults(shots);
   const stats = summarizeRound(round, shots);
   const narrative = await narrateRound(stats, holes);
@@ -67,8 +76,9 @@ export default async function RoundDetailPage({ params }: { params: Promise<{ id
           </ButtonLink>
         }
         topRight={
-          <ButtonLink href={`/rounds/${round.id}/play`} variant="onHeroSolid" size="sm">
-            <Pencil className="h-3.5 w-3.5" /> Edit shots
+          <ButtonLink href={scorecard ? `/rounds/${round.id}/score` : `/rounds/${round.id}/play`} variant="onHeroSolid" size="sm">
+            <Pencil className="h-3.5 w-3.5" />{" "}
+            {scorecard ? (round.status === "complete" ? "Edit scorecard" : "Keep scoring") : "Edit shots"}
           </ButtonLink>
         }
       />
@@ -77,7 +87,21 @@ export default async function RoundDetailPage({ params }: { params: Promise<{ id
         <DeleteRoundButton roundId={round.id} />
       </div>
 
-      {shots.length === 0 ? (
+      {scorecard ? (
+        lines.length > 0 ? (
+          <ScorecardSummary lines={lines} stats={classicStats(lines)} />
+        ) : (
+          <EmptyState
+            title="No holes scored yet"
+            message="Score the first hole and the card fills in as you go."
+            action={
+              <ButtonLink href={`/rounds/${round.id}/score`} size="sm">
+                Open scorecard
+              </ButtonLink>
+            }
+          />
+        )
+      ) : shots.length === 0 ? (
         <EmptyState
           title="No shots recorded"
           message="Add your shots and the strokes-gained breakdown, hole analysis and coaching read-out all appear automatically."

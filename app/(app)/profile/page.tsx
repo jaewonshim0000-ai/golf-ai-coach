@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Download } from "lucide-react";
 
 import { saveProfileAction, signOutAction } from "@/app/actions";
 import { DeleteAccountButton } from "@/components/auth/delete-account";
@@ -91,13 +92,22 @@ export default async function ProfilePage() {
           <CardHeader>
             <CardTitle>Account</CardTitle>
           </CardHeader>
-          <CardContent className="flex flex-wrap items-start justify-between gap-4">
-            <form action={signOutAction}>
-              <Button type="submit" variant="secondary">
-                Sign out
-              </Button>
-            </form>
-            <DeleteAccountButton />
+          <CardContent className="space-y-5">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-surface-2 p-3.5">
+              <div>
+                <p className="text-sm font-medium">Your data</p>
+                <p className="mt-0.5 text-xs text-fg-muted">Download your profile, rounds, shots, practices, and swing records as JSON.</p>
+              </div>
+              <ButtonLink href="/api/export" variant="secondary" size="sm" prefetch={false}>
+                <Download className="h-3.5 w-3.5" /> Download data
+              </ButtonLink>
+            </div>
+            <div className="flex flex-wrap items-start justify-between gap-4 border-t border-border pt-4">
+              <form action={signOutAction}>
+                <Button type="submit" variant="secondary">Sign out</Button>
+              </form>
+              <DeleteAccountButton />
+            </div>
           </CardContent>
         </Card>
       ) : null}

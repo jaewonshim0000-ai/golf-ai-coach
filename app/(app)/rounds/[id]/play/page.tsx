@@ -1,8 +1,7 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 
-import { ShotEntry } from "@/components/rounds/shot-entry";
-import { CLUBS } from "@/types/golf";
+import { HoleEntry } from "@/components/rounds/hole-entry";
 import * as repo from "@/lib/db/repo";
 
 export const metadata: Metadata = { title: "Record shots" };
@@ -16,11 +15,7 @@ export default async function PlayRoundPage({ params }: { params: Promise<{ id: 
   const round = await repo.getRound(user.id, id);
   if (!round) notFound();
 
-  const [shots, courses, profile] = await Promise.all([
-    repo.getShots(user.id, round.id),
-    repo.getCourses(user.id),
-    repo.getProfile(user.id),
-  ]);
+  const [shots, courses] = await Promise.all([repo.getShots(user.id, round.id), repo.getCourses(user.id)]);
 
   const course = courses.find((c) => c.id === round.course_id);
   const holes =
@@ -29,12 +24,7 @@ export default async function PlayRoundPage({ params }: { params: Promise<{ id: 
 
   return (
     <div>
-      <ShotEntry
-        round={round}
-        holes={holes}
-        initialShots={shots}
-        bag={profile?.bag?.length ? profile.bag : [...CLUBS]}
-      />
+      <HoleEntry round={round} holes={holes} initialShots={shots} />
     </div>
   );
 }

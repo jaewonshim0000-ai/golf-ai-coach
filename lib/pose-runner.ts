@@ -1,6 +1,6 @@
 "use client";
 
-import type { PoseFrame } from "./golf/pose";
+import { findImagePhases, smoothFrames, type PoseFrame } from "./golf/pose";
 
 /**
  * Running the pose detector over a swing, in the browser.
@@ -20,33 +20,54 @@ import type { PoseFrame } from "./golf/pose";
 const VERSION = "1.0.1";
 const WASM_BASE = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${VERSION}/wasm`;
 /*
-  The full model rather than lite: the 3D model is only as good as the depth
-  the detector infers, and full is markedly better at it for ~4 MB more.
-  ponytail: heavy is better again at ~30 MB and several times slower on a
-  phone; worth it only if the depth still looks soft on real clips.
+  The heavy model rather than full or lite: the 3D model is only as good as
+  the depth the detector infers, so this deliberately spends more download
+  size and processing time for the best model Google ships for this task.
 */
 const MODEL =
-  "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task";
+  "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_heavy/float16/1/pose_landmarker_heavy.task";
 
 /**
  * How many frames to sample across the swing.
  *
  * The downswing takes about a quarter of a second, so impact is a narrow
- * target: at 48 samples over a three-second clip the frames are 60ms apart,
- * which lands within a few degrees of it. More samples cost detection time on
- * a phone for accuracy the single-camera depth estimate cannot support.
+ * target. Short clips start at 64 samples and longer clips scale to 120;
+ * trimming still produces the tightest spacing and most accurate phases.
  */
-export const POSE_SAMPLES = 48;
+export const POSE_SAMPLES = 64;
+/** The first pass stops here, leaving room for the downswing pass. */
+const COARSE_SAMPLES_MAX = 96;
+/** What the server accepts in one model. */
+const MAX_POSE_SAMPLES = 128;
+/**
+ * Samples a second of video time through the downswing. A 30 or 60 fps clip
+ * has fewer real frames than this and the repeats are skipped; a slow-motion
+ * clip has more, and this is where they pay off.
+ */
+const DENSE_RATE = 120;
+
+type DetectedLandmark = { x: number; y: number; z: number; visibility?: number };
 
 type Landmarker = {
   detectForVideo: (
     video: HTMLVideoElement,
     timestampMs: number,
-  ) => { worldLandmarks: { x: number; y: number; z: number; visibility?: number }[][] };
+  ) => { worldLandmarks: DetectedLandmark[][]; landmarks: DetectedLandmark[][] };
   close: () => void;
 };
 
 let cached: Promise<Landmarker> | null = null;
+let lastVideoTimestamp = -1;
+
+/**
+ * MediaPipe keeps timestamp state inside a cached graph, so a second analysis
+ * cannot restart at zero. The browser clock also survives hot reloads; the
+ * previous value is the guard for multiple frames read within one millisecond.
+ */
+export function nextVideoTimestamp(now = performance.now()): number {
+  lastVideoTimestamp = Math.max(lastVideoTimestamp + 1, Math.floor(now));
+  return lastVideoTimestamp;
+}
 
 async function loadLandmarker(): Promise<Landmarker> {
   if (!cached) {
@@ -57,6 +78,9 @@ async function loadLandmarker(): Promise<Landmarker> {
         baseOptions: { modelAssetPath: MODEL, delegate: "GPU" },
         runningMode: "VIDEO",
         numPoses: 1,
+        minPoseDetectionConfidence: 0.65,
+        minPosePresenceConfidence: 0.65,
+        minTrackingConfidence: 0.65,
       })) as unknown as Landmarker;
     })().catch((error) => {
       // A failed load must not poison every later attempt.
@@ -67,16 +91,37 @@ async function loadLandmarker(): Promise<Landmarker> {
   return cached;
 }
 
-/** Seek and wait for the frame to be there, or give up on that sample. */
-function seek(video: HTMLVideoElement, time: number): Promise<void> {
+type FrameCallbackVideo = HTMLVideoElement & {
+  requestVideoFrameCallback?: (callback: (now: number, meta: { mediaTime: number }) => void) => number;
+};
+
+/**
+ * Seek and wait for the frame to be there, or give up on that sample.
+ * Resolves with the time of the frame actually on screen: a seek lands on the
+ * nearest real frame, not the time asked for, and the analysis should know
+ * which moment it is looking at. Browsers without frame callbacks fall back
+ * to the requested time.
+ */
+function seek(video: FrameCallbackVideo, time: number): Promise<number> {
   return new Promise((resolve) => {
-    const done = () => {
-      video.removeEventListener("seeked", done);
+    let settled = false;
+    const finish = (at: number) => {
+      if (settled) return;
+      settled = true;
       window.clearTimeout(timer);
-      resolve();
+      video.removeEventListener("seeked", onSeeked);
+      resolve(at);
     };
-    const timer = window.setTimeout(done, 2000);
-    video.addEventListener("seeked", done);
+    const timer = window.setTimeout(() => finish(video.currentTime), 2000);
+    const onSeeked = () => {
+      if (!video.requestVideoFrameCallback) return finish(video.currentTime);
+      const fallback = window.setTimeout(() => finish(video.currentTime), 150);
+      video.requestVideoFrameCallback((_, meta) => {
+        window.clearTimeout(fallback);
+        finish(meta.mediaTime);
+      });
+    };
+    video.addEventListener("seeked", onSeeked);
     video.currentTime = time;
   });
 }
@@ -104,23 +149,62 @@ export async function readSwing(
   video.pause();
 
   const frames: PoseFrame[] = [];
+  const seenFrames = new Set<number>();
+  /** Detect the body at one moment; false when that video frame was already read. */
+  const readAt = async (time: number) => {
+    const t = await seek(video, time);
+    const key = Math.round(t * 1000);
+    if (seenFrames.has(key)) return;
+    seenFrames.add(key);
+    // The graph is cached across measurements, so this must remain strictly
+    // increasing across separate runs as well as within this loop.
+    const result = landmarker.detectForVideo(video, nextVideoTimestamp());
+    const landmarks = result.worldLandmarks?.[0];
+    const imageLandmarks = result.landmarks?.[0];
+    if (landmarks && landmarks.length >= 33) {
+      frames.push({
+        t,
+        landmarks: landmarks.map((point) => ({ ...point })),
+        imageLandmarks: imageLandmarks?.map((point) => ({ ...point })),
+      });
+    }
+  };
+
   try {
-    for (let index = 0; index < POSE_SAMPLES; index += 1) {
-      const t = start + (span * (index + 0.5)) / POSE_SAMPLES;
-      await seek(video, t);
-      // Timestamps must increase, and they are only used for the detector's
-      // own frame bookkeeping, so the sample index does the job.
-      const result = landmarker.detectForVideo(video, index * 40);
-      const landmarks = result.worldLandmarks?.[0];
-      if (landmarks && landmarks.length >= 33) {
-        frames.push({ t, landmarks: landmarks.map((point) => ({ ...point })) });
+    // First pass: the whole clip, evenly, to find the swing in it.
+    const coarse = Math.min(COARSE_SAMPLES_MAX, Math.max(POSE_SAMPLES, Math.ceil(span * 20)));
+    // The second pass has not been sized yet; count it as a quarter-second downswing.
+    const expected = coarse + 24;
+    for (let index = 0; index < coarse; index += 1) {
+      await readAt(start + (span * (index + 0.5)) / coarse);
+      onProgress?.(index + 1, expected);
+    }
+
+    /*
+      Second pass: the downswing, at up to 120 samples a second. It lasts about a quarter of
+      a second and the body turns several hundred degrees a second through
+      impact, so the even first pass lands tens of degrees either side of it.
+      Reading every frame from just before the top to just after impact puts
+      impact within a frame.
+    */
+    const found = findImagePhases([...frames].sort((a, b) => a.t - b.t));
+    if (found) {
+      const ordered = [...frames].sort((a, b) => a.t - b.t);
+      const from = ordered[found.top]!.t - 0.05;
+      const until = ordered[found.impact]!.t + 0.12;
+      const room = MAX_POSE_SAMPLES - frames.length;
+      const steps = Math.min(room, Math.ceil((until - from) * DENSE_RATE));
+      for (let index = 0; index < steps; index += 1) {
+        const time = from + ((until - from) * index) / Math.max(1, steps - 1);
+        // Skip times the first pass already covered.
+        if (!frames.some((frame) => Math.abs(frame.t - time) < 0.5 / DENSE_RATE)) await readAt(time);
+        onProgress?.(coarse + index + 1, coarse + steps);
       }
-      onProgress?.(index + 1, POSE_SAMPLES);
     }
   } finally {
     video.currentTime = wasTime;
     if (!wasPaused) void video.play().catch(() => undefined);
   }
 
-  return frames;
+  return smoothFrames(frames.sort((a, b) => a.t - b.t));
 }

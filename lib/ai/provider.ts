@@ -99,16 +99,13 @@ export class AnthropicProvider implements AIProvider {
               { type: "text" as const, text: request.prompt },
             ],
           },
-          // Prefilling the opening brace keeps the reply to raw JSON without
-          // needing a JSON-schema round trip.
-          { role: "assistant", content: "{" },
         ],
       });
 
       const text = message.content
         .map((block) => (block.type === "text" ? block.text : ""))
         .join("");
-      const parsed = request.schema.safeParse(parseJson(`{${text}`));
+      const parsed = request.schema.safeParse(parseJson(text));
       if (parsed.success) {
         return { data: parsed.data, source: "ai", model: this.model };
       }
@@ -116,7 +113,7 @@ export class AnthropicProvider implements AIProvider {
         data: request.fallback(),
         source: "rules",
         model: this.model,
-        note: `Model output failed validation for ${request.name}; showing the rule-based coach instead.`,
+        note: `Model output failed validation for ${request.name}; using the deterministic fallback.`,
       };
     } catch (error) {
       return {
@@ -125,8 +122,8 @@ export class AnthropicProvider implements AIProvider {
         model: this.model,
         note:
           error instanceof Error
-            ? `AI call failed (${error.message}); showing the rule-based coach instead.`
-            : "AI call failed; showing the rule-based coach instead.",
+            ? `AI call failed (${error.message}); using the deterministic fallback.`
+            : "AI call failed; using the deterministic fallback.",
       };
     }
   }

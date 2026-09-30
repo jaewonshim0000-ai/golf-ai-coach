@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, Check, Loader2 } from "lucide-react";
 
 import { IDLE, type ActionState } from "@/lib/action-state";
@@ -60,12 +60,40 @@ export function ProfileForm({
 }) {
   const [state, formAction, pending] = useActionState(action, IDLE);
   const [step, setStep] = useState(0);
+  const [clientErrors, setClientErrors] = useState<Record<string, string>>({});
+  const formRef = useRef<HTMLFormElement>(null);
   const wizard = layout === "wizard";
   const visible = (index: number) => !wizard || index === step;
-  const errors = state.errors ?? {};
+  const errors = { ...clientErrors, ...(state.errors ?? {}) };
+
+  useEffect(() => {
+    if (state.errors?.display_name) setStep(0);
+  }, [state.errors?.display_name]);
+
+  function validateName(): boolean {
+    const name = formRef.current?.elements.namedItem("display_name") as HTMLInputElement | null;
+    if (name?.value.trim()) {
+      setClientErrors((current) => {
+        const { display_name: _displayName, ...rest } = current;
+        return rest;
+      });
+      return true;
+    }
+    setClientErrors((current) => ({ ...current, display_name: "Name is required" }));
+    setStep(0);
+    return false;
+  }
 
   return (
-    <form action={formAction} className="space-y-5">
+    <form
+      ref={formRef}
+      action={formAction}
+      className="space-y-5"
+      noValidate
+      onSubmit={(event) => {
+        if (!validateName()) event.preventDefault();
+      }}
+    >
       {wizard ? (
         <div className="space-y-2">
           <div className="flex items-baseline justify-between">
@@ -287,7 +315,13 @@ export function ProfileForm({
         )}
 
         {wizard && step < STEPS.length - 1 ? (
-          <Button type="button" onClick={() => setStep((s) => s + 1)}>
+          <Button
+            type="button"
+            onClick={() => {
+              if (step === 0 && !validateName()) return;
+              setStep((s) => s + 1);
+            }}
+          >
             Continue <ArrowRight className="h-4 w-4" />
           </Button>
         ) : (

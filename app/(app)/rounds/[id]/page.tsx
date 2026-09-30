@@ -21,6 +21,8 @@ import {
 } from "@/components/ui/primitives";
 import { CLUB_LABELS, SG_CATEGORIES, SG_CATEGORY_LABELS, labelize } from "@/types/golf";
 import { summarizeRound } from "@/lib/golf/strokes-gained";
+import { baselineForHandicap, getBaseline, rebaseRound } from "@/lib/golf/baselines";
+import { BaselinePicker } from "@/components/stats/baseline-picker";
 import { buildHoleResults } from "@/lib/golf/strokes-gained";
 import { summarizeRound as narrateRound } from "@/lib/ai/insights";
 import * as repo from "@/lib/db/repo";
@@ -29,25 +31,37 @@ import { cn, formatDate, signed, toParLabel } from "@/lib/utils";
 export const metadata: Metadata = { title: "Round detail" };
 export const dynamic = "force-dynamic";
 
-export default async function RoundDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+export default async function RoundDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ baseline?: string }>;
+}) {
+  const [{ id }, search] = await Promise.all([params, searchParams]);
   const user = await repo.currentUser();
   if (!user) return null;
 
   const round = await repo.getRound(user.id, id);
   if (!round) notFound();
 
-  const [shots, courses] = await Promise.all([
+  const [shots, courses, profile] = await Promise.all([
     repo.getShots(user.id, round.id),
     repo.getCourses(user.id),
+    repo.getProfile(user.id),
   ]);
+  // Strokes gained against the level the player picks, their own by default.
+  const baseline = search.baseline
+    ? getBaseline(search.baseline)
+    : baselineForHandicap(profile?.handicap_index ?? null);
   const course = courses.find((item) => item.id === round.course_id);
   // A scorecard round is one with holes on its card and no shots behind them.
   const lines = shots.length === 0 ? holeLines(round, course?.holes ?? [], []) : [];
   const scorecard = lines.length > 0 || Boolean(round.hole_stats);
   const holes = buildHoleResults(shots);
-  const stats = summarizeRound(round, shots);
-  const narrative = await narrateRound(stats, holes);
+  const tourStats = summarizeRound(round, shots);
+  const stats = rebaseRound(tourStats, baseline);
+  const narrative = await narrateRound(tourStats, holes);
 
   const scored = holes.flatMap((h) => h.shots);
   const biggestLosses = [...scored].sort((a, b) => a.strokes_gained - b.strokes_gained).slice(0, 3);
@@ -64,6 +78,7 @@ export default async function RoundDetailPage({ params }: { params: Promise<{ id
             <HeroPill tone="solid">
               {round.course_name} · {formatDate(round.played_on)}
             </HeroPill>
+            {round.round_type ? <HeroPill>{labelize(round.round_type)}</HeroPill> : null}
             {round.tees ? <HeroPill>{round.tees} tees</HeroPill> : null}
             {round.conditions.length ? (
               <HeroPill>{round.conditions.map(labelize).join(", ")}</HeroPill>
@@ -114,14 +129,35 @@ export default async function RoundDetailPage({ params }: { params: Promise<{ id
       ) : (
         <>
           <Card>
-            <CardContent className="grid grid-cols-3 gap-x-3 gap-y-4 p-5 lg:grid-cols-6">
-              <Stat label="Score" value={stats.score ?? "—"} sub={toParLabel(stats.to_par)} />
-              <Stat
-                label="SG total"
-                value={signed(stats.sg_total, 1)}
-                tone={stats.sg_total >= 0 ? "good" : "bad"}
-                sub="vs Tour baseline"
-              />
+            <CardContent className="space-y-4 p-5">
+              <div className="grid grid-cols-2 gap-3">
+                <Stat label="Score" value={stats.score ?? "—"} sub={toParLabel(stats.to_par)} />
+                <Stat
+                  label="Strokes gained"
+                  value={signed(stats.sg_total, 1)}
+                  tone={stats.sg_total >= 0 ? "good" : "bad"}
+                  sub={`vs ${baseline.label.toLowerCase()}${baseline.id === "tour" ? "" : " (approx.)"}`}
+                />
+              </div>
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-fg-muted">Compare to</p>
+                <BaselinePicker current={baseline.id} />
+              </div>
+              <div className="grid grid-cols-2 gap-3 border-t border-border pt-4 sm:grid-cols-4">
+                {SG_CATEGORIES.map((category) => (
+                  <Stat
+                    key={category}
+                    label={SG_CATEGORY_LABELS[category]}
+                    value={signed(stats.sg_by_category[category])}
+                    tone={stats.sg_by_category[category] >= 0 ? "good" : "bad"}
+                  />
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="grid grid-cols-2 gap-x-3 gap-y-4 p-5 sm:grid-cols-4">
               <Stat label="Fairways" value={`${stats.fairways_hit}/${stats.fairway_opportunities}`} />
               <Stat label="GIR" value={`${stats.greens_in_regulation}/${stats.holes_played}`} />
               <Stat label="Putts" value={stats.putts} />

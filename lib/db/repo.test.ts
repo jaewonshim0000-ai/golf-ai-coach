@@ -10,6 +10,7 @@ import {
   DEMO_USER_ID,
   deletePracticeSession,
   deleteSwingSession,
+  deleteSwingMeasurementsBySource,
   getSwingSessions,
   saveSwingClip,
 } from "./repo";
@@ -69,6 +70,38 @@ describe("swing storage", () => {
     const kept = store().swingSessions.filter((session) => session.id !== "swing_1").length;
     await deleteSwingSession(DEMO_USER_ID, "swing_1");
     assert.equal(store().swingSessions.length, kept);
+  });
+
+  it("replaces only the previous automated pose reading", async () => {
+    const before = store();
+    const sessionId = "swing_1";
+    before.swingMeasurements.push(
+      {
+        id: "pose_old",
+        swing_session_id: sessionId,
+        phase: "top",
+        metric: "chest_turn_top",
+        value: 170,
+        unit: "deg",
+        confidence: 0.8,
+        source: "pose",
+      },
+      {
+        id: "manual_keep",
+        swing_session_id: sessionId,
+        phase: "top",
+        metric: "pelvis_turn_top",
+        value: 42,
+        unit: "deg",
+        confidence: 1,
+        source: "manual",
+      },
+    );
+
+    await deleteSwingMeasurementsBySource(DEMO_USER_ID, sessionId, "pose");
+
+    assert.equal(store().swingMeasurements.some((row) => row.id === "pose_old"), false);
+    assert.equal(store().swingMeasurements.some((row) => row.id === "manual_keep"), true);
   });
 });
 

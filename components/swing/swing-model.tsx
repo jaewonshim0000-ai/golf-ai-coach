@@ -1,11 +1,19 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { Pause, Play } from "lucide-react";
 
-import { LM, modelSpace, unpackFrames, type PoseModel } from "@/lib/golf/pose";
+import { retimeSwingAction } from "@/app/actions";
+import {
+  LM,
+  modelSpace,
+  unpackFrames,
+  type PoseModel,
+  type SwingPhases,
+} from "@/lib/golf/pose";
 import { cn } from "@/lib/utils";
 import { Button, Card, CardContent, CardHeader, CardTitle } from "@/components/ui/primitives";
 
@@ -131,7 +139,8 @@ function between(track: THREE.Vector3[][], position: number): THREE.Vector3[] {
   return track[index]!.map((point, joint) => point.clone().lerp(track[next]![joint] ?? point, fraction));
 }
 
-export function SwingModel({ model }: { model: PoseModel }) {
+export function SwingModel({ model, sessionId }: { model: PoseModel; sessionId: string }) {
+  const router = useRouter();
   const host = useRef<HTMLDivElement>(null);
   const scene = useRef<Scene | null>(null);
   const last = model.frames.length - 1;
@@ -141,6 +150,14 @@ export function SwingModel({ model }: { model: PoseModel }) {
   const [ghost, setGhost] = useState(true);
   const [view, setView] = useState<View>("face");
   const [failed, setFailed] = useState<string | null>(null);
+  const [phaseDraft, setPhaseDraft] = useState<SwingPhases>(model.phases);
+  const [phaseMessage, setPhaseMessage] = useState<string | null>(null);
+  const [phasePending, startPhaseTransition] = useTransition();
+
+  useEffect(() => {
+    setPhaseDraft(model.phases);
+    setPosition(model.phases.top);
+  }, [model.phases.address, model.phases.top, model.phases.impact]);
 
   useEffect(() => {
     const element = host.current;
@@ -288,8 +305,29 @@ export function SwingModel({ model }: { model: PoseModel }) {
     return () => cancelAnimationFrame(frame);
   }, [playing, slow, last, model.t]);
 
-  const nearest = PHASES.find((phase) => Math.abs(model.phases[phase] - position) < 0.5);
+  const nearest = PHASES.find((phase) => Math.abs(phaseDraft[phase] - position) < 0.5);
   const seconds = (model.t[Math.round(position)] ?? 0) - (model.t[0] ?? 0);
+  const validPhaseOrder =
+    phaseDraft.address < phaseDraft.top && phaseDraft.top < phaseDraft.impact;
+
+  const markPhase = (phase: keyof SwingPhases) => {
+    setPlaying(false);
+    setPhaseMessage(null);
+    setPhaseDraft((current) => ({ ...current, [phase]: Math.round(position) }));
+  };
+
+  const recalculate = () => {
+    if (!validPhaseOrder) return;
+    startPhaseTransition(async () => {
+      const result = await retimeSwingAction({ swing_session_id: sessionId, phases: phaseDraft });
+      setPhaseMessage(
+        result.ok
+          ? "Timing saved. The measurements now use these three frames."
+          : (result.message ?? "The phase timing could not be saved."),
+      );
+      if (result.ok) router.refresh();
+    });
+  };
 
   return (
     <Card>
@@ -375,7 +413,7 @@ export function SwingModel({ model }: { model: PoseModel }) {
               variant={nearest === phase ? "primary" : "secondary"}
               onClick={() => {
                 setPlaying(false);
-                setPosition(model.phases[phase]);
+                setPosition(phaseDraft[phase]);
               }}
               className="capitalize"
             >
@@ -400,6 +438,49 @@ export function SwingModel({ model }: { model: PoseModel }) {
             />
             Show address
           </label>
+        </div>
+        <div className="space-y-2 rounded-xl border border-border bg-surface-2 p-3">
+          <div>
+            <p className="text-[12px] font-semibold text-fg">Correct phase timing</p>
+            <p className="mt-0.5 text-[11px] leading-[1.5] text-fg-muted">
+              Scrub to the exact frame, mark it, then recalculate the measurements.
+            </p>
+          </div>
+          <div className="grid gap-1.5 sm:grid-cols-3">
+            {PHASES.map((phase) => (
+              <Button
+                key={`mark-${phase}`}
+                type="button"
+                size="sm"
+                variant="secondary"
+                onClick={() => markPhase(phase)}
+                className="justify-between capitalize"
+              >
+                <span>Mark {phase}</span>
+                <span className="ml-2 tabular-nums text-fg-muted">
+                  {((model.t[phaseDraft[phase]] ?? 0) - (model.t[0] ?? 0)).toFixed(2)}s
+                </span>
+              </Button>
+            ))}
+          </div>
+          {!validPhaseOrder ? (
+            <p className="text-[11px] text-red-700">Mark address first, top second, and impact third.</p>
+          ) : null}
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              disabled={!validPhaseOrder || phasePending}
+              onClick={recalculate}
+            >
+              {phasePending ? "Recalculating…" : "Use these frames"}
+            </Button>
+            {phaseMessage ? (
+              <p className="text-[11px] leading-[1.4] text-fg-muted" role="status">
+                {phaseMessage}
+              </p>
+            ) : null}
+          </div>
         </div>
         <p className="text-[11px] leading-[1.5] text-fg-subtle">
           Built from one camera, so depth is inferred: turns are the softest numbers. The club is

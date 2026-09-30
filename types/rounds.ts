@@ -4,6 +4,7 @@ import type {
   Lie,
   MissDirection,
   PenaltyType,
+  RoundType,
   SGCategory,
   ShotType,
 } from "./golf";
@@ -32,6 +33,8 @@ export type Round = {
   course_name: string;
   played_on: string;
   tees: string | null;
+  /** Null on rounds logged before the type was asked. */
+  round_type?: RoundType | null;
   holes_played: number;
   score: number | null;
   /** Hole totals for a fast score-only round. Shot-tracked rounds leave this null. */

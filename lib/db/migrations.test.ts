@@ -17,7 +17,7 @@ test("live schema: atomic practice, persistent results, and cross-user isolation
       create table storage.objects(id text primary key, bucket_id text, name text);
       create function storage.foldername(text) returns text[] language sql as $$ select string_to_array($1, '/') $$;
     `);
-    for (const path of ["supabase/migrations/0001_init.sql", "supabase/migrations/0002_live_practice.sql", "supabase/migrations/0003_swing_vision.sql", "supabase/migrations/0004_swing_clips.sql", "supabase/migrations/0005_delete_account.sql", "supabase/migrations/0006_pose_source.sql", "supabase/migrations/0007_scorecards.sql", "supabase/migrations/0008_swing_model.sql", "supabase/migrations/0009_plans_plots_scorecards.sql", "supabase/seed/seed.sql"]) {
+    for (const path of ["supabase/migrations/0001_init.sql", "supabase/migrations/0002_live_practice.sql", "supabase/migrations/0003_swing_vision.sql", "supabase/migrations/0004_swing_clips.sql", "supabase/migrations/0005_delete_account.sql", "supabase/migrations/0006_pose_source.sql", "supabase/migrations/0007_scorecards.sql", "supabase/migrations/0008_swing_model.sql", "supabase/migrations/0009_plans_plots_scorecards.sql", "supabase/migrations/0010_round_type.sql", "supabase/seed/seed.sql"]) {
       const sql = (await readFile(path, "utf8")).replace('create extension if not exists "pgcrypto";', "");
       await db.exec(sql);
     }

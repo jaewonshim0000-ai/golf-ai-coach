@@ -12,12 +12,105 @@ import {
   type AnalyzeState,
 } from "@/app/actions";
 import { FRAME_COUNT } from "@/lib/ai/vision";
-import { packFrames } from "@/lib/golf/pose";
+import { LM, packFrames, type Landmark, type PoseFrame } from "@/lib/golf/pose";
 import { readSwing } from "@/lib/pose-runner";
 import { clampClip, clipWindow, getClip } from "@/lib/video-store";
 import { cn } from "@/lib/utils";
 import { browserClient } from "@/lib/db/supabase";
 import { Button } from "@/components/ui/primitives";
+
+type TrackingPreview = { image: string; landmarks: Landmark[]; time: number };
+
+const TRACKED_BONES: [number, number][] = [
+  [LM.leftShoulder, LM.rightShoulder],
+  [LM.leftShoulder, 13], [13, LM.leftWrist],
+  [LM.rightShoulder, 14], [14, LM.rightWrist],
+  [LM.leftShoulder, LM.leftHip], [LM.rightShoulder, LM.rightHip],
+  [LM.leftHip, LM.rightHip],
+  [LM.leftHip, LM.leftKnee], [LM.leftKnee, LM.leftAnkle],
+  [LM.rightHip, LM.rightKnee], [LM.rightKnee, LM.rightAnkle],
+  [LM.leftAnkle, LM.leftHeel], [LM.leftHeel, LM.leftFootIndex],
+  [LM.rightAnkle, LM.rightHeel], [LM.rightHeel, LM.rightFootIndex],
+];
+
+function trackingQuality(frame: PoseFrame): number {
+  const points = frame.imageLandmarks ?? [];
+  const important = [
+    LM.leftShoulder, LM.rightShoulder, LM.leftWrist, LM.rightWrist,
+    LM.leftHip, LM.rightHip, LM.leftKnee, LM.rightKnee,
+    LM.leftAnkle, LM.rightAnkle,
+  ];
+  return important.reduce((sum, index) => sum + (points[index]?.visibility ?? 0), 0) / important.length;
+}
+
+async function captureTrackingPreview(
+  element: HTMLVideoElement,
+  frames: PoseFrame[],
+): Promise<TrackingPreview | null> {
+  const frame = [...frames]
+    .filter((item) => item.imageLandmarks?.length === 33)
+    .sort((a, b) => trackingQuality(b) - trackingQuality(a))[0];
+  if (!frame?.imageLandmarks) return null;
+  await seek(element, frame.t);
+  const canvas = document.createElement("canvas");
+  const scale = Math.min(1, 560 / element.videoWidth);
+  canvas.width = Math.round(element.videoWidth * scale);
+  canvas.height = Math.round(element.videoHeight * scale);
+  const context = canvas.getContext("2d");
+  if (!context) return null;
+  context.drawImage(element, 0, 0, canvas.width, canvas.height);
+  return {
+    image: canvas.toDataURL("image/jpeg", 0.8),
+    landmarks: frame.imageLandmarks,
+    time: frame.t,
+  };
+}
+
+function TrackingOverlay({ preview }: { preview: TrackingPreview }) {
+  const visible = (point?: Landmark) => Boolean(point && (point.visibility ?? 1) >= 0.55);
+  return (
+    <div className="mt-3 space-y-2">
+      <div className="relative overflow-hidden rounded-xl bg-black">
+        {/* Generated locally from the user's video; it never becomes a remote image asset. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={preview.image} alt="Frame used to verify body tracking" className="block h-auto w-full" />
+        <svg
+          viewBox="0 0 1 1"
+          preserveAspectRatio="none"
+          className="pointer-events-none absolute inset-0 h-full w-full"
+          aria-hidden
+        >
+          {TRACKED_BONES.map(([from, to]) => {
+            const a = preview.landmarks[from];
+            const b = preview.landmarks[to];
+            if (!visible(a) || !visible(b)) return null;
+            const accent =
+              (from === LM.leftShoulder && to === LM.rightShoulder) ||
+              (from === LM.leftHip && to === LM.rightHip);
+            return (
+              <line
+                key={`${from}-${to}`}
+                x1={a!.x} y1={a!.y} x2={b!.x} y2={b!.y}
+                stroke={accent ? (from === LM.leftHip ? "#3fc1a5" : "#ff7a59") : "#f8fafc"}
+                strokeWidth={accent ? 0.009 : 0.005}
+                strokeLinecap="round"
+              />
+            );
+          })}
+          {preview.landmarks.map((point, index) =>
+            visible(point) ? (
+              <circle key={index} cx={point.x} cy={point.y} r={0.008} fill="#e6b85c" />
+            ) : null,
+          )}
+        </svg>
+      </div>
+      <p className="text-[10.5px] leading-[1.5] text-fg-subtle">
+        Tracking check at {preview.time.toFixed(1)}s · orange shoulders · green hips · gold joints.
+        If the lines leave your body, shorten the clip or use a brighter face-on/down-the-line view.
+      </p>
+    </div>
+  );
+}
 
 /** Seek and wait for the frame to actually be there, or give up on it. */
 function seek(element: HTMLVideoElement, time: number): Promise<void> {
@@ -68,6 +161,7 @@ export function SwingVideo({
   const [analysis, setAnalysis] = useState<AnalyzeState | null>(null);
   const [analysing, setAnalysing] = useState(false);
   const [progress, setProgress] = useState<string | null>(null);
+  const [trackingPreview, setTrackingPreview] = useState<TrackingPreview | null>(null);
   /*
     Reading frames off the canvas needs a cross-origin-enabled element, but a
     host that does not send the matching header will refuse to play at all
@@ -121,6 +215,7 @@ export function SwingVideo({
     if (!element || analysing) return;
     setAnalysing(true);
     setAnalysis(null);
+    setTrackingPreview(null);
     setProgress("Loading the pose detector");
     const wasTime = element.currentTime;
 
@@ -143,7 +238,13 @@ export function SwingVideo({
 
       if (posed.length >= 3) {
         setProgress("Building the 3D model");
-        const saved = await savePoseModelAction({ swing_session_id: id, ...packFrames(posed) });
+        setTrackingPreview(await captureTrackingPreview(element, posed));
+        const saved = await savePoseModelAction({
+          swing_session_id: id,
+          ...packFrames(posed),
+          // Picture x and y are fractions of different lengths; the rebuild needs both.
+          aspect: element.videoWidth / element.videoHeight,
+        });
         // A body with no swing in it falls through to the estimate below;
         // anything else - saved, or a real failure - is the answer.
         if (!saved.noSwing) {
@@ -264,7 +365,7 @@ export function SwingVideo({
                 {!crossOrigin
                   ? "This video will play but cannot be read, because its storage does not allow it."
                   : (progress ??
-                    "Builds a 3D model of your body from the video and measures twelve positions on it.")}
+                    "Tracks 33 joints, rebuilds your body in 3D from what the camera saw, and measures the positions this view can support. Most accurate in slow motion (120 or 240 fps): face on for sway, down the line for turns. The first read downloads about 30 MB.")}
               </p>
             </div>
             <Button
@@ -299,6 +400,7 @@ export function SwingVideo({
               ) : null}
             </p>
           ) : null}
+          {trackingPreview ? <TrackingOverlay preview={trackingPreview} /> : null}
         </div>
       ) : null}
 

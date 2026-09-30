@@ -52,7 +52,7 @@ export function AuthForm({ mode, initialError = null }: { mode: "login" | "signu
         });
         if (signUpError) throw signUpError;
         if (!result.session) {
-          setNotice("Check your inbox to confirm your email, then sign in.");
+          setNotice("Check your inbox and spam folder to confirm your email, then sign in. You can resend it from the sign-in page.");
           return;
         }
       } else {

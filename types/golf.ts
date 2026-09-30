@@ -181,6 +181,9 @@ export function bandStart(id: string): number {
 export const CONDITIONS = ["calm", "breezy", "windy", "wet", "cold", "hot"] as const;
 export type Condition = (typeof CONDITIONS)[number];
 
+export const ROUND_TYPES = ["practice", "casual", "league", "tournament"] as const;
+export type RoundType = (typeof ROUND_TYPES)[number];
+
 /** Human labels for enum-ish values, so the UI never prints snake_case. */
 export function labelize(value: string): string {
   return value

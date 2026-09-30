@@ -186,7 +186,7 @@ export default async function SwingPage({ params }: { params: Promise<{ id: stri
         </div>
       </div>
 
-      {model ? <SwingModel model={model} /> : null}
+      {model ? <SwingModel model={model} sessionId={session.id} /> : null}
 
       <SwingDiagnostic session={session} measurements={measurements} />
       <MeasurementForm sessionId={session.id} />

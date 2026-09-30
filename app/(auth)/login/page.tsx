@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 
 import { AuthForm } from "@/components/auth/auth-form";
+import { ConfirmationForm } from "@/components/auth/confirmation-form";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/primitives";
 import { mode } from "@/lib/db/repo";
 
@@ -24,6 +25,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
       </CardHeader>
       <CardContent className="space-y-4">
         <AuthForm mode="login" initialError={initialError} />
+        <ConfirmationForm />
         <p className="text-center text-xs text-fg-muted">
           No account yet?{" "}
           <Link href="/signup" className="text-accent hover:underline">

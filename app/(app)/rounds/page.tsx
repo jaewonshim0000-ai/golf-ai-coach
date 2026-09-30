@@ -129,7 +129,7 @@ export default async function RoundsPage({ searchParams }: { searchParams: Promi
         description="Every round you log, and what the shots say about it."
         action={
           <ButtonLink href="/rounds/new" size="sm">
-            <Flag className="h-3.5 w-3.5" /> New round
+            <Flag className="h-3.5 w-3.5" /> Add round
           </ButtonLink>
         }
       />
@@ -140,60 +140,16 @@ export default async function RoundsPage({ searchParams }: { searchParams: Promi
           message="Play your first round to start discovering where you're gaining and losing shots."
           action={
             <ButtonLink href="/rounds/new" size="sm">
-              Log a round
+              Add round
             </ButtonLink>
           }
         />
       ) : (
         <>
-          <Card>
-            <CardHeader>
-              <CardTitle>Scoring</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <TrendLine points={state.scoringTrend} height={150} invert />
-            </CardContent>
-          </Card>
-
-          <SectionHeading
-            title="Your numbers"
-            description={`Across ${classic.holes} holes, from scorecards and shot tracking alike.`}
-          />
-          <Card>
-            <CardContent className="grid grid-cols-3 gap-x-3 gap-y-4 p-5 lg:grid-cols-5">
-              <Stat label="Fairways" value={pct(classic.fairways.pct)} sub={`${classic.fairways.made}/${classic.fairways.chances}`} />
-              <Stat label="Greens" value={pct(classic.greens.pct)} sub={`${classic.greens.made}/${classic.greens.chances}`} />
-              <Stat label="Putts / round" value={one(classic.puttsPerRound)} sub={`${one(classic.threePuttsPerRound)} three-putts`} />
-              <Stat label="Scrambling" value={pct(classic.scrambling.pct)} sub={`${classic.scrambling.made}/${classic.scrambling.chances}`} />
-              <Stat label="Penalties / round" value={one(classic.penaltiesPerRound)} />
-            </CardContent>
-            {classic.holes > 0 ? (
-              <CardContent className="space-y-3 border-t border-border pt-4">
-                <ScoreMix mix={classic.mix} />
-                <p className="tabular text-[12px] text-fg-muted">
-                  Average score:{" "}
-                  {([3, 4, 5] as const).map((par) => `par ${par}s ${one(classic.parAverage[par])}`).join(" · ")}
-                </p>
-              </CardContent>
-            ) : null}
-          </Card>
-
-          <div className="grid gap-5 md:grid-cols-2">
-            <ChartCard title="Fairways hit">
-              <TrendLine points={trends.fairways} height={110} unit="%" />
-            </ChartCard>
-            <ChartCard title="Greens in regulation">
-              <TrendLine points={trends.greens} height={110} unit="%" />
-            </ChartCard>
-            <ChartCard title="Putts per round">
-              <TrendLine points={trends.putts} height={110} invert />
-            </ChartCard>
-            <ChartCard title="Scrambling">
-              <TrendLine points={trends.scrambling} height={110} unit="%" />
-            </ChartCard>
+          {/* The hero overlaps whatever comes first; a heading has to clear it. */}
+          <div className="pt-12">
+            <SectionHeading title="Last rounds" />
           </div>
-
-          <SectionHeading title="Logged rounds" />
 
           <div className="grid gap-2.5 md:grid-cols-2">
             {state.rounds.map((round) => {
@@ -265,6 +221,53 @@ export default async function RoundsPage({ searchParams }: { searchParams: Promi
                 </MiniCard>
               );
             })}
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Scoring</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <TrendLine points={state.scoringTrend} height={150} invert />
+            </CardContent>
+          </Card>
+
+          <SectionHeading
+            title="Your numbers"
+            description={`Across ${classic.holes} holes, from scorecards and shot tracking alike.`}
+          />
+          <Card>
+            <CardContent className="grid grid-cols-3 gap-x-3 gap-y-4 p-5 lg:grid-cols-5">
+              <Stat label="Fairways" value={pct(classic.fairways.pct)} sub={`${classic.fairways.made}/${classic.fairways.chances}`} />
+              <Stat label="Greens" value={pct(classic.greens.pct)} sub={`${classic.greens.made}/${classic.greens.chances}`} />
+              <Stat label="Putts / round" value={one(classic.puttsPerRound)} sub={`${one(classic.threePuttsPerRound)} three-putts`} />
+              <Stat label="Scrambling" value={pct(classic.scrambling.pct)} sub={`${classic.scrambling.made}/${classic.scrambling.chances}`} />
+              <Stat label="Penalties / round" value={one(classic.penaltiesPerRound)} />
+            </CardContent>
+            {classic.holes > 0 ? (
+              <CardContent className="space-y-3 border-t border-border pt-4">
+                <ScoreMix mix={classic.mix} />
+                <p className="tabular text-[12px] text-fg-muted">
+                  Average score:{" "}
+                  {([3, 4, 5] as const).map((par) => `par ${par}s ${one(classic.parAverage[par])}`).join(" · ")}
+                </p>
+              </CardContent>
+            ) : null}
+          </Card>
+
+          <div className="grid gap-5 md:grid-cols-2">
+            <ChartCard title="Fairways hit">
+              <TrendLine points={trends.fairways} height={110} unit="%" />
+            </ChartCard>
+            <ChartCard title="Greens in regulation">
+              <TrendLine points={trends.greens} height={110} unit="%" />
+            </ChartCard>
+            <ChartCard title="Putts per round">
+              <TrendLine points={trends.putts} height={110} invert />
+            </ChartCard>
+            <ChartCard title="Scrambling">
+              <TrendLine points={trends.scrambling} height={110} unit="%" />
+            </ChartCard>
           </div>
 
           <SectionHeading

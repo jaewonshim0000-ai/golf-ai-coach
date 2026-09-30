@@ -26,9 +26,10 @@ Without a database connection, the app shows a setup screen. For disposable samp
    - `supabase/migrations/0009_plans_plots_scorecards.sql` (new and existing projects; apply once).
    - `supabase/seed/seed.sql` (reference drills and swing bands only; safe to re-run).
 3. Copy `.env.example` to `.env.local` and set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` from the project's connection settings. Use the public anon key, never a service-role key. Keep `ENABLE_DEMO_MODE=false`.
-4. In Supabase Authentication URL Configuration, set the Site URL to the deployed app and allow its `/auth/callback` URL. Add `http://localhost:3000/auth/callback` for local development. Email/password sign-in must be enabled, and password recovery emails must be enabled for the **Forgot your password?** link to work.
-5. Add the same environment variables to the existing Vercel project, then rebuild and redeploy. Public environment variables must be present at build time.
-6. Create your account, confirm your email if required, and complete the profile. New accounts start empty. Do **not** run `supabase/seed/demo-player.sql` for real users.
+4. In Supabase Authentication URL Configuration, set the Site URL to the deployed app and allow its `/auth/callback` URL. Add `http://localhost:3001/auth/callback` for this local setup. Email/password sign-in and Confirm Email must be enabled.
+5. In Supabase Authentication → Emails → SMTP Settings, connect a custom SMTP provider before inviting users. Supabase's built-in mailer only delivers to project-team addresses and is limited to two messages per hour, so it cannot support real account confirmations or password recovery.
+6. Add the same environment variables to the existing Vercel project, then rebuild and redeploy. Public environment variables must be present at build time.
+7. Create your account, confirm your email, and complete the profile. New accounts start empty. Do **not** run `supabase/seed/demo-player.sql` for real users.
 
 The second migration makes practice creation transactional, adds per-shot estimates, prevents duplicate results, and enforces parent ownership. If upgrading an old database, it keeps the latest duplicate practice result and one existing measurement per metric. Back up an existing production database before applying migrations.
 
@@ -68,13 +69,43 @@ Use **Upload video** to choose a saved MP4, MOV, or WebM, or **Record video** to
 
 ### Reading a swing from video
 
-**Measure swing** runs a pose detector over the clip in the browser and builds a 3D model of the player: the 33-joint skeleton, in metres, in each of 48 frames. The video never leaves the device, there is no per-use cost, and no API key is needed. `@mediapipe/tasks-vision` (full pose model) does the detection; the wasm and the model are fetched from MediaPipe's CDNs on first use and cached by the browser.
+**Measure swing** runs a pose detector over the clip in the browser: `@mediapipe/tasks-vision` (heavy pose model), with the wasm and model fetched from MediaPipe's CDNs on first use and cached. The video never leaves the device, there is no per-use cost, and no API key is needed. Sampling is done in two passes:
 
-Only the skeleton is sent to the server, which validates it, finds the phases, reads the twelve positions off it, and stores the model on the swing (`swing_sessions.pose_model`, ~40 KB). The numbers are therefore always read from the same model the swing page draws. **3D swing model** on that page replays it as a mannequin you can turn and scrub through, in slow motion, from face on, down the line or above, with the shoulder and hip lines drawn past the body, the hand path, the target line, and a ghost of the address position to measure against. The club is not tracked.
+1. An even pass (64 to 96 frames) finds the swing.
+2. A second pass reads the downswing at up to 120 samples a second, where the body turns several hundred degrees a second.
 
-`lib/golf/pose.ts` does the measuring, and the shape of it is the point: the detector returns a body in the camera's frame, and golf is described in the player's. So it builds the player's axes out of the address pose — vertical from the stance, the target line from the feet, toward the ball from where the toes point — and measures everything in those. Nothing depends on which way the camera faced, on the library's axis conventions, or on handedness: down-the-line and face-on clips of the same swing give the same numbers, and the test suite checks a left-hander's mirrored swing reads identically.
+Each sample is stamped with the video frame actually shown, and repeated frames are skipped. A tracking preview is drawn over a sampled frame, so bad tracking is visible before the numbers are trusted.
 
-Phases are found without club detection: the top is where the chest has turned furthest from address, address is the lowest the hands sit before it, and impact is the first frame after the top where the hands come back through address height — first crossing, so the follow-through cannot be mistaken for it.
+The browser sends the detector's two skeletons per frame, plus the video's aspect ratio: the picture landmarks and the "world" 3D guess. The server rebuilds the body from them in `lib/golf/lift.ts`, because the world skeleton alone is pinned between the hips every frame and its depth is noisy and squashed. The rebuild works like this:
+
+- Each bone's in-picture part comes from the picture landmarks (the detector's most accurate output), back-projected through a phone lens. The body moves through the frame as it really did.
+- Every bone keeps one length for the whole clip.
+- The detector's depth is re-scaled by one gain per clip. The gain is fitted so rigid bones stay rigid as they rotate, with an errors-in-variables correction so noise does not bias it low.
+- Depth is blended with the geometric depth a known bone length implies (Taylor 2000). Each source is weighted by the error it carries on that clip, measured from the clip's own jitter.
+
+The rebuilt model is stored on the swing (`swing_sessions.pose_model`, flagged `lifted`), so the numbers are always read off the model the page draws. Moving the phases in the viewer re-measures that stored model; nothing is uploaded again.
+
+`lib/golf/pose.ts` does the measuring:
+
+- The player's axes come from the address pose: vertical from the stance, the target line from the feet, toward the ball from where the toes point.
+- Each position is the median over the frames within 50 ms of its phase. Address is averaged over 100 ms into one steady reference.
+- A movement (sway, lift, thrust, head) is measured only when its axis lies within about 35° of the picture. Face-on gives sway and lift; down-the-line gives thrust and lift. The rest stay unmeasured rather than read off depth the camera cannot see.
+
+Phases come from the hand path in the picture, with no club detection:
+
+- **Address** is the hands' lowest early position.
+- **Top** is their highest before they come back down.
+- **Impact** is the bottom of the hand arc, not the first frame "near" address height. Through impact one frame is about 10° of turn at 60 fps.
+
+**Accuracy, checked against a simulated golfer** (`lib/golf/lift.test.ts`, `swing.fixture.ts`). The simulation is a rigid-boned body with a realistic tempo, filmed by a phone at about 2.6 m. The detector is given about 1 cm of picture jitter, 3 cm of depth jitter, depth squashed to 60% and a 5% size error. The results:
+
+- **Perfect detector:** the rebuild is within 3° everywhere.
+- **Down the line:** every turn and bend within 7°.
+- **Face on:** bends within 4° and turns at the top within 9°. Turns at impact are the weakest, within 18°: the shoulder and hip lines sit 30–40° out of the picture there, where one camera is least certain.
+- **Movements the view can see:** within about half an inch.
+- **Zoomed (2×) clips:** read as well as main-lens ones.
+
+For the best numbers, film in slow motion (120 or 240 fps): face-on for sway, down-the-line for turns. The club is not tracked.
 
 **One camera cannot see depth.** It is inferred, so the rotations are the softest numbers here. Pose readings are stored as `source = 'pose'` with confidence capped at 0.8; the database enforces it, along with 0.6 for a model's eyeball estimate and no ceiling for a value a person typed. Precedence runs manual > pose > vision: re-measuring never overwrites a number you typed.
 

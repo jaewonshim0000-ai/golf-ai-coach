@@ -1,243 +1,80 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
-import { Loader2, Plus } from "lucide-react";
+import { useActionState } from "react";
+import { Loader2 } from "lucide-react";
 
-import { createCourseAction, createRoundAction } from "@/app/actions";
+import { createRoundAction } from "@/app/actions";
 import { IDLE } from "@/lib/action-state";
-import type { Course } from "@/types/rounds";
-import { CONDITIONS, labelize } from "@/types/golf";
+import { ROUND_TYPES, labelize } from "@/types/golf";
 import { cn } from "@/lib/utils";
-import {
-  Badge,
-  Button,
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  Field,
-  Input,
-  Select,
-  Textarea,
-} from "@/components/ui/primitives";
+import { Button, Card, CardContent, Eyebrow, Field, Input } from "@/components/ui/primitives";
 
-const DEFAULT_PARS = [4, 4, 3, 5, 4, 4, 3, 5, 4, 4, 3, 4, 5, 4, 4, 3, 4, 5];
-const DEFAULT_YARDS = [400, 370, 165, 510, 425, 390, 150, 530, 415, 395, 185, 440, 505, 360, 420, 165, 385, 525];
-
-export function NewRoundForm({ courses }: { courses: Course[] }) {
+export function NewRoundForm({ courseNames }: { courseNames: string[] }) {
   const [state, formAction, pending] = useActionState(createRoundAction, IDLE);
-  const [adding, setAdding] = useState(courses.length === 0);
-  const [entryMode, setEntryMode] = useState<"shots" | "scorecard">("shots");
   const errors = state.errors ?? {};
   const today = new Date().toISOString().slice(0, 10);
 
   return (
-    <div className="space-y-4">
-      {!adding ? (
-        <form action={formAction} className="space-y-4">
-          <input type="hidden" name="entry_mode" value={entryMode} />
-          <Card>
-            <CardHeader className="flex-row items-center justify-between gap-3">
-              <CardTitle>Round details</CardTitle>
-              <Button type="button" variant="ghost" size="sm" onClick={() => setAdding(true)}>
-                <Plus className="h-3.5 w-3.5" /> New course
-              </Button>
-            </CardHeader>
-            <CardContent className="grid gap-4 sm:grid-cols-2">
-              <Field label="Course" error={errors.course_id}>
-                <Select name="course_id" required defaultValue={courses[0]?.id}>
-                  {courses.map((course) => (
-                    <option key={course.id} value={course.id}>
-                      {course.name}
-                      {course.city ? ` · ${course.city}` : ""}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label="Date" error={errors.played_on}>
-                <Input name="played_on" type="date" required defaultValue={today} />
-              </Field>
-              <Field label="Tees" error={errors.tees}>
-                <Input name="tees" placeholder="White" maxLength={40} />
-              </Field>
-              <div className="sm:col-span-2">
-                <p className="mb-2 text-xs font-medium text-fg-muted">How do you want to log it?</p>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <button type="button" aria-pressed={entryMode === "shots"} onClick={() => setEntryMode("shots")} className={cn("rounded-xl border p-3 text-left transition-colors", entryMode === "shots" ? "border-accent bg-accent-soft" : "border-border-strong bg-surface-2")}>
-                    <span className="block text-sm font-semibold">Track every shot</span>
-                    <span className="mt-0.5 block text-xs text-fg-muted">Best for strokes gained and coaching.</span>
-                  </button>
-                  <button type="button" aria-pressed={entryMode === "scorecard"} onClick={() => setEntryMode("scorecard")} className={cn("rounded-xl border p-3 text-left transition-colors", entryMode === "scorecard" ? "border-accent bg-accent-soft" : "border-border-strong bg-surface-2")}>
-                    <span className="block text-sm font-semibold">Live scorecard</span>
-                    <span className="mt-0.5 block text-xs text-fg-muted">Score, putts, fairway and penalties, hole by hole.</span>
-                  </button>
-                </div>
-              </div>
-              <div className="sm:col-span-2">
-                <p className="mb-2 text-xs font-medium text-fg-muted">Conditions</p>
-                <div className="flex flex-wrap gap-2">
-                  {CONDITIONS.map((condition) => (
-                    <ConditionChip key={condition} value={condition} />
-                  ))}
-                </div>
-              </div>
-              <Field label="Notes" className="sm:col-span-2" error={errors.notes}>
-                <Textarea name="notes" rows={2} maxLength={1000} placeholder="Anything worth remembering" />
-              </Field>
-            </CardContent>
-          </Card>
-
-          {state.message ? (
-            <p
-              className={cn(
-                "rounded-lg px-3 py-2 text-sm",
-                state.ok ? "bg-good-soft text-good" : "bg-bad-soft text-bad",
-              )}
-            >
-              {state.message}
-            </p>
-          ) : null}
-
-          <Button type="submit" disabled={pending}>
-            {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            {entryMode === "scorecard" ? "Start scorecard" : "Start recording shots"}
-          </Button>
-        </form>
-      ) : (
-        <AddCourseForm onDone={() => setAdding(false)} canCancel={courses.length > 0} />
-      )}
-    </div>
-  );
-}
-
-function ConditionChip({ value }: { value: string }) {
-  const [checked, setChecked] = useState(false);
-  return (
-    <label className="cursor-pointer">
-      <input
-        type="checkbox"
-        name="conditions"
-        value={value}
-        checked={checked}
-        onChange={(e) => setChecked(e.target.checked)}
-        className="peer sr-only"
-      />
-      <Badge tone={checked ? "accent" : "neutral"} className="px-3 py-1 text-xs">
-        {labelize(value)}
-      </Badge>
-    </label>
-  );
-}
-
-function AddCourseForm({ onDone, canCancel }: { onDone: () => void; canCancel: boolean }) {
-  const [state, formAction, pending] = useActionState(createCourseAction, IDLE);
-  const [holeCount, setHoleCount] = useState<9 | 18>(18);
-  const errors = state.errors ?? {};
-  const holeIndexes = Array.from({ length: holeCount }, (_, index) => index);
-
-  // The action revalidates the course list; drop back to the round form so the
-  // new course can be picked.
-  useEffect(() => {
-    if (state.ok) onDone();
-  }, [state.ok, onDone]);
-
-  return (
     <form action={formAction} className="space-y-4">
       <Card>
-        <CardHeader>
-          <CardTitle>Add a course</CardTitle>
-          <p className="mt-0.5 text-xs text-fg-muted">
-            Par and yardage per hole. Pick nine or eighteen, then adjust the defaults.
-          </p>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex gap-2">
-            {([9, 18] as const).map((count) => (
-              <Button key={count} type="button" size="sm" variant={holeCount === count ? "subtle" : "secondary"} onClick={() => setHoleCount(count)}>{count} holes</Button>
+        <CardContent className="space-y-4 p-5">
+          <Field label="Course name" error={errors.course_name}>
+            <Input
+              name="course_name"
+              required
+              minLength={2}
+              maxLength={120}
+              list="course-names"
+              autoComplete="off"
+              placeholder="Riverbend Golf Club"
+            />
+          </Field>
+          <datalist id="course-names">
+            {courseNames.map((name) => (
+              <option key={name} value={name} />
             ))}
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Course name" error={errors.name}>
-              <Input name="name" required minLength={2} maxLength={120} placeholder="Riverbend Golf Club" />
-            </Field>
-            <Field label="City" error={errors.city}>
-              <Input name="city" maxLength={80} placeholder="Portland, OR" />
-            </Field>
-          </div>
+          </datalist>
 
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] text-sm">
-              <thead>
-                <tr className="text-left text-[11px] uppercase tracking-wider text-fg-subtle">
-                  <th className="pb-2">Hole</th>
-                  {holeIndexes.map((index) => (
-                    <th key={index} className="pb-2 text-center font-medium">
-                      {index + 1}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <th className="py-1 text-left text-xs font-medium text-fg-muted">Par</th>
-                  {holeIndexes.map((index) => (
-                    <td key={index} className="px-0.5 py-1">
-                      <Input
-                        name="par"
-                        type="number"
-                        min={3}
-                        max={6}
-                        defaultValue={DEFAULT_PARS[index]}
-                        className="tabular h-8 px-1 text-center text-xs"
-                        aria-label={`Par for hole ${index + 1}`}
-                      />
-                    </td>
-                  ))}
-                </tr>
-                <tr>
-                  <th className="py-1 text-left text-xs font-medium text-fg-muted">Yards</th>
-                  {holeIndexes.map((index) => (
-                    <td key={index} className="px-0.5 py-1">
-                      <Input
-                        name="yards"
-                        type="number"
-                        min={60}
-                        max={700}
-                        defaultValue={DEFAULT_YARDS[index]}
-                        className="tabular h-8 px-1 text-center text-xs"
-                        aria-label={`Yards for hole ${index + 1}`}
-                      />
-                    </td>
-                  ))}
-                </tr>
-              </tbody>
-            </table>
-          </div>
+          <Field label="Date" error={errors.played_on}>
+            <Input name="played_on" type="date" required defaultValue={today} />
+          </Field>
 
-          {state.message ? (
-            <p
-              className={cn(
-                "rounded-lg px-3 py-2 text-sm",
-                state.ok ? "bg-good-soft text-good" : "bg-bad-soft text-bad",
-              )}
-            >
-              {state.message}
-            </p>
-          ) : null}
+          <fieldset>
+            <legend className="mb-1.5"><Eyebrow className="tracking-[0.15em]">Type of round</Eyebrow></legend>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {ROUND_TYPES.map((type) => (
+                <label key={type} className="cursor-pointer">
+                  <input
+                    type="radio"
+                    name="round_type"
+                    value={type}
+                    defaultChecked={type === "casual"}
+                    className="peer sr-only"
+                  />
+                  <span
+                    className={cn(
+                      "block rounded-xl border border-border-strong bg-surface-2 px-3 py-2.5 text-center text-sm font-medium transition-colors",
+                      "peer-checked:border-accent peer-checked:bg-accent-soft peer-checked:text-fg peer-focus-visible:ring-2 peer-focus-visible:ring-accent",
+                    )}
+                  >
+                    {labelize(type)}
+                  </span>
+                </label>
+              ))}
+            </div>
+            {errors.round_type ? <p className="mt-1 text-xs text-bad">{errors.round_type}</p> : null}
+          </fieldset>
         </CardContent>
       </Card>
 
-      <div className="flex gap-2">
-        <Button type="submit" disabled={pending}>
-          {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-          Save course
-        </Button>
-        {canCancel ? (
-          <Button type="button" variant="secondary" onClick={onDone}>
-            Cancel
-          </Button>
-        ) : null}
-      </div>
+      {state.message && !state.ok ? (
+        <p className="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad">{state.message}</p>
+      ) : null}
+
+      <Button type="submit" size="lg" className="w-full" disabled={pending}>
+        {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+        Continue
+      </Button>
     </form>
   );
 }

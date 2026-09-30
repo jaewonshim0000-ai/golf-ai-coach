@@ -9,7 +9,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
-import type { Condition, MissDirection } from "@/types/golf";
+import type { MissDirection } from "@/types/golf";
 import type { Goal, PracticeFacility } from "@/types/player";
 import type { Club } from "@/types/golf";
 import type { HoleStat } from "@/types/rounds";
@@ -25,22 +25,28 @@ import { METRICS_BY_ID } from "@/lib/golf/swing-metrics";
 import {
   POSE_CONFIDENCE_CAP,
   analysePose,
+  packFrames,
   unpackFrames,
   type PackedLandmark,
+  type PoseFrame,
+  type SwingPhases,
 } from "@/lib/golf/pose";
+import { liftFrames } from "@/lib/golf/lift";
+import { holeShots, type HoleRow } from "@/lib/golf/hole-entry";
 import { DRILLS_BY_ID } from "@/lib/seed/drills";
 import { loadPlayerState } from "@/lib/player-state";
 import * as repo from "@/lib/db/repo";
 import { resetDemoStore } from "@/lib/db/demo-store";
 import type { ActionState } from "@/lib/action-state";
 import {
-  courseSchema,
   drillAttemptSchema,
   fieldErrors,
   measurementSchema,
   poseModelSchema,
+  retimeSchema,
   practiceSessionSchema,
   profileSchema,
+  holeShotsSchema,
   roundSchema,
   holeSchema,
   shotSchema,
@@ -149,38 +155,10 @@ export async function completeOnboardingAction(
 
 // ------------------------------------------------------------------- rounds
 
-export async function createCourseAction(
-  _prev: ActionState,
-  formData: FormData,
-): Promise<ActionState> {
-  const user = await requireUser();
-  const parsed = courseSchema.safeParse({
-    name: formData.get("name"),
-    city: formData.get("city") || undefined,
-    pars: list(formData, "par"),
-    yards: list(formData, "yards"),
-  });
-  if (!parsed.success) return fail(parsed.error);
-
-  try {
-    await repo.createCourse({
-      user_id: user.id,
-      name: parsed.data.name,
-      city: parsed.data.city ?? null,
-      par: parsed.data.pars.reduce((a, b) => a + b, 0),
-      holes: parsed.data.pars.map((par, index) => ({
-        hole_number: index + 1,
-        par,
-        yards: parsed.data.yards[index] ?? 400,
-      })),
-    });
-  } catch (error) {
-    return asError(error);
-  }
-
-  revalidatePath("/rounds");
-  return { ok: true, message: "Course added." };
-}
+// A course first typed into a round gets a standard card; each hole's par is
+// picked as it is played and kept with the shots.
+const DEFAULT_PARS = [4, 4, 3, 5, 4, 4, 3, 5, 4, 4, 3, 4, 5, 4, 4, 3, 4, 5];
+const DEFAULT_YARDS = [400, 370, 165, 510, 425, 390, 150, 530, 415, 395, 185, 440, 505, 360, 420, 165, 385, 525];
 
 export async function createRoundAction(
   _prev: ActionState,
@@ -188,34 +166,39 @@ export async function createRoundAction(
 ): Promise<ActionState> {
   const user = await requireUser();
   const parsed = roundSchema.safeParse({
-    course_id: formData.get("course_id"),
+    course_name: formData.get("course_name"),
     played_on: formData.get("played_on"),
-    tees: formData.get("tees") || undefined,
-    conditions: list(formData, "conditions"),
-    notes: formData.get("notes") || undefined,
+    round_type: formData.get("round_type"),
   });
   if (!parsed.success) return fail(parsed.error);
 
   let roundId: string;
-  const entryMode = formData.get("entry_mode") === "scorecard" ? "scorecard" : "shots";
   try {
+    const name = parsed.data.course_name;
     const courses = await repo.getCourses(user.id);
-    const course = courses.find((c) => c.id === parsed.data.course_id);
-    if (!course) return { ok: false, message: "That course no longer exists." };
+    const course =
+      courses.find((c) => c.name.toLowerCase() === name.toLowerCase()) ??
+      (await repo.createCourse({
+        user_id: user.id,
+        name,
+        city: null,
+        par: DEFAULT_PARS.reduce((a, b) => a + b, 0),
+        holes: DEFAULT_PARS.map((par, index) => ({ hole_number: index + 1, par, yards: DEFAULT_YARDS[index]! })),
+      }));
 
     const round = await repo.createRound({
       user_id: user.id,
       course_id: course.id,
       course_name: course.name,
       played_on: parsed.data.played_on,
-      tees: parsed.data.tees ?? null,
+      round_type: parsed.data.round_type,
+      tees: null,
       holes_played: 0,
       score: null,
       hole_scores: null,
-      // An empty card marks the round as scored hole by hole from the start.
-      hole_stats: entryMode === "scorecard" ? course.holes.map(() => null) : null,
-      conditions: parsed.data.conditions as Condition[],
-      notes: parsed.data.notes ?? null,
+      hole_stats: null,
+      conditions: [],
+      notes: null,
       status: "in_progress",
     });
     roundId = round.id;
@@ -224,7 +207,44 @@ export async function createRoundAction(
   }
 
   revalidatePath("/rounds");
-  redirect(entryMode === "scorecard" ? `/rounds/${roundId}/score` : `/rounds/${roundId}/play`);
+  redirect(`/rounds/${roundId}/play`);
+}
+
+/** Save one hole of a shot-tracked round, entered as where each shot started. */
+export async function saveHoleShotsAction(input: {
+  round_id: string;
+  hole_number: number;
+  par: number;
+  rows: HoleRow[];
+}): Promise<ActionState> {
+  const user = await requireUser();
+  const parsed = holeShotsSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, message: parsed.error.issues[0]?.message ?? "Check the shots." };
+  const { round_id, hole_number, par, rows } = parsed.data;
+
+  const shots = holeShots(round_id, hole_number, par, rows);
+  for (const shot of shots) {
+    const checked = shotSchema.safeParse(shot);
+    if (!checked.success) {
+      return { ok: false, message: `Shot ${shot.shot_number}: ${checked.error.issues[0]?.message ?? "check it"}.` };
+    }
+  }
+
+  try {
+    const round = await repo.getRound(user.id, round_id);
+    if (!round) return { ok: false, message: "Round not found." };
+    await repo.replaceHoleShots(
+      user.id,
+      round_id,
+      hole_number,
+      shots.map((shot) => ({ ...shot, user_id: user.id })),
+    );
+  } catch (error) {
+    return asError(error);
+  }
+
+  revalidatePath(`/rounds/${round_id}`);
+  return { ok: true };
 }
 
 export type HoleState = ActionState & { hole_stats?: (HoleStat | null)[] };
@@ -314,58 +334,6 @@ export async function finishScorecardAction(
   redirect(`/rounds/${roundId}`);
 }
 
-export async function addShotAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  const user = await requireUser();
-  const parsed = shotSchema.safeParse({
-    round_id: formData.get("round_id"),
-    hole_number: formData.get("hole_number"),
-    hole_par: formData.get("hole_par"),
-    shot_number: formData.get("shot_number"),
-    starting_location: formData.get("starting_location"),
-    starting_distance: formData.get("starting_distance"),
-    starting_unit: formData.get("starting_unit"),
-    club: formData.get("club") || null,
-    shot_type: formData.get("shot_type"),
-    ending_location: formData.get("ending_location"),
-    ending_distance: formData.get("ending_distance"),
-    ending_unit: formData.get("ending_unit"),
-    penalty_strokes: formData.get("penalty_strokes") ?? 0,
-    penalty_type: formData.get("penalty_type") || "none",
-    miss_direction: formData.get("miss_direction") || null,
-    notes: formData.get("notes") || null,
-  });
-  if (!parsed.success) return fail(parsed.error);
-
-  try {
-    const round = await repo.getRound(user.id, parsed.data.round_id);
-    if (!round) return { ok: false, message: "Round not found." };
-    if (round.status === "complete") return { ok: false, message: "This round is already complete." };
-    await repo.addShot({ ...parsed.data, user_id: user.id, intended_target: null, lie: parsed.data.starting_location });
-  } catch (error) {
-    return asError(error);
-  }
-
-  revalidatePath(`/rounds/${parsed.data.round_id}`);
-  return { ok: true };
-}
-
-export async function deleteShotAction(
-  _prev: ActionState,
-  formData: FormData,
-): Promise<ActionState> {
-  const user = await requireUser();
-  const shotId = String(formData.get("shot_id") ?? "");
-  const roundId = String(formData.get("round_id") ?? "");
-  if (!shotId) return { ok: false, message: "Missing shot." };
-  try {
-    await repo.deleteShot(user.id, shotId);
-  } catch (error) {
-    return asError(error);
-  }
-  revalidatePath(`/rounds/${roundId}`);
-  return { ok: true };
-}
-
 export async function finishRoundAction(
   _prev: ActionState,
   formData: FormData,
@@ -374,7 +342,8 @@ export async function finishRoundAction(
   const roundId = String(formData.get("round_id") ?? "");
   try {
     const round = await repo.getRound(user.id, roundId);
-    if (!round || round.status === "complete") return { ok: false, message: "This round is unavailable or already complete." };
+    // Finishing again after an edit recounts the score.
+    if (!round) return { ok: false, message: "This round is unavailable." };
     const shots = await repo.getShots(user.id, roundId);
     if (shots.length === 0) return { ok: false, message: "Log at least one shot before finishing the round." };
     const holes = new Set(shots.map((s) => s.hole_number));
@@ -850,7 +819,7 @@ export async function analyzeSwingAction(input: {
 
   const result = await analyzeSwingFrames(session, parsed.data.frames);
   if (!result.data.usable) {
-    return { ok: false, message: visionNote(result.data, 0) };
+    return { ok: false, message: result.note ?? visionNote(result.data, 0) };
   }
 
   /*
@@ -918,28 +887,70 @@ export async function savePoseModelAction(input: {
   swing_session_id: string;
   t: number[];
   frames: PackedLandmark[][];
+  imageFrames?: PackedLandmark[][];
+  /** The video's width over its height; needed to rebuild from the picture. */
+  aspect?: number;
+  phases?: SwingPhases;
 }): Promise<PoseState> {
   const user = await requireUser();
   const parsed = poseModelSchema.safeParse(input);
   if (!parsed.success) return { ok: false, message: "That swing model could not be read." };
 
-  const [sessions, profile, existing] = await Promise.all([
-    repo.getSwingSessions(user.id),
-    repo.getProfile(user.id),
-    repo.getSwingMeasurements(user.id),
-  ]);
+  const [sessions, profile] = await Promise.all([repo.getSwingSessions(user.id), repo.getProfile(user.id)]);
   const session = sessions.find((item) => item.id === parsed.data.swing_session_id);
   if (!session) return { ok: false, message: "That swing session does not exist." };
 
-  const handedness = profile?.dominant_hand ?? "right";
-  const analysis = analysePose(unpackFrames(parsed.data), handedness);
+  // Rebuild the body from what the camera saw when the picture came with it;
+  // the detector's hip-pinned skeleton is the fallback, and measures less.
+  const detected = unpackFrames(parsed.data);
+  const lifted = parsed.data.aspect ? liftFrames(detected, parsed.data.aspect) : null;
+  return measureAndStore(user.id, session.id, profile?.dominant_hand ?? "right", lifted ?? detected, {
+    t: parsed.data.t,
+    lifted: lifted !== null,
+    phases: parsed.data.phases,
+  });
+}
+
+/**
+ * Move the three phases on a stored model and measure it again. The model
+ * already on the swing is what gets measured, so nothing is uploaded twice
+ * and a rebuilt model keeps the movements it can support.
+ */
+export async function retimeSwingAction(input: {
+  swing_session_id: string;
+  phases: SwingPhases;
+}): Promise<PoseState> {
+  const user = await requireUser();
+  const parsed = retimeSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, message: "Address, top and impact must be three frames in that order." };
+  const model = await repo.getSwingModel(user.id, parsed.data.swing_session_id);
+  if (!model) return { ok: false, message: "Measure the swing before moving its phases." };
+  if (parsed.data.phases.impact >= model.frames.length) {
+    return { ok: false, message: "Impact is past the end of the clip." };
+  }
+  return measureAndStore(user.id, parsed.data.swing_session_id, model.handedness, unpackFrames(model), {
+    t: model.t,
+    lifted: model.lifted === true,
+    phases: parsed.data.phases,
+  });
+}
+
+async function measureAndStore(
+  userId: string,
+  sessionId: string,
+  handedness: "right" | "left",
+  frames: PoseFrame[],
+  options: { t: number[]; lifted: boolean; phases?: SwingPhases },
+): Promise<PoseState> {
+  const analysis = analysePose(frames, handedness, options.phases, { translations: options.lifted });
   if (!analysis || analysis.readings.length === 0) {
     return { ok: false, noSwing: true, message: "No swing could be found in that body." };
   }
 
+  const existing = await repo.getSwingMeasurements(userId);
   const manual = new Set(
     existing
-      .filter((row) => row.swing_session_id === session.id && row.source === "manual")
+      .filter((row) => row.swing_session_id === sessionId && row.source === "manual")
       .map((row) => row.metric),
   );
 
@@ -954,7 +965,7 @@ export async function savePoseModelAction(input: {
     }
     return [
       {
-        swing_session_id: session.id,
+        swing_session_id: sessionId,
         phase: metric.phase,
         metric: metric.id,
         value: reading.value,
@@ -966,22 +977,25 @@ export async function savePoseModelAction(input: {
   });
 
   try {
-    await repo.saveSwingModel(user.id, session.id, {
+    await repo.saveSwingModel(userId, sessionId, {
       v: 1,
       handedness,
       phases: analysis.phases,
-      t: parsed.data.t,
-      frames: parsed.data.frames,
+      t: options.t,
+      frames: packFrames(frames).frames,
+      ...(options.lifted ? { lifted: true } : {}),
     });
+    await repo.deleteSwingMeasurementsBySource(userId, sessionId, "pose");
     for (const row of rows) await repo.saveSwingMeasurement(row);
   } catch (error) {
     return asError(error);
   }
 
-  revalidatePath(`/swing/${session.id}`);
+  revalidatePath(`/swing/${sessionId}`);
   revalidatePath("/swing");
   revalidatePath("/practice");
   const heldBack = analysis.readings.length - rows.length;
+  const unavailable = analysis.skipped.length;
   return {
     ok: true,
     measurements: rows.length,
@@ -989,7 +1003,7 @@ export async function savePoseModelAction(input: {
     message:
       rows.length === 0
         ? "Built the 3D model."
-        : `Built the 3D model and measured ${rows.length} position${rows.length === 1 ? "" : "s"} on it.`,
+        : `Built the 3D model and measured ${rows.length} reliable position${rows.length === 1 ? "" : "s"}.${unavailable ? ` ${unavailable} ${unavailable === 1 ? "was" : "were"} left unmeasured because this camera view could not support ${unavailable === 1 ? "it" : "them"}.` : ""}`,
   };
 }
 

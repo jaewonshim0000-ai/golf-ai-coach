@@ -22,8 +22,6 @@ import {
  * or a sign wrong, these numbers come back wrong rather than merely different.
  */
 
-const INCH = 0.0254;
-
 type Point = { x: number; y: number; z: number };
 
 /** Rotate about vertical the way a right-hander turns going back. */
@@ -123,6 +121,18 @@ function swing(top: Pose = {}, impact: Pose = {}): PoseFrame[] {
   ];
 }
 
+function imageSkeleton(handY: number): Landmark[] {
+  const landmarks = Array.from({ length: 33 }, () => ({
+    x: 0.5,
+    y: 0.5,
+    z: 0,
+    visibility: 0.95,
+  }));
+  landmarks[LM.leftWrist] = { x: 0.46, y: handY, z: 0, visibility: 0.95 };
+  landmarks[LM.rightWrist] = { x: 0.54, y: handY, z: 0, visibility: 0.95 };
+  return landmarks;
+}
+
 function read(frames: PoseFrame[], metric: string): number | undefined {
   return analysePose(frames, "right")?.readings.find((row) => row.metric === metric)?.value;
 }
@@ -196,12 +206,46 @@ describe("finding the three frames", () => {
     assert.ok(phases!.impact < frames.length - 1);
   });
 
+  it("does not mistake a larger follow-through turn for the top", () => {
+    const frames = swing();
+    frames[frames.length - 1] = {
+      t: 1.4,
+      landmarks: skeleton({ chestTurn: -130, pelvisTurn: -80, hands: 0.8 }),
+    };
+    assert.deepEqual(findPhases(frames, "right"), { address: 0, top: 2, impact: 4 });
+  });
+
+  it("uses the visible hand path when depth rotation is misleading", () => {
+    const handPath = [0.82, 0.7, 0.5, 0.24, 0.48, 0.8, 0.45, 0.2];
+    const frames = handPath.map((handY, index) => ({
+      t: index / 10,
+      landmarks: skeleton({ chestTurn: index === 6 ? 150 : index * 8, hands: index / 20 }),
+      imageLandmarks: imageSkeleton(handY),
+    }));
+    assert.deepEqual(findPhases(frames, "right"), { address: 0, top: 3, impact: 5 });
+  });
+
+  it("locks the backswing top before a higher finish", () => {
+    const handPath = [0.82, 0.7, 0.5, 0.24, 0.48, 0.8, 0.56, 0.12, 0.2, 0.32];
+    const frames = handPath.map((handY, index) => ({
+      t: index / 10,
+      landmarks: skeleton({ chestTurn: index === 7 ? -140 : index * 5 }),
+      imageLandmarks: imageSkeleton(handY),
+    }));
+    assert.deepEqual(findPhases(frames, "right"), { address: 0, top: 3, impact: 5 });
+  });
+
   it("refuses a clip too short to hold a swing", () => {
     assert.equal(findPhases([{ t: 0, landmarks: skeleton() }], "right"), null);
   });
 });
 
 describe("reading the positions", () => {
+  it("uses manually marked phases when supplied", () => {
+    const phases = { address: 0, top: 1, impact: 3 };
+    assert.deepEqual(analysePose(swing(), "right", phases)?.phases, phases);
+  });
+
   it("measures the bends at address", () => {
     const frames = swing();
     near(read(frames, "chest_bend_address"), 34);
@@ -220,25 +264,17 @@ describe("reading the positions", () => {
     near(read(frames, "chest_turn_impact"), 30);
   });
 
-  it("calls a pelvis sliding away from the target a positive sway at the top", () => {
-    const frames = swing({ hips: { x: -2 * INCH } });
-    near(read(frames, "pelvis_sway_top"), 2, 0.3);
-  });
-
-  it("calls a pelvis moving toward the target a positive sway at impact", () => {
-    const frames = swing({}, { hips: { x: 3 * INCH } });
-    near(read(frames, "pelvis_sway_impact"), 3, 0.3);
-  });
-
-  it("reads lift at the top and thrust at impact on their own axes", () => {
-    const frames = swing({ hips: { y: 1.5 * INCH } }, { hips: { z: -2 * INCH } });
-    near(read(frames, "pelvis_lift_top"), 1.5, 0.3);
-    near(read(frames, "pelvis_thrust_impact"), -2, 0.3);
-  });
-
-  it("reads head sway against the target line", () => {
-    const frames = swing({}, { nose: { x: -1.5 * INCH } });
-    near(read(frames, "head_sway_impact"), -1.5, 0.3);
+  it("does not invent translations from a skeleton re-centred on every frame", () => {
+    const analysis = analysePose(swing(), "right");
+    const unsupported = [
+      "pelvis_sway_top",
+      "pelvis_lift_top",
+      "pelvis_sway_impact",
+      "pelvis_thrust_impact",
+      "head_sway_impact",
+    ];
+    assert.ok(unsupported.every((metric) => analysis?.skipped.includes(metric)));
+    assert.ok(unsupported.every((metric) => !analysis?.readings.some((row) => row.metric === metric)));
   });
 
   it("reads chest side bend as a tilt out of level", () => {
@@ -273,9 +309,14 @@ describe("reading the positions", () => {
 
 describe("the stored model", () => {
   it("survives packing to the millimetre", () => {
-    const frames = swing();
+    const handPath = [0.8, 0.62, 0.24, 0.52, 0.79, 0.3];
+    const frames = swing().map((frame, index) => ({
+      ...frame,
+      imageLandmarks: imageSkeleton(handPath[index]!),
+    }));
     const back = unpackFrames(packFrames(frames));
     assert.equal(back.length, frames.length);
+    assert.equal(back[0]!.imageLandmarks?.length, 33);
     near(back[2]!.landmarks[LM.leftShoulder]!.x, frames[2]!.landmarks[LM.leftShoulder]!.x, 0.001);
     near(read(back, "chest_turn_top"), 90);
   });

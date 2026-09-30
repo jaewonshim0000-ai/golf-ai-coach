@@ -2,12 +2,12 @@ import { z } from "zod";
 
 import {
   CLUBS,
-  CONDITIONS,
   DOMINANT_HANDS,
   EXPERIENCE_LEVELS,
   LIES,
   MISS_DIRECTIONS,
   PENALTY_TYPES,
+  ROUND_TYPES,
   SHOT_TYPES,
   SWING_PATTERNS,
 } from "../../types/golf";
@@ -15,6 +15,7 @@ import { GOALS, PRACTICE_FACILITIES } from "../../types/player";
 import { CERTAINTY_LEVELS, SWING_CATEGORIES, SKILLS } from "../../types/practice";
 import { PRACTICE_GOALS, type GoalId } from "../practice/goals";
 import { PLAN_LENGTHS, type PlanLength } from "../practice/plan";
+import { START_OPTION_IDS } from "../golf/hole-entry";
 
 /** Input validation at the trust boundary. Every server action parses through here. */
 
@@ -43,11 +44,9 @@ export const profileSchema = z.object({
 export type ProfileInput = z.infer<typeof profileSchema>;
 
 export const roundSchema = z.object({
-  course_id: z.string().min(1, "Pick a course"),
+  course_name: z.string().trim().min(2, "Write the course name").max(120),
   played_on: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD"),
-  tees: z.string().trim().max(40).optional(),
-  conditions: z.array(z.enum(CONDITIONS)).default([]),
-  notes: z.string().trim().max(1000).optional(),
+  round_type: z.enum(ROUND_TYPES),
 });
 export type RoundInput = z.infer<typeof roundSchema>;
 
@@ -89,16 +88,22 @@ export const shotSchema = z
   );
 export type ShotInput = z.infer<typeof shotSchema>;
 
-export const courseSchema = z.object({
-  name: z.string().trim().min(2).max(120),
-  city: z.string().trim().max(80).optional(),
-  pars: z.array(z.coerce.number().int().min(3).max(6)).refine((values) => values.length === 9 || values.length === 18, "Choose 9 or 18 holes"),
-  yards: z.array(z.coerce.number().int().min(60).max(700)).refine((values) => values.length === 9 || values.length === 18, "Choose 9 or 18 holes"),
-}).refine((course) => course.pars.length === course.yards.length, {
-  message: "Par and yardage must be entered for every hole",
-  path: ["yards"],
+/** One hole, entered as where each shot started. The last one finished in the hole. */
+export const holeShotsSchema = z.object({
+  round_id: z.string().min(1).max(80),
+  hole_number: z.coerce.number().int().min(1).max(18),
+  par: z.coerce.number().int().min(3).max(5),
+  rows: z
+    .array(
+      z.object({
+        start: z.enum(START_OPTION_IDS),
+        distance: z.coerce.number().positive("Enter every shot's length").max(700),
+        penalty: z.coerce.number().int().min(0).max(3),
+      }),
+    )
+    .min(1, "Add at least one shot")
+    .max(20),
 });
-export type CourseInput = z.infer<typeof courseSchema>;
 
 /** One hole of a live scorecard, saved as it is played. */
 export const holeSchema = z
@@ -192,18 +197,53 @@ export const measurementSchema = z.object({
 });
 
 /**
- * A 3D swing model sent up from the browser. Detector output in metres around
- * the hips, so anything outside a few metres is not a body; the frame count
- * matches what the pose runner samples, with room to spare.
+ * A 3D swing model sent up from the browser. World output is in metres around
+ * the hips and normalized image landmarks use the same bounded tuple shape;
+ * the frame count matches what the pose runner samples, with room to spare.
  */
 const coordinate = z.number().finite().min(-5).max(5);
+const packedPoseFrame = z
+  .array(z.tuple([coordinate, coordinate, coordinate, z.number().min(0).max(1)]))
+  .length(33);
 export const poseModelSchema = z
   .object({
     swing_session_id: z.string().min(1).max(80),
-    t: z.array(z.number().finite().min(0).max(3600)).min(3).max(64),
-    frames: z
-      .array(z.array(z.tuple([coordinate, coordinate, coordinate, z.number().min(0).max(1)])).length(33))
-      .min(3)
-      .max(64),
+    t: z.array(z.number().finite().min(0).max(3600)).min(3).max(128),
+    frames: z.array(packedPoseFrame).min(3).max(128),
+    imageFrames: z.array(packedPoseFrame).min(3).max(128).optional(),
+    // Width over height of the video; phone clips run from 9:16 to 16:9.
+    aspect: z.number().finite().min(0.3).max(3.5).optional(),
+    phases: z
+      .object({
+        address: z.number().int().min(0).max(127),
+        top: z.number().int().min(0).max(127),
+        impact: z.number().int().min(0).max(127),
+      })
+      .optional(),
   })
-  .refine((model) => model.t.length === model.frames.length, "One time per frame.");
+  .refine(
+    (model) =>
+      model.t.length === model.frames.length &&
+      (!model.imageFrames || model.imageFrames.length === model.frames.length),
+    "One time and optional image pose per frame.",
+  )
+  .refine(
+    (model) =>
+      !model.phases ||
+      (model.phases.address < model.phases.top &&
+        model.phases.top < model.phases.impact &&
+        model.phases.impact < model.frames.length),
+    "Address, top and impact must be different frames in that order.",
+  );
+
+/** Moving the three phases on a model already stored with the swing. */
+export const retimeSchema = z
+  .object({
+    swing_session_id: z.string().min(1).max(80),
+    phases: z.object({
+      address: z.number().int().min(0).max(127),
+      top: z.number().int().min(0).max(127),
+      impact: z.number().int().min(0).max(127),
+    }),
+  })
+  .refine((input) => input.phases.address < input.phases.top && input.phases.top < input.phases.impact);

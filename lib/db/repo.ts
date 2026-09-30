@@ -235,27 +235,34 @@ export async function getShots(userId: string, roundId?: string): Promise<Shot[]
   return unwrap(await query.order("hole_number").order("shot_number"), "getShots");
 }
 
-export async function addShot(shot: Omit<Shot, "id" | "created_at">): Promise<Shot> {
+/**
+ * Replace one hole's shots with the ones just entered. The hole is saved
+ * whole, so editing it is the same as entering it.
+ */
+export async function replaceHoleShots(
+  userId: string,
+  roundId: string,
+  holeNumber: number,
+  shots: Omit<Shot, "id" | "created_at">[],
+): Promise<void> {
   const sb = await client();
-  const row: Shot = { ...shot, id: newId("shot"), created_at: new Date().toISOString() };
-  if (!sb) {
-    store().shots.push(row);
-    return row;
-  }
-  const { data, error } = await sb.from("shots").insert(row).select().single();
-  if (error) throw new Error(`addShot: ${error.message}`);
-  return data as Shot;
-}
-
-export async function deleteShot(userId: string, shotId: string): Promise<void> {
-  const sb = await client();
+  const rows: Shot[] = shots.map((shot) => ({ ...shot, id: newId("shot"), created_at: new Date().toISOString() }));
   if (!sb) {
     const s = store();
-    s.shots = s.shots.filter((x) => x.id !== shotId);
+    s.shots = [...s.shots.filter((x) => !(x.round_id === roundId && x.hole_number === holeNumber)), ...rows];
     return;
   }
-  const { error } = await sb.from("shots").delete().eq("id", shotId).eq("user_id", userId);
-  if (error) throw new Error(`deleteShot: ${error.message}`);
+  // ponytail: delete then insert is two requests, not one transaction; a failed
+  // insert leaves the hole empty, and the entry screen still holds the rows to retry.
+  const removed = await sb
+    .from("shots")
+    .delete()
+    .eq("user_id", userId)
+    .eq("round_id", roundId)
+    .eq("hole_number", holeNumber);
+  if (removed.error) throw new Error(`replaceHoleShots: ${removed.error.message}`);
+  const { error } = await sb.from("shots").insert(rows);
+  if (error) throw new Error(`replaceHoleShots: ${error.message}`);
 }
 
 // -------------------------------------------------------------- practice
@@ -622,6 +629,36 @@ export async function getSwingMeasurements(userId: string): Promise<SwingMeasure
       ),
     "getSwingMeasurements",
   );
+}
+
+/** Remove a previous automated reading before writing the new supported set. */
+export async function deleteSwingMeasurementsBySource(
+  userId: string,
+  sessionId: string,
+  source: "pose" | "vision",
+): Promise<void> {
+  const sb = await client();
+  if (!sb) {
+    const s = store();
+    s.swingMeasurements = s.swingMeasurements.filter(
+      (row) => !(row.swing_session_id === sessionId && row.source === source),
+    );
+    return;
+  }
+  const owned = await sb
+    .from("swing_sessions")
+    .select("id")
+    .eq("id", sessionId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (owned.error) throw new Error(`deleteSwingMeasurementsBySource: ${owned.error.message}`);
+  if (!owned.data) return;
+  const { error } = await sb
+    .from("swing_measurements")
+    .delete()
+    .eq("swing_session_id", sessionId)
+    .eq("source", source);
+  if (error) throw new Error(`deleteSwingMeasurementsBySource: ${error.message}`);
 }
 
 /**

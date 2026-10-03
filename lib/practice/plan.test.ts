@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import { DRILLS_BY_ID } from "../seed/drills";
 import { PRACTICE_GOALS, earnedTolerance, goalForWeakness, missPattern } from "./goals";
 import { PLAN_LENGTHS, buildPlan } from "./plan";
+import { PRACTICE_DRILL_IDS } from "./drill-priorities";
 
 const goal = (id: string) => PRACTICE_GOALS.find((candidate) => candidate.id === id)!;
 
@@ -25,6 +26,29 @@ describe("practice plans", () => {
     assert.equal(plan.items[0]!.block, "warm_up");
     assert.equal(plan.items.at(-1)!.block, "pressure");
     assert.equal(buildPlan(15, "iron_accuracy").items.length, 2);
+  });
+
+  it("uses matching saved drills without replacing the goal test or repeating exercises", () => {
+    const plan = buildPlan(60, "driver_accuracy", null, ["drill_gate_putting", "drill_driver_fairway_finder", "drill_driver_pressure_ladder"]);
+    assert.ok(plan.items.some((item) => item.drill_id === "drill_driver_fairway_finder"));
+    assert.ok(plan.items.some((item) => item.drill_id === "drill_driver_pressure_ladder"));
+    assert.ok(!plan.items.some((item) => item.drill_id === "drill_gate_putting"));
+    assert.ok(plan.items.some((item) => item.block === "skill" && item.drill_id === "drill_driver_accuracy"));
+    assert.equal(new Set(plan.items.map((item) => item.drill_id)).size, plan.items.length);
+    assert.equal(plan.items.reduce((sum, item) => sum + item.duration, 0), 60);
+  });
+
+  it("keeps every selected-drill combination valid across all goals and lengths", () => {
+    for (const minutes of PLAN_LENGTHS) {
+      for (const { id } of PRACTICE_GOALS) {
+        for (const selected of [PRACTICE_DRILL_IDS, [...PRACTICE_DRILL_IDS].reverse(), ...PRACTICE_DRILL_IDS.map((drill) => [drill])]) {
+          const plan = buildPlan(minutes, id, null, [...selected]);
+          assert.ok(plan.items.every((item) => DRILLS_BY_ID.has(item.drill_id)));
+          assert.equal(new Set(plan.items.map((item) => item.drill_id)).size, plan.items.length);
+          assert.equal(plan.items.reduce((sum, item) => sum + item.duration, 0), minutes);
+        }
+      }
+    }
   });
 });
 

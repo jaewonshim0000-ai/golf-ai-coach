@@ -5,6 +5,7 @@ import { CLUB_LABELS, labelize } from "@/types/golf";
 import { DRILLS_BY_ID } from "@/lib/seed/drills";
 import {
   PHASE_LABELS,
+  SWING_METRICS,
   diagnoseSwing,
   formatMetricValue,
   type MetricReading,
@@ -14,10 +15,8 @@ import { cn, formatDate } from "@/lib/utils";
 import { Badge, Card, CardContent, CardHeader, CardTitle, Eyebrow } from "@/components/ui/primitives";
 
 /**
- * The swing diagnostic: every tracked position against its reference band,
- * worst first. Same shape as a 3D capture report, with one difference stated
- * on the screen rather than buried - these values were typed in by a person,
- * because this app does not measure a swing from video.
+ * Capture-style reference bands apply only to comparable coach measurements.
+ * The automatic video criteria are rendered separately by SwingMotionReport.
  */
 export function SwingDiagnostic({
   session,
@@ -31,6 +30,10 @@ export function SwingDiagnostic({
 
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="dsp text-[20px] font-semibold tracking-[0.02em]">Coach measurements</h2>
+        <Badge tone="neutral">{diagnostic.measured} measurements</Badge>
+      </div>
       <div className="flex gap-3 rounded-xl border border-info/30 bg-info-soft p-3.5">
         <Info className="mt-0.5 h-4 w-4 shrink-0 text-info" />
         <p className="text-[12px] leading-[1.55] text-fg-muted">
@@ -56,9 +59,9 @@ export function SwingDiagnostic({
             </>
           ) : (
             <>
-              <span className="font-medium text-fg">Hand-measured, not machine-measured.</span>{" "}
-              Every value below was entered by you or your coach. The bands are general references,
-              not rules.
+              <span className="font-medium text-fg">Measurements added by you or your coach.</span>{" "}
+              These reference bands use 3D angles or physical distances. They are general references,
+              not rules, and are separate from the automatic video criteria.
             </>
           )}
         </p>
@@ -71,14 +74,7 @@ export function SwingDiagnostic({
         </p>
       ) : null}
 
-      {diagnostic.measured === 0 ? (
-        <Card>
-          <CardContent className="p-5 text-[13px] text-fg-muted">
-            Nothing measured yet. Add a value below and it appears here against its band.
-          </CardContent>
-        </Card>
-      ) : (
-        <>
+      {diagnostic.measured > 0 ? (
           <Card>
             <CardHeader className="flex-row items-center justify-between gap-3">
               <CardTitle>Out of range</CardTitle>
@@ -123,42 +119,26 @@ export function SwingDiagnostic({
               )}
             </CardContent>
           </Card>
-
+      ) : null}
           {phases.map((phase) => {
-            const rows = diagnostic.readings.filter((r) => r.metric.phase === phase);
-            if (rows.length === 0) return null;
+            const metrics = SWING_METRICS.filter((metric) => metric.phase === phase && diagnostic.readings.some((row) => row.metric.id === metric.id));
+            if (!metrics.length) return null;
             return (
               <Card key={phase}>
                 <CardHeader>
                   <CardTitle>{PHASE_LABELS[phase]}</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3.5">
-                  {rows.map((reading) => (
-                    <MetricRow key={reading.metric.id} reading={reading} />
-                  ))}
+                  {metrics.map((metric) => {
+                    const reading = diagnostic.readings.find((row) => row.metric.id === metric.id);
+                    return <div key={metric.id} className="border-t border-border pt-3.5 first:border-0 first:pt-0">
+                      {reading ? <MetricRow reading={reading} /> : null}
+                    </div>;
+                  })}
                 </CardContent>
               </Card>
             );
           })}
-        </>
-      )}
-
-      {diagnostic.missing.length > 0 ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Not measured</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap gap-1.5">
-              {diagnostic.missing.map((metric) => (
-                <Badge key={metric.id} tone="neutral">
-                  {metric.label} · {PHASE_LABELS[metric.phase].toLowerCase()}
-                </Badge>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      ) : null}
     </div>
   );
 }

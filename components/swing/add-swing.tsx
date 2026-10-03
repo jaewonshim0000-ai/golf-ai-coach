@@ -91,7 +91,7 @@ export function AddSwing() {
         <input ref={upload} aria-label="Upload swing video" type="file" accept={VIDEO_ACCEPT} hidden onChange={(event) => chooseFile(event.target.files?.[0] ?? null)} />
         <input ref={camera} aria-label="Record swing video" type="file" accept="video/*" capture="environment" hidden onChange={(event) => chooseFile(event.target.files?.[0] ?? null)} />
         {file ? <p className="break-words text-sm">{file.name} · {(file.size / 1024 / 1024).toFixed(1)} MB</p> : null}
-        <p className="text-xs text-fg-muted">MP4, MOV, or WebM, up to 50 MB. {browserClient() ? "Saved privately to your account." : "Demo clips are saved on this device only."} Uploading saves a playable clip; swing measurements are entered manually.</p>
+        <p className="text-xs text-fg-muted">MP4, MOV, or WebM, up to 50 MB. {browserClient() ? "Saved privately to your account." : "Demo clips are saved on this device only."} After saving, choose Analyze movement to track your joints on the video. Use a fixed camera and keep your whole body visible.</p>
         {error ? <p role="alert" className="rounded-lg bg-bad-soft p-3 text-sm text-bad">{error}</p> : null}
         <Button type="submit" disabled={pending || !file}>{pending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}{pending ? "Uploading and saving…" : "Save swing"}</Button>
       </form>

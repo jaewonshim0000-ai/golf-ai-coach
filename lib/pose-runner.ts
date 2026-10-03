@@ -1,16 +1,16 @@
 "use client";
 
-import { findImagePhases, smoothFrames, type PoseFrame } from "./golf/pose";
+import { LM, type Landmark, type PoseFrame } from "./golf/pose";
+import { findAutomaticTiming, visiblePoint } from "./golf/motion-analysis";
 
 /**
  * Running the pose detector over a swing, in the browser.
  *
- * The detection happens on the player's own device: the video never leaves it,
- * there is no per-use cost, and it works without an API key. What leaves the
- * device afterwards is thirty-three points per frame, which is what the
- * measurements are computed from.
+ * Detection happens on the player's device, without sending video frames to
+ * an inference service or requiring a model API key. The visible joints are
+ * saved afterwards to the player's existing account storage.
  *
- * ponytail: the model and the wasm come from the public CDNs MediaPipe
+ * The model and the wasm come from the public CDNs MediaPipe
  * publishes them on, so there is no build step and no binary in the repo. They
  * are fetched once and then cached by the browser. Self-hosting is a change of
  * these two constants plus copying `node_modules/@mediapipe/tasks-vision/wasm`
@@ -20,9 +20,8 @@ import { findImagePhases, smoothFrames, type PoseFrame } from "./golf/pose";
 const VERSION = "1.0.1";
 const WASM_BASE = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${VERSION}/wasm`;
 /*
-  The heavy model rather than full or lite: the 3D model is only as good as
-  the depth the detector infers, so this deliberately spends more download
-  size and processing time for the best model Google ships for this task.
+  Use the heavy detector for visible joints. Its inferred depth does not drive
+  the movement report and is omitted from new stored motion models.
 */
 const MODEL =
   "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_heavy/float16/1/pose_landmarker_heavy.task";
@@ -31,8 +30,8 @@ const MODEL =
  * How many frames to sample across the swing.
  *
  * The downswing takes about a quarter of a second, so impact is a narrow
- * target. Short clips start at 64 samples and longer clips scale to 120;
- * trimming still produces the tightest spacing and most accurate phases.
+ * target. The first pass takes up to 96 samples, with room for a second pass
+ * up to 128 total. Repeated source frames are discarded.
  */
 export const POSE_SAMPLES = 64;
 /** The first pass stops here, leaving room for the downswing pass. */
@@ -46,42 +45,39 @@ const MAX_POSE_SAMPLES = 128;
  */
 const DENSE_RATE = 120;
 
-type DetectedLandmark = { x: number; y: number; z: number; visibility?: number };
+type DetectedLandmark = Landmark & { presence?: number };
 
 type Landmarker = {
-  detectForVideo: (
+  detect: (
     video: HTMLVideoElement,
-    timestampMs: number,
   ) => { worldLandmarks: DetectedLandmark[][]; landmarks: DetectedLandmark[][] };
   close: () => void;
 };
 
 let cached: Promise<Landmarker> | null = null;
-let lastVideoTimestamp = -1;
-
-/**
- * MediaPipe keeps timestamp state inside a cached graph, so a second analysis
- * cannot restart at zero. The browser clock also survives hot reloads; the
- * previous value is the guard for multiple frames read within one millisecond.
- */
-export function nextVideoTimestamp(now = performance.now()): number {
-  lastVideoTimestamp = Math.max(lastVideoTimestamp + 1, Math.floor(now));
-  return lastVideoTimestamp;
-}
 
 async function loadLandmarker(): Promise<Landmarker> {
   if (!cached) {
     cached = (async () => {
       const { FilesetResolver, PoseLandmarker } = await import("@mediapipe/tasks-vision");
       const fileset = await FilesetResolver.forVisionTasks(WASM_BASE);
-      return (await PoseLandmarker.createFromOptions(fileset, {
-        baseOptions: { modelAssetPath: MODEL, delegate: "GPU" },
-        runningMode: "VIDEO",
-        numPoses: 1,
+      const options = {
+        // Seeking and the dense second pass visit frames out of order. IMAGE
+        // mode detects each independently, without an invalid tracking history.
+        runningMode: "IMAGE" as const,
+        numPoses: 2,
         minPoseDetectionConfidence: 0.65,
         minPosePresenceConfidence: 0.65,
-        minTrackingConfidence: 0.65,
-      })) as unknown as Landmarker;
+      };
+      try {
+        return (await PoseLandmarker.createFromOptions(fileset, {
+          ...options, baseOptions: { modelAssetPath: MODEL, delegate: "GPU" },
+        })) as unknown as Landmarker;
+      } catch {
+        return (await PoseLandmarker.createFromOptions(fileset, {
+          ...options, baseOptions: { modelAssetPath: MODEL, delegate: "CPU" },
+        })) as unknown as Landmarker;
+      }
     })().catch((error) => {
       // A failed load must not poison every later attempt.
       cached = null;
@@ -105,28 +101,66 @@ type FrameCallbackVideo = HTMLVideoElement & {
 function seek(video: FrameCallbackVideo, time: number): Promise<number> {
   return new Promise((resolve) => {
     let settled = false;
+    let callbackId: number | undefined;
+    let fallback: number | undefined;
     const finish = (at: number) => {
       if (settled) return;
       settled = true;
       window.clearTimeout(timer);
+      window.clearTimeout(fallback);
+      if (callbackId !== undefined) video.cancelVideoFrameCallback?.(callbackId);
       video.removeEventListener("seeked", onSeeked);
       resolve(at);
     };
-    const timer = window.setTimeout(() => finish(video.currentTime), 2000);
+    const timer = window.setTimeout(() => finish(NaN), 2000);
     const onSeeked = () => {
       if (!video.requestVideoFrameCallback) return finish(video.currentTime);
-      const fallback = window.setTimeout(() => finish(video.currentTime), 150);
-      video.requestVideoFrameCallback((_, meta) => {
+      // A seek within the same source frame may not present another image.
+      // Skip it rather than label the old picture with the requested time.
+      fallback = window.setTimeout(() => finish(NaN), 150);
+    };
+    if (video.requestVideoFrameCallback) {
+      // Register before seeking: registering from `seeked` can miss the frame
+      // and report a requested time that belongs to a different decoded image.
+      callbackId = video.requestVideoFrameCallback((_, meta) => {
         window.clearTimeout(fallback);
         finish(meta.mediaTime);
       });
-    };
+    }
     video.addEventListener("seeked", onSeeked);
+    if (Math.abs(video.currentTime - time) < 0.0001 && video.readyState >= 2) {
+      if (!video.requestVideoFrameCallback) return finish(video.currentTime);
+      // Force presentation when the playhead already matches the request.
+      video.currentTime = time + 0.000001;
+      return;
+    }
     video.currentTime = time;
   });
 }
 
 export type PoseProgress = (done: number, total: number) => void;
+
+/** Stay with the same visible body when a coach or spectator is in the shot. */
+export function selectTrackedPose(poses: Landmark[][], previous?: Landmark[]): number {
+  const centre = (points: Landmark[]) => {
+    const left = points[LM.leftHip], right = points[LM.rightHip];
+    return visiblePoint(left) && visiblePoint(right) ? { x: (left.x + right.x) / 2, y: (left.y + right.y) / 2 } : null;
+  };
+  const prior = previous ? centre(previous) : null;
+  let picked = -1, best = -Infinity;
+  poses.forEach((points, index) => {
+    const core = [LM.leftShoulder, LM.rightShoulder, LM.leftHip, LM.rightHip];
+    const body = core.map((joint) => points[joint]);
+    if (!body.every(visiblePoint)) return;
+    const location = centre(points)!;
+    const height = Math.abs((points[LM.leftAnkle]?.y ?? location.y + 0.15) - points[LM.leftShoulder]!.y);
+    const separation = prior ? Math.hypot(location.x - prior.x, location.y - prior.y) : 0;
+    if (prior && separation > Math.max(0.12, height * 0.45)) return;
+    const score = prior ? -separation : height - Math.abs(location.x - 0.5) * 0.2;
+    if (score > best) { best = score; picked = index; }
+  });
+  return picked;
+}
 
 /**
  * Walk the clip and return one skeleton per sample. Frames where no body was
@@ -150,22 +184,27 @@ export async function readSwing(
 
   const frames: PoseFrame[] = [];
   const seenFrames = new Set<number>();
+  let previous: Landmark[] | undefined;
   /** Detect the body at one moment; false when that video frame was already read. */
   const readAt = async (time: number) => {
     const t = await seek(video, time);
+    if (!Number.isFinite(t)) return;
     const key = Math.round(t * 1000);
     if (seenFrames.has(key)) return;
     seenFrames.add(key);
-    // The graph is cached across measurements, so this must remain strictly
-    // increasing across separate runs as well as within this loop.
-    const result = landmarker.detectForVideo(video, nextVideoTimestamp());
-    const landmarks = result.worldLandmarks?.[0];
-    const imageLandmarks = result.landmarks?.[0];
+    const result = landmarker.detect(video);
+    const nearest = frames.reduce<PoseFrame | null>((best, frame) =>
+      !best || Math.abs(frame.t - t) < Math.abs(best.t - t) ? frame : best, null);
+    const selected = selectTrackedPose(result.landmarks, nearest?.imageLandmarks ?? previous);
+    if (selected < 0) return;
+    const landmarks = result.worldLandmarks?.[selected];
+    const imageLandmarks = result.landmarks?.[selected];
     if (landmarks && landmarks.length >= 33) {
+      previous = imageLandmarks;
       frames.push({
         t,
         landmarks: landmarks.map((point) => ({ ...point })),
-        imageLandmarks: imageLandmarks?.map((point) => ({ ...point })),
+        imageLandmarks: imageLandmarks?.map((point) => ({ ...point, visibility: Math.min(point.visibility ?? 0, point.presence ?? 1) })),
       });
     }
   };
@@ -181,17 +220,15 @@ export async function readSwing(
     }
 
     /*
-      Second pass: the downswing, at up to 120 samples a second. It lasts about a quarter of
-      a second and the body turns several hundred degrees a second through
-      impact, so the even first pass lands tens of degrees either side of it.
-      Reading every frame from just before the top to just after impact puts
-      impact within a frame.
+      Second pass: sample the downswing more closely, up to the source video's
+      real frame rate. This improves temporal coverage without inventing frames
+      or claiming the hand-arc minimum establishes exact ball contact.
     */
-    const found = findImagePhases([...frames].sort((a, b) => a.t - b.t));
+    const found = findAutomaticTiming([...frames].sort((a, b) => a.t - b.t), video.videoWidth / video.videoHeight)?.phases;
     if (found) {
       const ordered = [...frames].sort((a, b) => a.t - b.t);
-      const from = ordered[found.top]!.t - 0.05;
-      const until = ordered[found.impact]!.t + 0.12;
+      const from = Math.max(start, ordered[found.top]!.t - 0.05);
+      const until = Math.min(start + span - 0.001, ordered[found.impact]!.t + 0.12);
       const room = MAX_POSE_SAMPLES - frames.length;
       const steps = Math.min(room, Math.ceil((until - from) * DENSE_RATE));
       for (let index = 0; index < steps; index += 1) {
@@ -200,11 +237,21 @@ export async function readSwing(
         if (!frames.some((frame) => Math.abs(frame.t - time) < 0.5 / DENSE_RATE)) await readAt(time);
         onProgress?.(coarse + index + 1, coarse + steps);
       }
+    } else {
+      // Fill first-pass gaps to improve the visible evidence for automatic
+      // timing. Missing source frames and hidden joints are never fabricated.
+      const room = MAX_POSE_SAMPLES - frames.length;
+      for (let index = 0; index < room; index++) {
+        await readAt(start + (span * (index + 0.25)) / room);
+        onProgress?.(coarse + index + 1, coarse + room);
+      }
     }
   } finally {
     video.currentTime = wasTime;
     if (!wasPaused) void video.play().catch(() => undefined);
   }
 
-  return smoothFrames(frames.sort((a, b) => a.t - b.t));
+  // Keep observed x/y intact. Averaging fast-moving wrists moves contact and
+  // can turn a missed/hidden joint into a convincing but invented coordinate.
+  return frames.sort((a, b) => a.t - b.t);
 }

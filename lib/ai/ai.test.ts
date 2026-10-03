@@ -192,6 +192,7 @@ function askState(): PlayerState {
     userId: "u1",
     profile: null,
     drills: [],
+    practiceDrillPriorities: [],
     rounds: [round],
     shots: [],
     shotsByRound: new Map(),

@@ -2,6 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { PGlite } from "@electric-sql/pglite";
+import { compactMotionModel, expandMotionModel } from "../golf/motion-storage";
+import { denseMotionModel } from "../golf/__fixtures__/motion";
+import type { PoseModel } from "../golf/pose";
 
 test("live schema: atomic practice, persistent results, and cross-user isolation", async () => {
   const db = new PGlite();
@@ -91,6 +94,12 @@ test("live schema: atomic practice, persistent results, and cross-user isolation
     await db.exec(`update swing_sessions set pose_model = '{"v":1,"frames":[]}' where id = 'swing_test'`);
     await assert.rejects(db.exec(`update swing_sessions set pose_model = '[1,2,3]' where id = 'swing_test'`));
     await assert.rejects(db.query("update swing_sessions set pose_model = jsonb_build_object('frames', '[]'::jsonb, 'junk', repeat(md5(random()::text), 20000)) where id = 'swing_test'"));
+    // Exercise the real JSONB constraint: 128 precise projected samples fit.
+    const dense = compactMotionModel(denseMotionModel());
+    await db.query("update swing_sessions set pose_model = $1 where id = 'swing_test'", [dense]);
+    const stored = (await db.query<{ pose_model: PoseModel; bytes: number }>("select pose_model, pg_column_size(pose_model) as bytes from swing_sessions where id = 'swing_test'")).rows[0]!;
+    assert.ok(stored.bytes < 262144);
+    assert.deepEqual(expandMotionModel(stored.pose_model)!.imageFrames, expandMotionModel(dense)!.imageFrames);
 
     // A live scorecard has an entry per hole of a 9 or 18 hole course.
     await db.exec(`insert into courses(id,user_id,name,par,holes) values ('course_test', '${user}', 'Test', 36, '[]')`);

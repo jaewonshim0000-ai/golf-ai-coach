@@ -16,6 +16,7 @@ import { CERTAINTY_LEVELS, SWING_CATEGORIES, SKILLS } from "../../types/practice
 import { PRACTICE_GOALS, type GoalId } from "../practice/goals";
 import { PLAN_LENGTHS, type PlanLength } from "../practice/plan";
 import { START_OPTION_IDS } from "../golf/hole-entry";
+import { PRACTICE_DRILL_IDS } from "../practice/drill-priorities";
 
 /** Input validation at the trust boundary. Every server action parses through here. */
 
@@ -132,6 +133,10 @@ export const practiceSessionSchema = z.object({
 });
 export type PracticeSessionInput = z.infer<typeof practiceSessionSchema>;
 
+export const practicePrioritiesSchema = z.object({
+  drill_ids: z.array(z.enum(PRACTICE_DRILL_IDS)).max(30).transform((ids) => [...new Set(ids)]),
+});
+
 export const drillAttemptSchema = z
   .object({
     session_id: z.string().min(1),
@@ -213,6 +218,8 @@ export const poseModelSchema = z
     imageFrames: z.array(packedPoseFrame).min(3).max(128).optional(),
     // Width over height of the video; phone clips run from 9:16 to 16:9.
     aspect: z.number().finite().min(0.3).max(3.5).optional(),
+    cameraAngle: z.enum(["face_on", "down_the_line", "other"]).optional(),
+    clip: z.tuple([z.number().finite().min(0).max(3600), z.number().finite().min(0).max(3600)]).optional(),
     phases: z
       .object({
         address: z.number().int().min(0).max(127),
@@ -227,6 +234,11 @@ export const poseModelSchema = z
       (!model.imageFrames || model.imageFrames.length === model.frames.length),
     "One time and optional image pose per frame.",
   )
+  .refine(
+    (model) => model.t.every((time, index) => index === 0 || time > model.t[index - 1]!),
+    "Frame times must increase in video order.",
+  )
+  .refine((model) => !model.clip || (model.clip[0] < model.clip[1] && model.t[0]! >= model.clip[0] - 0.1 && model.t.at(-1)! <= model.clip[1] + 0.1), "Samples must sit inside the analysed clip.")
   .refine(
     (model) =>
       !model.phases ||

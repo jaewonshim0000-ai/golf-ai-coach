@@ -29,6 +29,7 @@ export type PlayerState = {
   userId: string;
   profile: PlayerProfile | null;
   drills: Drill[];
+  practiceDrillPriorities: string[];
   rounds: Round[];
   shots: ScoredShot[];
   shotsByRound: Map<string, ScoredShot[]>;
@@ -60,9 +61,10 @@ export async function loadPlayerState(userId: string): Promise<PlayerState> {
     practiceSessions,
     drillAttempts,
     swingSessions,
-    swingFindings,
+    storedSwingFindings,
     handicapHistory,
     swingMeasurements,
+    practiceDrillPriorities,
   ] = await Promise.all([
     repo.getProfile(userId),
     repo.getRounds(userId),
@@ -73,8 +75,12 @@ export async function loadPlayerState(userId: string): Promise<PlayerState> {
     repo.getSwingFindings(userId),
     repo.getHandicapHistory(userId),
     repo.getSwingMeasurements(userId),
+    repo.getPracticeDrillPriorities(userId),
   ]);
 
+  // Retired monocular depth/vision fault guesses must not influence coaching.
+  // Keep them in storage, but use only the player's or coach's recorded findings.
+  const swingFindings = storedSwingFindings.filter((finding) => finding.source === "manual");
   const drills = repo.getDrills();
   const shots = scoreShots(rawShots);
 
@@ -130,6 +136,7 @@ export async function loadPlayerState(userId: string): Promise<PlayerState> {
     userId,
     profile,
     drills,
+    practiceDrillPriorities,
     rounds,
     shots,
     shotsByRound,

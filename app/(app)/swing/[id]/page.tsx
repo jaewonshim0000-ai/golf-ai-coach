@@ -5,7 +5,9 @@ import { ArrowLeft, Target } from "lucide-react";
 import { SwingDiagnostic } from "@/components/swing/diagnostic";
 import { MeasurementForm } from "@/components/swing/measurement-form";
 import { SwingVideo } from "@/components/swing/swing-video";
-import { SwingModel } from "@/components/swing/swing-model";
+import { SwingMotionReport, SwingMotionSummary } from "@/components/swing/motion-report";
+import { analyseMotion } from "@/lib/golf/motion-analysis";
+import { unpackFrames } from "@/lib/golf/pose";
 import { DeleteSwingButton } from "@/components/swing/delete-swing";
 import {
   Badge,
@@ -39,8 +41,14 @@ export default async function SwingPage({ params }: { params: Promise<{ id: stri
   if (!session) notFound();
 
   const model = await repo.getSwingModel(user.id, session.id);
-  const measurements = state.swingMeasurements.filter((m) => m.swing_session_id === session.id);
-  const findings = state.swingFindings.filter((f) => f.swing_session_id === session.id);
+  // Earlier monocular 3D/visual guesses cannot substantiate the capture-style
+  // reference bands. Keep hand-entered measurements and observations separate.
+  const measurements = state.swingMeasurements.filter((m) => m.swing_session_id === session.id && m.source === "manual");
+  const findings = state.swingFindings.filter((f) => f.swing_session_id === session.id && f.source === "manual");
+  const trimChanged = Boolean(model?.clip &&
+    (Math.abs(model.clip[0] - (session.clip_start ?? 0)) > 0.1 || (session.clip_end !== null && Math.abs(model.clip[1] - session.clip_end) > 0.1)));
+  const motion = !trimChanged && model?.motionVersion === 1 && model.imageFrames && model.aspect ?
+    analyseMotion(unpackFrames(model), model.aspect, model.cameraAngle ?? "other", model.handedness, model.phasesConfirmed ? model.phases : undefined) : null;
   const diagnostic = diagnoseSwing(measurements);
 
   const worst = diagnostic.outOfRange[0] ?? null;
@@ -55,6 +63,7 @@ export default async function SwingPage({ params }: { params: Promise<{ id: stri
         size="sm"
         eyebrow={`${labelize(session.camera_angle)} · ${formatDate(session.created_at.slice(0, 10))}`}
         title={CLUB_LABELS[session.club]}
+        action={<ButtonLink href="#swing-criteria" variant="onHeroSolid" size="sm">View all 12 criteria</ButtonLink>}
         topLeft={
           <ButtonLink href="/swing" variant="onHero" size="sm">
             <ArrowLeft className="h-3.5 w-3.5" /> Swings
@@ -70,13 +79,26 @@ export default async function SwingPage({ params }: { params: Promise<{ id: stri
           clipEnd={session.clip_end}
           trimmable
           analysable
+          model={model}
+          cameraAngle={session.camera_angle === "face_on" || session.camera_angle === "down_the_line" ? session.camera_angle : "other"}
         />
 
         <div className="space-y-5">
+          {motion ? <SwingMotionSummary report={motion} /> : (
+            <Card>
+              <CardHeader><CardTitle>Track your swing on the video</CardTitle></CardHeader>
+              <CardContent className="space-y-3 text-[13px] leading-relaxed text-fg-muted">
+                <p>Choose the camera view and select Analyze movement. The overlay follows visible joints and shows the hand path, posture and body movement at address, top and impact.</p>
+                {model ? <p>Read this swing again to replace the earlier 3D estimates with visible movement analysis. Those depth-derived scores are no longer used to label swing faults.</p> : null}
+                <p>For the clearest result, use one swing, a fixed camera and a full-body view. Swing positions and video criteria are analyzed automatically.</p>
+              </CardContent>
+            </Card>
+          )}
+          {measurements.length > 0 || findings.length > 0 ? <>
           {/* The one thing to fix. Everything else on this screen sits below it. */}
           <InkCard>
             <div className="p-5">
-              <Eyebrow className="tracking-[0.2em] text-white/60">Biggest issue</Eyebrow>
+              <Eyebrow className="tracking-[0.2em] text-white/60">Hand-measured position to review</Eyebrow>
               {worst ? (
                 <>
                   <h2 className="dsp mt-2.5 text-[26px] font-semibold leading-[1.02] tracking-[-0.015em]">
@@ -93,7 +115,7 @@ export default async function SwingPage({ params }: { params: Promise<{ id: stri
                       <Eyebrow className="tracking-[0.17em] text-white/50">Work on it</Eyebrow>
                       <p className="mt-1.5 text-[13px] font-medium">{drill.name}</p>
                       <ButtonLink
-                        href="/practice/start?goal=swing"
+                        href={`/practice/start?goal=${drill.id}`}
                         size="sm"
                         variant="onHeroSolid"
                         className="mt-3"
@@ -164,6 +186,8 @@ export default async function SwingPage({ params }: { params: Promise<{ id: stri
             </CardContent>
           </Card>
 
+          </> : null}
+
           <Card>
             <CardHeader className="flex-row items-center justify-between gap-3">
               <CardTitle>Goals</CardTitle>
@@ -186,10 +210,16 @@ export default async function SwingPage({ params }: { params: Promise<{ id: stri
         </div>
       </div>
 
-      {model ? <SwingModel model={model} sessionId={session.id} /> : null}
-
-      <SwingDiagnostic session={session} measurements={measurements} />
-      <MeasurementForm sessionId={session.id} />
+      <section id="swing-criteria" aria-label="Swing criteria" className="scroll-mt-6">
+        <SwingMotionReport report={motion} view={model?.cameraAngle ?? (session.camera_angle === "face_on" || session.camera_angle === "down_the_line" ? session.camera_angle : "other")} />
+      </section>
+      <details id="manual-swing-measurements" className="rounded-2xl border border-border bg-surface p-4">
+        <summary className="cursor-pointer text-[13px] font-medium text-accent">Add a measurement from you or your coach</summary>
+        <div className="mt-4 space-y-5">
+          {measurements.length > 0 ? <SwingDiagnostic session={session} measurements={measurements} /> : null}
+          <MeasurementForm sessionId={session.id} />
+        </div>
+      </details>
 
       <div className="flex justify-end pt-2">
         <DeleteSwingButton swingSessionId={session.id} />

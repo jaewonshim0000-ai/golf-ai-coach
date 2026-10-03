@@ -33,6 +33,7 @@ export type DemoStore = {
   swingMeasurements: SwingMeasurement[];
   /** 3D swing models by swing id. */
   swingModels: Record<string, PoseModel>;
+  practiceDrillPriorities: string[];
 };
 
 declare global {
@@ -56,6 +57,7 @@ function create(): DemoStore {
     swingFindings: [...data.swingFindings],
     swingMeasurements: [...data.swingMeasurements],
     swingModels: {},
+    practiceDrillPriorities: [],
   };
 }
 

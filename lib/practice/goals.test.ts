@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { dispersion, QUICK_DRILLS } from "./goals";
+import { dispersion, goalForWeakness, QUICK_DRILLS } from "./goals";
 import { drillAttemptSchema, practiceSessionSchema } from "../validation/schemas";
 
 test("dispersion keeps misses from cancelling out and includes boundary shots", () => {
@@ -14,6 +14,13 @@ test("dispersion keeps misses from cancelling out and includes boundary shots", 
 test("every quick goal has ten balls, including wedges, chipping and putting", () => {
   assert.ok(["wedges", "chipping", "putting"].every((category) => QUICK_DRILLS.some((drill) => drill.category === category)));
   assert.ok(QUICK_DRILLS.every((drill) => drill.recommended_reps === 10));
+});
+
+test("numbered irons are not mistaken for short-distance wedge weaknesses", () => {
+  assert.equal(goalForWeakness({ category: "approach", key: "7_iron" }), "iron_accuracy");
+  assert.equal(goalForWeakness({ category: "approach", key: "50-75" }), "wedge_accuracy");
+  assert.equal(goalForWeakness({ category: "approach", key: "150-175" }), "iron_accuracy");
+  assert.equal(goalForWeakness({ category: "approach", key: "sw" }), "wedge_accuracy");
 });
 
 test("practice takes a known goal and length, and rejects invalid shot data", () => {

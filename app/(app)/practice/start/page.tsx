@@ -8,6 +8,7 @@ import { loadPlayerState } from "@/lib/player-state";
 import { PRACTICE_GOALS, earnedTolerance, goalForWeakness, type GoalId } from "@/lib/practice/goals";
 import { PLAN_LENGTHS, buildPlan } from "@/lib/practice/plan";
 import { DRILLS_BY_ID } from "@/lib/seed/drills";
+import { goalsForDrill, rankPracticeDrills } from "@/lib/practice/drill-priorities";
 
 export const metadata: Metadata = { title: "Start practice" };
 export const dynamic = "force-dynamic";
@@ -28,10 +29,15 @@ export default async function StartPracticePage({
       .sort((a, b) => a.completed_at.localeCompare(b.completed_at))
       .at(-1)?.shot_offsets;
 
-  const recommended = goalForWeakness(state.weaknesses[0] ?? null);
+  const ranked = rankPracticeDrills(state.drills, state);
+  const priorities = ranked.filter(({ drill }) => state.practiceDrillPriorities.includes(drill.id));
+  const needed = ranked.find((entry) => entry.reason);
+  const recommended = needed ? goalsForDrill(needed.drill)[0]! : goalForWeakness(state.weaknesses[0] ?? null);
+  const preferredGoal = priorities[0] ? goalsForDrill(priorities[0].drill)[0] : undefined;
   // Links arrive with a goal, a drill id or a weakness id.
   const asked =
     PRACTICE_GOALS.find((goal) => goal.id === search.goal || `drill_${goal.id}` === search.goal)?.id ??
+    (DRILLS_BY_ID.has(search.goal ?? "") ? goalsForDrill(DRILLS_BY_ID.get(search.goal!)!)[0] : undefined) ??
     (state.weaknesses.some((weakness) => weakness.id === search.goal)
       ? goalForWeakness(state.weaknesses.find((weakness) => weakness.id === search.goal)!)
       : undefined);
@@ -43,7 +49,7 @@ export default async function StartPracticePage({
     const band = earnedTolerance(goal, last);
     if (band !== null) bands[goal.id] = `${band} ${goal.unit === "feet" ? "ft" : "yd"} band${last ? " earned" : ""}`;
     for (const minutes of PLAN_LENGTHS) {
-      const plan = buildPlan(minutes, goal.id, last);
+      const plan = buildPlan(minutes, goal.id, last, priorities.map(({ drill }) => drill.id));
       previews[`${minutes}:${goal.id}`] = {
         title: plan.title,
         blocks: plan.items.map((item) => ({
@@ -51,6 +57,7 @@ export default async function StartPracticePage({
           duration: item.duration,
           name: DRILLS_BY_ID.get(item.drill_id)?.name ?? item.drill_id,
           objective: item.objective,
+          prioritized: state.practiceDrillPriorities.includes(item.drill_id),
         })),
       };
     }
@@ -73,9 +80,10 @@ export default async function StartPracticePage({
       <SessionBuilder
         goals={PRACTICE_GOALS.map((goal) => goal.id)}
         recommended={recommended}
-        initialGoal={asked ?? recommended}
+        initialGoal={asked ?? preferredGoal ?? recommended}
         previews={previews}
         bands={bands}
+        priorityNames={priorities.map(({ drill }) => drill.name)}
       />
     </div>
   );

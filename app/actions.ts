@@ -1,6 +1,7 @@
 "use server";
 import { dispersion, offsetFor, practiceGoal } from "@/lib/practice/goals";
 import { buildPlan } from "@/lib/practice/plan";
+import { rankPracticeDrills } from "@/lib/practice/drill-priorities";
 import { cookies } from "next/headers";
 import { serverClient } from "@/lib/db/supabase";
 import { privateVideoPath } from "@/lib/video-upload";
@@ -23,15 +24,13 @@ import {
 } from "@/lib/ai/vision";
 import { METRICS_BY_ID } from "@/lib/golf/swing-metrics";
 import {
-  POSE_CONFIDENCE_CAP,
-  analysePose,
   packFrames,
   unpackFrames,
   type PackedLandmark,
   type PoseFrame,
   type SwingPhases,
 } from "@/lib/golf/pose";
-import { liftFrames } from "@/lib/golf/lift";
+import { analyseMotion, motionCriteria, type MotionView } from "@/lib/golf/motion-analysis";
 import { holeShots, type HoleRow } from "@/lib/golf/hole-entry";
 import { DRILLS_BY_ID } from "@/lib/seed/drills";
 import { loadPlayerState } from "@/lib/player-state";
@@ -45,6 +44,7 @@ import {
   poseModelSchema,
   retimeSchema,
   practiceSessionSchema,
+  practicePrioritiesSchema,
   profileSchema,
   holeShotsSchema,
   roundSchema,
@@ -376,6 +376,25 @@ export async function deleteRoundAction(
 
 // ----------------------------------------------------------------- practice
 
+export type PracticePrioritiesState = ActionState & { drillIds?: string[] };
+
+export async function savePracticePrioritiesAction(
+  _prev: PracticePrioritiesState,
+  formData: FormData,
+): Promise<PracticePrioritiesState> {
+  const user = await requireUser();
+  const parsed = practicePrioritiesSchema.safeParse({ drill_ids: list(formData, "drill_ids") });
+  if (!parsed.success) return { ok: false, message: "Choose drills from the practice list." };
+  try {
+    await repo.savePracticeDrillPriorities(user.id, parsed.data.drill_ids);
+  } catch (error) {
+    return asError(error);
+  }
+  revalidatePath("/practice");
+  revalidatePath("/practice/start");
+  return { ok: true, message: "Your practice priorities are saved.", drillIds: parsed.data.drill_ids };
+}
+
 export async function createPracticeSessionAction(
   _prev: ActionState,
   formData: FormData,
@@ -393,11 +412,15 @@ export async function createPracticeSessionAction(
   let sessionId: string;
   try {
     // The band for today's test is the one the last test earned.
-    const last = (await repo.getDrillAttempts(user.id))
+    const player = await loadPlayerState(user.id);
+    const priorities = rankPracticeDrills(player.drills, player)
+      .filter(({ drill }) => player.practiceDrillPriorities.includes(drill.id))
+      .map(({ drill }) => drill.id);
+    const last = player.drillAttempts
       .filter((attempt) => attempt.drill_id === `drill_${parsed.data.goal}` && attempt.shot_offsets?.length)
       .sort((a, b) => a.completed_at.localeCompare(b.completed_at))
       .at(-1);
-    const plan = buildPlan(parsed.data.minutes, parsed.data.goal, last?.shot_offsets);
+    const plan = buildPlan(parsed.data.minutes, parsed.data.goal, last?.shot_offsets, priorities);
 
     const session = await repo.createPracticeSession(
       {
@@ -867,14 +890,8 @@ export async function analyzeSwingAction(input: {
 }
 
 /**
- * Build the 3D model of a swing and measure it.
- *
- * The browser sends only the skeleton it found in each frame. Everything
- * after that happens here, off the stored model: the phases are found, the
- * positions are measured, and the model is kept so the page can replay the
- * exact body the numbers came from. Handedness comes from the profile rather
- * than the request. A number a person typed is never overwritten, because a
- * measurement outranks a reading of a skeleton.
+ * Store visible joints and analyse projected motion. Inferred depth does not
+ * produce capture-style body measurements. Manual measurements stay intact.
  */
 export type PoseState = ActionState & {
   measurements?: number;
@@ -890,6 +907,8 @@ export async function savePoseModelAction(input: {
   imageFrames?: PackedLandmark[][];
   /** The video's width over its height; needed to rebuild from the picture. */
   aspect?: number;
+  cameraAngle?: MotionView;
+  clip?: [number, number];
   phases?: SwingPhases;
 }): Promise<PoseState> {
   const user = await requireUser();
@@ -900,13 +919,11 @@ export async function savePoseModelAction(input: {
   const session = sessions.find((item) => item.id === parsed.data.swing_session_id);
   if (!session) return { ok: false, message: "That swing session does not exist." };
 
-  // Rebuild the body from what the camera saw when the picture came with it;
-  // the detector's hip-pinned skeleton is the fallback, and measures less.
   const detected = unpackFrames(parsed.data);
-  const lifted = parsed.data.aspect ? liftFrames(detected, parsed.data.aspect) : null;
-  return measureAndStore(user.id, session.id, profile?.dominant_hand ?? "right", lifted ?? detected, {
-    t: parsed.data.t,
-    lifted: lifted !== null,
+  return storeMotion(user.id, session.id, profile?.dominant_hand ?? "right", detected, {
+    aspect: parsed.data.aspect ?? 0,
+    view: parsed.data.cameraAngle ?? (session.camera_angle === "face_on" || session.camera_angle === "down_the_line" ? session.camera_angle : "other"),
+    clip: parsed.data.clip,
     phases: parsed.data.phases,
   });
 }
@@ -925,68 +942,54 @@ export async function retimeSwingAction(input: {
   if (!parsed.success) return { ok: false, message: "Address, top and impact must be three frames in that order." };
   const model = await repo.getSwingModel(user.id, parsed.data.swing_session_id);
   if (!model) return { ok: false, message: "Measure the swing before moving its phases." };
-  if (parsed.data.phases.impact >= model.frames.length) {
+  if (parsed.data.phases.impact >= model.t.length) {
     return { ok: false, message: "Impact is past the end of the clip." };
   }
-  return measureAndStore(user.id, parsed.data.swing_session_id, model.handedness, unpackFrames(model), {
-    t: model.t,
-    lifted: model.lifted === true,
+  if (!model.imageFrames || !model.aspect) return { ok: false, message: "Analyze movement again to track the joints on the original video." };
+  return storeMotion(user.id, parsed.data.swing_session_id, model.handedness, unpackFrames(model), {
+    aspect: model.aspect,
+    view: model.cameraAngle ?? "other",
+    clip: model.clip,
     phases: parsed.data.phases,
   });
 }
 
-async function measureAndStore(
+async function storeMotion(
   userId: string,
   sessionId: string,
   handedness: "right" | "left",
   frames: PoseFrame[],
-  options: { t: number[]; lifted: boolean; phases?: SwingPhases },
+  options: { aspect: number; view: MotionView; phases?: SwingPhases; clip?: [number, number] },
 ): Promise<PoseState> {
-  const analysis = analysePose(frames, handedness, options.phases, { translations: options.lifted });
-  if (!analysis || analysis.readings.length === 0) {
-    return { ok: false, noSwing: true, message: "No swing could be found in that body." };
+  const analysis = analyseMotion(frames, options.aspect, options.view, handedness, options.phases);
+  if (analysis.quality.coverage < 0.65 || frames.length < 8 || (options.phases && !analysis.usable)) {
+    return { ok: false, noSwing: true, message: analysis.summary };
   }
-
-  const existing = await repo.getSwingMeasurements(userId);
-  const manual = new Set(
-    existing
-      .filter((row) => row.swing_session_id === sessionId && row.source === "manual")
-      .map((row) => row.metric),
-  );
-
-  const rows = analysis.readings.flatMap((reading) => {
-    const metric = METRICS_BY_ID.get(reading.metric);
-    if (!metric || manual.has(metric.id)) return [];
-    // Ten band widths outside the band is a detector that lost the body, not
-    // a swing. The band itself is a reference, so the envelope is generous.
-    const width = metric.max - metric.min;
-    if (reading.value < metric.min - width * 10 || reading.value > metric.max + width * 10) {
-      return [];
+  if (!analysis.usable) {
+    const previous = await repo.getSwingModel(userId, sessionId);
+    if (previous?.motionVersion === 1 && previous.imageFrames && previous.aspect) {
+      const previousReport = analyseMotion(unpackFrames(previous), previous.aspect, previous.cameraAngle ?? "other", previous.handedness, previous.phasesConfirmed ? previous.phases : undefined);
+      if (previousReport.usable) return { ok: false, noSwing: true, message: `${analysis.summary} Your previous analysis has been kept.` };
     }
-    return [
-      {
-        swing_session_id: sessionId,
-        phase: metric.phase,
-        metric: metric.id,
-        value: reading.value,
-        unit: metric.unit,
-        confidence: Math.min(reading.confidence, POSE_CONFIDENCE_CAP),
-        source: "pose" as const,
-      },
-    ];
-  });
+  }
 
   try {
     await repo.saveSwingModel(userId, sessionId, {
       v: 1,
       handedness,
-      phases: analysis.phases,
-      t: options.t,
-      frames: packFrames(frames).frames,
-      ...(options.lifted ? { lifted: true } : {}),
+      // Legacy storage requires indices even when timing cannot be resolved.
+      // The report and overlay use detected timing, never these placeholders.
+      phases: analysis.phases ?? { address: 0, top: Math.floor(frames.length / 2), impact: frames.length - 1 },
+      ...packFrames(frames),
+      aspect: options.aspect,
+      cameraAngle: options.view,
+      motionVersion: 1,
+      phasesConfirmed: Boolean(options.phases),
+      timingStatus: options.phases ? "confirmed" : analysis.phases ? "estimated" : "unresolved",
+      clip: options.clip,
     });
+    // Retire the old depth-derived readings after a successful replacement.
     await repo.deleteSwingMeasurementsBySource(userId, sessionId, "pose");
-    for (const row of rows) await repo.saveSwingMeasurement(row);
   } catch (error) {
     return asError(error);
   }
@@ -994,16 +997,10 @@ async function measureAndStore(
   revalidatePath(`/swing/${sessionId}`);
   revalidatePath("/swing");
   revalidatePath("/practice");
-  const heldBack = analysis.readings.length - rows.length;
-  const unavailable = analysis.skipped.length;
   return {
     ok: true,
-    measurements: rows.length,
-    skipped: heldBack,
-    message:
-      rows.length === 0
-        ? "Built the 3D model."
-        : `Built the 3D model and measured ${rows.length} reliable position${rows.length === 1 ? "" : "s"}.${unavailable ? ` ${unavailable} ${unavailable === 1 ? "was" : "were"} left unmeasured because this camera view could not support ${unavailable === 1 ? "it" : "them"}.` : ""}`,
+    measurements: analysis.readings.length,
+    message: !analysis.phases ? analysis.summary : `Analyzed ${motionCriteria(options.view).filter((criterion) => analysis.readings.some((reading) => reading.id === criterion.id)).length} of 12 video criteria across ${analysis.quality.total} body samples. ${analysis.timing?.topWindow ? "The briefly hidden backswing transition is reported as a range." : "Swing positions were detected automatically."}`,
   };
 }
 

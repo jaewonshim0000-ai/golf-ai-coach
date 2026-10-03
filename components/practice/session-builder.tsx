@@ -13,7 +13,7 @@ import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Field, Input }
 
 export type PlanPreview = {
   title: string;
-  blocks: { block: PracticeBlock; duration: number; name: string; objective: string }[];
+  blocks: { block: PracticeBlock; duration: number; name: string; objective: string; prioritized?: boolean }[];
 };
 
 /** Goal and length in, the whole plan shown before it starts. */
@@ -23,6 +23,7 @@ export function SessionBuilder({
   initialGoal,
   previews,
   bands,
+  priorityNames,
 }: {
   goals: GoalId[];
   recommended: GoalId;
@@ -31,6 +32,7 @@ export function SessionBuilder({
   previews: Record<string, PlanPreview>;
   /** Today's band per goal, earned from the last test. */
   bands: Partial<Record<GoalId, string>>;
+  priorityNames: string[];
 }) {
   const [state, formAction, pending] = useActionState(createPracticeSessionAction, IDLE);
   const [goal, setGoal] = useState<GoalId>(initialGoal);
@@ -47,6 +49,13 @@ export function SessionBuilder({
           <CardTitle>What are you working on?</CardTitle>
         </CardHeader>
         <CardContent className="space-y-5">
+          {priorityNames.length > 0 ? (
+            <p className="rounded-xl bg-accent-soft px-3.5 py-3 text-[12px] leading-relaxed text-fg-muted">
+              Your saved drills are preferred in matching work blocks: {priorityNames.slice(0, 3).join(", ")}
+              {priorityNames.length > 3 ? ` and ${priorityNames.length - 3} more` : ""}.
+              {" "}Choose 30 or 60 minutes for extra drill work; 15 minutes covers the warm-up and test.
+            </p>
+          ) : null}
           <fieldset>
             <legend className="dsp mb-2 text-[9px] tracking-[0.15em] text-fg-subtle">Goal</legend>
             <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-5">
@@ -63,7 +72,7 @@ export function SessionBuilder({
                   <span className="flex h-full cursor-pointer flex-col rounded-xl border border-border-strong bg-surface-2 px-3 py-2.5 text-[13px] font-medium transition-colors peer-checked:border-accent peer-checked:bg-accent-soft peer-focus-visible:ring-2 peer-focus-visible:ring-accent">
                     {GOAL_SHORT[id]}
                     <span className="mt-0.5 text-[10.5px] font-normal text-fg-subtle">
-                      {id === recommended ? "Costing you most" : bands[id] ?? "Made putts"}
+                      {id === recommended ? "Suggested focus" : bands[id] ?? "Made putts"}
                     </span>
                   </span>
                 </label>
@@ -121,6 +130,7 @@ export function SessionBuilder({
                     <span className="block text-[12px] text-fg-muted">
                       {block.name} — {block.objective}
                     </span>
+                    {block.prioritized ? <Badge tone="accent" className="mt-1">Your priority</Badge> : null}
                   </span>
                 </li>
               ))}

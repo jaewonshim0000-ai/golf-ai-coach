@@ -13,9 +13,11 @@ import type {
   SwingSession,
 } from "../../types/practice";
 import { DRILLS } from "../seed/drills";
+import { cleanDrillPriorities } from "../practice/drill-priorities";
 import { serverClient, supabaseConfigured } from "./supabase";
 import { privateVideoPath } from "../video-upload";
 import type { PoseModel } from "../golf/pose";
+import { compactMotionModel, expandMotionModel } from "../golf/motion-storage";
 import { DEMO_USER_ID, newId, store } from "./demo-store";
 
 /**
@@ -129,6 +131,31 @@ export async function addHandicapEntry(entry: Omit<HandicapEntry, "id">): Promis
 /** Drills are reference data shipped with the app and mirrored into Postgres. */
 export function getDrills(): Drill[] {
   return DRILLS;
+}
+
+/** Small account preferences stored alongside the user's existing auth metadata. */
+export async function getPracticeDrillPriorities(userId: string): Promise<string[]> {
+  const sb = await client();
+  if (!sb) return userId === DEMO_USER_ID ? cleanDrillPriorities(store().practiceDrillPriorities) : [];
+  const { data, error } = await sb.auth.getUser();
+  if (error) throw new Error(`getPracticeDrillPriorities: ${error.message}`);
+  if (!data.user || data.user.id !== userId) throw new Error("Sign in to read your practice priorities.");
+  return cleanDrillPriorities(data.user.user_metadata?.practice_drill_priorities);
+}
+
+export async function savePracticeDrillPriorities(userId: string, drillIds: string[]): Promise<void> {
+  const priorities = cleanDrillPriorities(drillIds);
+  const sb = await client();
+  if (!sb) {
+    if (userId !== DEMO_USER_ID) throw new Error("That player does not exist.");
+    store().practiceDrillPriorities = priorities;
+    return;
+  }
+  const { data, error: userError } = await sb.auth.getUser();
+  if (userError) throw new Error(`savePracticeDrillPriorities: ${userError.message}`);
+  if (!data.user || data.user.id !== userId) throw new Error("Sign in to save your practice priorities.");
+  const { error } = await sb.auth.updateUser({ data: { practice_drill_priorities: priorities } });
+  if (error) throw new Error(`savePracticeDrillPriorities: ${error.message}`);
 }
 
 // --------------------------------------------------------------- courses
@@ -568,7 +595,7 @@ export async function saveSwingClip(
 
 export async function getSwingModel(userId: string, sessionId: string): Promise<PoseModel | null> {
   const sb = await client();
-  if (!sb) return store().swingModels[sessionId] ?? null;
+  if (!sb) return expandMotionModel(store().swingModels[sessionId] ?? null);
   const { data, error } = await sb
     .from("swing_sessions")
     .select("pose_model")
@@ -576,7 +603,7 @@ export async function getSwingModel(userId: string, sessionId: string): Promise<
     .eq("user_id", userId)
     .maybeSingle();
   if (error) throw new Error(`getSwingModel: ${error.message}`);
-  return ((data as { pose_model: PoseModel | null } | null)?.pose_model ?? null);
+  return expandMotionModel((data as { pose_model: PoseModel | null } | null)?.pose_model ?? null);
 }
 
 export async function saveSwingModel(
@@ -585,13 +612,14 @@ export async function saveSwingModel(
   model: PoseModel,
 ): Promise<void> {
   const sb = await client();
+  const stored = compactMotionModel(model);
   if (!sb) {
-    store().swingModels[sessionId] = model;
+    store().swingModels[sessionId] = stored;
     return;
   }
   const { error } = await sb
     .from("swing_sessions")
-    .update({ pose_model: model, analysis_status: "processed" })
+    .update({ pose_model: stored, analysis_status: "processed" })
     .eq("id", sessionId)
     .eq("user_id", userId);
   if (error) throw new Error(`saveSwingModel: ${error.message}`);

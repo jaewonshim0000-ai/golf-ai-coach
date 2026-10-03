@@ -4,6 +4,7 @@ import { User } from "lucide-react";
 
 import { resetDemoAction } from "@/app/actions";
 import { DemoNotice, PriorityCard, TodaysSession } from "@/components/dashboard/sections";
+import { PracticeDrillPriorities } from "@/components/practice/drill-priorities";
 import {
   Badge,
   ButtonLink,
@@ -18,6 +19,7 @@ import {
   SectionHeading,
 } from "@/components/ui/primitives";
 import { benchmarkFor, benchmarkNote } from "@/lib/practice/benchmark";
+import { rankPracticeDrills } from "@/lib/practice/drill-priorities";
 import * as repo from "@/lib/db/repo";
 import { loadPlayerState } from "@/lib/player-state";
 import { formatDate, greeting, relativeDays } from "@/lib/utils";
@@ -147,6 +149,10 @@ export default async function PracticePage() {
           )}
         </CardContent>
       </Card>
+      <PracticeDrillPriorities
+        drills={rankPracticeDrills(state.drills, state)}
+        initialSelected={state.practiceDrillPriorities}
+      />
     </div>
   );
 }

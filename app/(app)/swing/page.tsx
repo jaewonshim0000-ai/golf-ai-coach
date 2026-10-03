@@ -19,7 +19,7 @@ export default async function SwingLibraryPage() {
   const state = await loadPlayerState(user.id);
 
   const swings = state.swingSessions.map((session) => {
-    const measurements = state.swingMeasurements.filter((m) => m.swing_session_id === session.id);
+    const measurements = state.swingMeasurements.filter((m) => m.swing_session_id === session.id && m.source === "manual");
     return { session, diagnostic: diagnoseSwing(measurements) };
   });
 
@@ -42,7 +42,7 @@ export default async function SwingLibraryPage() {
       {swings.length === 0 ? (
         <EmptyState
           title="No swings yet"
-          message="Upload a swing from your library or record a new one. Play it back and add your own measurements."
+          message="Upload a swing or record one, then open it and choose Analyze movement to review your joints on the video."
         />
       ) : (
         <div className="relative grid grid-cols-2 gap-2.5 md:grid-cols-4">
@@ -62,7 +62,7 @@ export default async function SwingLibraryPage() {
                   {formatDate(session.created_at.slice(0, 10))}
                 </p>
                 {diagnostic.measured === 0 ? (
-                  <Badge tone="neutral">not measured</Badge>
+                  <Badge tone="neutral">{session.analysis_status === "processed" ? "Review analysis" : "Analyze movement"}</Badge>
                 ) : (
                   <Badge tone={diagnostic.outOfRange.length > 0 ? "warn" : "good"}>
                     {diagnostic.outOfRange.length > 0

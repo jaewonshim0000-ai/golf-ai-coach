@@ -136,7 +136,8 @@ export function goalForWeakness(weakness: { category: string; key: string } | nu
   if (weakness.category === "off_the_tee") return "driver_accuracy";
   if (weakness.category === "putting") return "putting_conversion";
   if (weakness.category === "around_the_green") return "chip_accuracy";
-  const start = parseInt(weakness.key, 10);
+  // Numbered clubs such as 7_iron aren't distance bands.
+  const start = /^\d+(?:-\d+|\+)$/.test(weakness.key) ? parseInt(weakness.key, 10) : NaN;
   return (Number.isFinite(start) && start < 100) || /^(pw|gw|sw|lw)$/.test(weakness.key)
     ? "wedge_accuracy"
     : "iron_accuracy";

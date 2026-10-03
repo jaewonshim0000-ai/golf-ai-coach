@@ -1,0 +1,39 @@
+"use client";
+
+import { LM, type PoseFrame } from "@/lib/golf/pose";
+import { frameAtTime, visibleHands, visiblePoint } from "@/lib/golf/motion-analysis";
+
+const BONES: [number, number][] = [
+  [11, 12], [11, 13], [13, 15], [12, 14], [14, 16], [11, 23], [12, 24], [23, 24],
+  [23, 25], [25, 27], [24, 26], [26, 28], [27, 29], [29, 31], [28, 30], [30, 32],
+];
+export function BodyOverlay({ frames, time, guide }: { frames: PoseFrame[]; time: number; guide?: PoseFrame }) {
+  const frame = frameAtTime(frames, time);
+  if (!frame?.imageLandmarks) return null;
+  const points = frame.imageLandmarks;
+  // Separate segments stop a lost hand from drawing a line across a gap.
+  const trails: { from: { x: number; y: number }; to: { x: number; y: number }; opacity: number }[] = [];
+  frames.forEach((current, index) => {
+    const previous = frames[index - 1];
+    if (!previous || current.t > time || current.t < time - 0.6 || current.t - previous.t > 0.12) return;
+    const a = visibleHands(previous), b = visibleHands(current);
+    if (a && b) trails.push({ from: a, to: b, opacity: 0.2 + (1 - (time - current.t) / 0.6) * 0.6 });
+  });
+  const guidePoints = guide?.imageLandmarks;
+  const guideHipL = guidePoints?.[LM.leftHip], guideHipR = guidePoints?.[LM.rightHip];
+  const guideHead = guidePoints?.[LM.nose];
+  return <svg viewBox="0 0 1 1" preserveAspectRatio="none" className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden>
+    {visiblePoint(guideHipL) && visiblePoint(guideHipR) ? <line x1={(guideHipL.x + guideHipR.x) / 2} x2={(guideHipL.x + guideHipR.x) / 2} y1="0" y2="1" stroke="#3fc1a5" strokeWidth="0.003" strokeDasharray="0.012 0.01" opacity="0.6" /> : null}
+    {visiblePoint(guideHead) ? <line x1={guideHead.x} x2={guideHead.x} y1="0" y2="1" stroke="#e6b85c" strokeWidth="0.002" strokeDasharray="0.01 0.012" opacity="0.4" /> : null}
+    {trails.map((trail, index) => <line key={index} x1={trail.from.x} y1={trail.from.y} x2={trail.to.x} y2={trail.to.y} stroke="#e6b85c" strokeWidth="0.004" opacity={trail.opacity} />)}
+    {BONES.map(([from, to]) => {
+      const a = points[from], b = points[to];
+      if (!visiblePoint(a) || !visiblePoint(b)) return null;
+      return <line key={`${from}-${to}`} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={from === 11 && to === 12 ? "#ff7a59" : from === 23 && to === 24 ? "#3fc1a5" : "#f8fafc"} strokeWidth="0.0045" strokeLinecap="round" />;
+    })}
+    {[0, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28].map((joint) => {
+      const point = points[joint];
+      return visiblePoint(point) ? <circle key={joint} data-joint={joint} cx={point.x} cy={point.y} r="0.005" fill="#e6b85c" /> : null;
+    })}
+  </svg>;
+}

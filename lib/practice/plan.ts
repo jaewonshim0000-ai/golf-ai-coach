@@ -1,16 +1,15 @@
 import type { PracticeBlock, PracticeItem } from "../../types/practice";
-import { DRILLS_BY_ID } from "../seed/drills";
+import { DRILLS, DRILLS_BY_ID } from "../seed/drills";
 import { GOAL_SHORT, PRACTICE_GOALS, earnedTolerance, type GoalId } from "./goals";
+import { blocksForDrill, goalsForDrill } from "./drill-priorities";
 
 /**
  * A practice plan: warm up, fix it, test it, then prove it under pressure.
  *
  * The skill block is always the goal's ten-ball test, scored against a band
  * the player earned last time, so every plan produces a number comparable
- * with the one before. The other blocks come from the drill library, picked
- * per goal from a fixed table rather than scored and ranked: the right
- * technical drill for a wedge problem is not a close call, and a table is
- * something a coach can read and change.
+ * with the one before. Matching saved drills fill the other work blocks,
+ * with a fixed set of defaults when the player hasn't chosen one.
  */
 
 export const PLAN_LENGTHS = [15, 30, 60] as const;
@@ -79,8 +78,15 @@ export function buildPlan(
   minutes: PlanLength,
   goalId: GoalId,
   lastOffsets?: number[] | null,
+  priorityDrillIds: string[] = [],
 ): Plan {
   const goal = PRACTICE_GOALS.find((candidate) => candidate.id === goalId)!;
+  const priorities = priorityDrillIds.flatMap((id) => {
+    const drill = DRILLS_BY_ID.get(id);
+    return drill && goalsForDrill(drill).includes(goalId) ? [drill] : [];
+  });
+  // Reserve the warm-up and test, then use each preferred exercise only once.
+  const used = new Set([LIBRARY[goal.id].warm_up!, `drill_${goal.id}`]);
   const items = LAYOUT[minutes].map(([block, duration], order_index) => {
     if (block === "skill") {
       const drill = DRILLS_BY_ID.get(`drill_${goal.id}`)!;
@@ -99,7 +105,12 @@ export function buildPlan(
             : `7 of 10 within ${tolerance} ${goal.unit === "feet" ? "ft of the hole" : "yd of your line"}.`,
       };
     }
-    const drill = DRILLS_BY_ID.get(LIBRARY[goal.id][block]!)!;
+    const fallback = DRILLS_BY_ID.get(LIBRARY[goal.id][block]!)!;
+    const drill = block === "warm_up" ? fallback :
+      priorities.find((candidate) => !used.has(candidate.id) && blocksForDrill(candidate).includes(block)) ??
+      (!used.has(fallback.id) ? fallback : DRILLS.find((candidate) =>
+        !used.has(candidate.id) && goalsForDrill(candidate).includes(goalId) && blocksForDrill(candidate).includes(block)))!;
+    used.add(drill.id);
     // Keep the drill's own structure when there is time for it; shorten it
     // in proportion when there is not.
     const scale = Math.min(1, duration / drill.recommended_duration);

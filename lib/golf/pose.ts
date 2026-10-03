@@ -31,7 +31,7 @@ export type PoseFrame = {
   t: number;
   /** Metric 3D landmarks, in metres around the hips. */
   landmarks: Landmark[];
-  /** Optional image-space landmarks used only for the local tracking preview. */
+  /** Observed image-space landmarks used for the overlay and projected analysis. */
   imageLandmarks?: Landmark[];
 };
 
@@ -663,12 +663,9 @@ export function smoothFrames(frames: PoseFrame[]): PoseFrame[] {
 }
 
 /**
- * The 3D model of the swing: the skeleton the detector found in every sampled
- * frame, kept so the swing can be replayed and turned round, and so the
- * measurements are read off the same model the player is looking at.
- *
- * Compact on purpose - [x, y, z, visibility] per landmark, rounded to the
- * millimetre - because it is stored with the swing and a clip is ~40 KB.
+ * A sampled swing. Legacy entries have estimated world-coordinate skeletons;
+ * new motion entries retain projected image coordinates with decoded frame
+ * timestamps. The repository compacts image data for the existing JSONB limit.
  */
 export type PackedLandmark = [number, number, number, number];
 
@@ -681,6 +678,15 @@ export type PoseModel = {
   frames: PackedLandmark[][];
   /** Normalized image landmarks may accompany a fresh browser analysis. */
   imageFrames?: PackedLandmark[][];
+  /** Storage-only encoding of projected x/y/visibility; expanded by the repository. */
+  imageData?: string;
+  /** Original video shape and view for projected movement analysis. */
+  aspect?: number;
+  cameraAngle?: "face_on" | "down_the_line" | "other";
+  motionVersion?: 1;
+  phasesConfirmed?: boolean;
+  timingStatus?: "unresolved" | "estimated" | "confirmed";
+  clip?: [number, number];
   /**
    * The frames were rebuilt from the picture (`liftFrames`): they move with
    * the body and are in camera axes, so movement can be measured on them.
@@ -705,10 +711,17 @@ export function packFrames(frames: PoseFrame[]): {
       ],
     );
   const imageFrames = frames.every((frame) => frame.imageLandmarks?.length === 33)
-    ? frames.map((frame) => pack(frame.imageLandmarks!))
+    ? frames.map((frame) => frame.imageLandmarks!.map((point): PackedLandmark => [
+      Math.round(point.x * 100000) / 100000,
+      Math.round(point.y * 100000) / 100000,
+      mm(point.z),
+      Math.round((point.visibility ?? 0) * 1000) / 1000,
+    ]))
     : undefined;
   return {
-    t: frames.map((frame) => Math.round(frame.t * 1000) / 1000),
+    // Keep decoded frame boundaries exact. Rounding down can seek to the
+    // previous frame when the saved sample is replayed.
+    t: frames.map((frame) => frame.t),
     frames: frames.map((frame) => pack(frame.landmarks)),
     ...(imageFrames ? { imageFrames } : {}),
   };
@@ -719,9 +732,9 @@ export function unpackFrames(packed: {
   frames: PackedLandmark[][];
   imageFrames?: PackedLandmark[][];
 }): PoseFrame[] {
-  return packed.frames.map((landmarks, index) => ({
-    t: packed.t[index] ?? index,
-    landmarks: landmarks.map(([x, y, z, visibility]) => ({ x, y, z, visibility })),
+  return packed.t.map((t, index) => ({
+    t,
+    landmarks: (packed.frames[index] ?? []).map(([x, y, z, visibility]) => ({ x, y, z, visibility })),
     imageLandmarks: packed.imageFrames?.[index]?.map(([x, y, z, visibility]) => ({
       x, y, z, visibility,
     })),

@@ -13,6 +13,8 @@ Without a database connection, the app shows a setup screen. For disposable samp
 
 ## Connect real accounts and deploy
 
+Public app: [golf-ai-coach-alpha.vercel.app](https://golf-ai-coach-alpha.vercel.app). The existing Vercel project is connected to this GitHub repository; pushes to `main` create a production deployment. Players use that HTTPS address and their own accounts. The local development server is not needed for the public app.
+
 1. Create or use a Supabase project.
 2. In its SQL editor, run these files in order:
    - `supabase/migrations/0001_init.sql` (new projects only).
@@ -26,16 +28,20 @@ Without a database connection, the app shows a setup screen. For disposable samp
    - `supabase/migrations/0009_plans_plots_scorecards.sql` (new and existing projects; apply once).
    - `supabase/seed/seed.sql` (reference drills and swing bands only; safe to re-run).
 3. Copy `.env.example` to `.env.local` and set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` from the project's connection settings. Use the public anon key, never a service-role key. Keep `ENABLE_DEMO_MODE=false`.
-4. In Supabase Authentication URL Configuration, set the Site URL to the deployed app and allow its `/auth/callback` URL. Add `http://localhost:3001/auth/callback` for this local setup. Email/password sign-in and Confirm Email must be enabled.
-5. In Supabase Authentication → Emails → SMTP Settings, connect a custom SMTP provider before inviting users. Supabase's built-in mailer only delivers to project-team addresses and is limited to two messages per hour, so it cannot support real account confirmations or password recovery.
-6. Add the same environment variables to the existing Vercel project, then rebuild and redeploy. Public environment variables must be present at build time.
-7. Create your account, confirm your email, and complete the profile. New accounts start empty. Do **not** run `supabase/seed/demo-player.sql` for real users.
+4. In Supabase Authentication URL Configuration, set the Site URL to `https://golf-ai-coach-alpha.vercel.app` and allow `https://golf-ai-coach-alpha.vercel.app/auth/callback`. Also allow the callback at the local port you use, such as `http://localhost:3001/auth/callback`. Email/password sign-in must be enabled. See [redirect URL configuration](https://supabase.com/docs/guides/auth/redirect-urls).
+5. Configure [custom SMTP](https://supabase.com/docs/guides/auth/auth-smtp) in Supabase before inviting other players. Its default mail service only delivers to project team members, so it does not support general signup confirmations and password recovery. Confirm that both email flows link back to the public app.
+6. Add `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` and `ENABLE_DEMO_MODE=false` to the Vercel Production environment. Optional coaching uses `ANTHROPIC_API_KEY` and `AI_MODEL`. Rebuild after environment changes; public variables must be present at build time. Never put server secrets in `NEXT_PUBLIC_` variables.
+7. Create your account, confirm your email if required, and complete the profile. New accounts start empty. Do **not** run `supabase/seed/demo-player.sql` for real users.
+
+The drill-priority and video-overlay updates use the existing schema and Auth metadata; they do not add a database migration. Existing projects that already applied migrations through `0009` can deploy these updates directly.
 
 The second migration makes practice creation transactional, adds per-shot estimates, prevents duplicate results, and enforces parent ownership. If upgrading an old database, it keeps the latest duplicate practice result and one existing measurement per metric. Back up an existing production database before applying migrations.
 
-The private `swing-videos` bucket is created by the migrations. Uploads go directly to Storage under the signed-in user's folder, with a 50 MB limit. The database stores the object path; playback uses expiring signed URLs. See the [Supabase SSR guide](https://supabase.com/docs/guides/auth/server-side/creating-a-client) and [Storage upload reference](https://supabase.com/docs/reference/javascript/storage-from-upload).
+The private `swing-videos` bucket is created by the migrations. Uploads go directly to Storage under the signed-in user's folder, with a 50 MB limit. The database stores the object path; playback uses expiring signed URLs. See the [Supabase SSR   guide](https://supabase.com/docs/guides/auth/server-side/creating-a-client) and [Storage upload reference](https://supabase.com/docs/reference/javascript/storage-from-upload).
 
 ## Practice
+
+The bottom of Practice lists 30 drills, ordered by needs found in the last ten played rounds. Shot-tracked rounds use strokes lost; detailed scorecards can promote driver drills for missed fairways and putting drills for three-putts. Small samples are labeled early signals, and total scores alone never imply a skill weakness. Search or filter the list, select drills, and save priorities. Choices stay with the signed-in account in Auth metadata, so no database migration is needed. Matching saved drills are preferred in 30- and 60-minute work blocks; warm-ups and the goal's ten-ball test retain their structure. Plan previews and created sessions use the same selection rules.
 
 **Start practice** builds a plan from a goal (driver, irons, wedges, chipping or putting; the one costing you most strokes is preselected) and a length:
 
@@ -69,49 +75,15 @@ Use **Upload video** to choose a saved MP4, MOV, or WebM, or **Record video** to
 
 ### Reading a swing from video
 
-**Measure swing** runs a pose detector over the clip in the browser: `@mediapipe/tasks-vision` (heavy pose model), with the wasm and model fetched from MediaPipe's CDNs on first use and cached. The video never leaves the device, there is no per-use cost, and no API key is needed. Sampling is done in two passes:
+**Analyze movement** runs the MediaPipe heavy pose detector on decoded video frames in the browser. Each frame is detected independently in IMAGE mode: seeking backwards for a dense downswing pass cannot carry tracking state from the finish into the backswing. GPU inference falls back to CPU if initialization fails. The detector chooses the same visible body when multiple people appear.
 
-1. An even pass (64 to 96 frames) finds the swing.
-2. A second pass reads the downswing at up to 120 samples a second, where the body turns several hundred degrees a second.
+The primary output is now a synchronized **2D body overlay on the original video**, with shoulders, hips, joints, an address guide and a short hand trail. Low-visibility joints, isolated body jumps and gaps are not filled in. Up to 128 unique samples, their unrounded decoded timestamps and high-precision normalized image coordinates are stored in the existing `swing_sessions.pose_model` JSON column. Projected x/y/visibility data is stored as compact JSON text within that column and expanded on read; inferred world coordinates are omitted from new models. This fits the existing 256 KB constraint without reducing coordinate precision or requiring a new migration.
 
-Each sample is stamped with the video frame actually shown, and repeated frames are skipped. A tracking preview is drawn over a sampled frame, so bad tracking is visible before the numbers are trusted.
+`lib/golf/motion-analysis.ts` uses image x/y corrected for video aspect ratio. The main checklist analyzes 12 video criteria: torso inclination and shoulder-line tilt at address, top and impact, plus horizontal hip/head displacement and vertical hip movement at top and impact. Fixed-camera face-on footage scales lateral movement to stance width; other views use visible body height and screen direction. Each reading explains the change relative to the player's setup. Original capture-style reference bands appear only with actual coach measurements in the optional measurement panel. Camera/stance movement or changing scale withholds displacement. These observations do not establish a swing fault, pressure transfer or professional-template conformity.
 
-The browser sends the detector's two skeletons per frame, plus the video's aspect ratio: the picture landmarks and the "world" 3D guess. The server rebuilds the body from them in `lib/golf/lift.ts`, because the world skeleton alone is pinned between the hips every frame and its depth is noisy and squashed. The rebuild works like this:
+Address, top and impact are detected automatically from a complete hand arc. A small reversal cannot lock the wrong top. An occlusion of up to 0.4 seconds can bracket an estimated backswing transition only when visible hands rise before it, descend after it and complete the downswing into follow-through, with continuous body tracking. Visible body readings then show min/max ranges across that interval, and tempo is omitted if timing is uncertain. Hidden hand coordinates are never interpolated or drawn. Longer occlusions, missing body frames and incomplete swings remain unresolved with a specific recording instruction; there is no timing review panel. Previously saved manual timing remains compatible. Contact is a hand-path estimate, not detected ball contact. Durations are recorded-video time and can be stretched by slow-motion recording. Changing the trim requires a fresh analysis; old unresolved models are reanalyzed from saved observed joints when the page loads.
 
-- Each bone's in-picture part comes from the picture landmarks (the detector's most accurate output), back-projected through a phone lens. The body moves through the frame as it really did.
-- Every bone keeps one length for the whole clip.
-- The detector's depth is re-scaled by one gain per clip. The gain is fitted so rigid bones stay rigid as they rotate, with an errors-in-variables correction so noise does not bias it low.
-- Depth is blended with the geometric depth a known bone length implies (Taylor 2000). Each source is weighted by the error it carries on that clip, measured from the clip's own jitter.
-
-The rebuilt model is stored on the swing (`swing_sessions.pose_model`, flagged `lifted`), so the numbers are always read off the model the page draws. Moving the phases in the viewer re-measures that stored model; nothing is uploaded again.
-
-`lib/golf/pose.ts` does the measuring:
-
-- The player's axes come from the address pose: vertical from the stance, the target line from the feet, toward the ball from where the toes point.
-- Each position is the median over the frames within 50 ms of its phase. Address is averaged over 100 ms into one steady reference.
-- A movement (sway, lift, thrust, head) is measured only when its axis lies within about 35° of the picture. Face-on gives sway and lift; down-the-line gives thrust and lift. The rest stay unmeasured rather than read off depth the camera cannot see.
-
-Phases come from the hand path in the picture, with no club detection:
-
-- **Address** is the hands' lowest early position.
-- **Top** is their highest before they come back down.
-- **Impact** is the bottom of the hand arc, not the first frame "near" address height. Through impact one frame is about 10° of turn at 60 fps.
-
-**Accuracy, checked against a simulated golfer** (`lib/golf/lift.test.ts`, `swing.fixture.ts`). The simulation is a rigid-boned body with a realistic tempo, filmed by a phone at about 2.6 m. The detector is given about 1 cm of picture jitter, 3 cm of depth jitter, depth squashed to 60% and a 5% size error. The results:
-
-- **Perfect detector:** the rebuild is within 3° everywhere.
-- **Down the line:** every turn and bend within 7°.
-- **Face on:** bends within 4° and turns at the top within 9°. Turns at impact are the weakest, within 18°: the shoulder and hip lines sit 30–40° out of the picture there, where one camera is least certain.
-- **Movements the view can see:** within about half an inch.
-- **Zoomed (2×) clips:** read as well as main-lens ones.
-
-For the best numbers, film in slow motion (120 or 240 fps): face-on for sway, down-the-line for turns. The club is not tracked.
-
-**One camera cannot see depth.** It is inferred, so the rotations are the softest numbers here. Pose readings are stored as `source = 'pose'` with confidence capped at 0.8; the database enforces it, along with 0.6 for a model's eyeball estimate and no ceiling for a value a person typed. Precedence runs manual > pose > vision: re-measuring never overwrites a number you typed.
-
-If no body is found — too far away, cropped, filmed through a net — it falls back to sending six frames to the model configured by `ANTHROPIC_API_KEY`, which estimates what it can see and writes up to three findings. That path stores `source = 'vision'`, and with no key it says the frames were not read rather than inventing anything. The diagnostic marks each row `pose` or `est.` and says how many came from where.
-
-Trim is stored on the swing itself, so the same clip range plays on every device you sign in from. **Delete swing** removes the stored video, its measurements and its findings; the file is deleted from storage before the row, so a failure never leaves a paid-for file with nothing pointing at it. Demo clips (no database connected) keep the video blob in IndexedDB on the recording device.
+A single camera cannot reliably establish exact 3D hip/chest rotation, clubface angle, clubhead speed or foot pressure. The app no longer derives capture-style inch/rotation scores or automatic fault labels from inferred depth, and it no longer falls back to guessing numeric measurements from six stills when body tracking fails. Earlier automated scores are hidden from the swing detail page; hand-entered measurements and notes remain available. The video is processed locally; this analysis sends joint coordinates to the player's existing account storage, not frames to an external vision model.
 
 ## Your account
 

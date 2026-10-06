@@ -1,13 +1,13 @@
 "use client";
 
-import { LM, type PoseFrame } from "@/lib/golf/pose";
-import { frameAtTime, visibleHands, visiblePoint } from "@/lib/golf/motion-analysis";
+import type { PoseFrame } from "@/lib/golf/pose";
+import { frameAtTime, motionGeometry, visibleHands, visiblePoint, type MotionView } from "@/lib/golf/motion-analysis";
 
 const BONES: [number, number][] = [
   [11, 12], [11, 13], [13, 15], [12, 14], [14, 16], [11, 23], [12, 24], [23, 24],
   [23, 25], [25, 27], [24, 26], [26, 28], [27, 29], [29, 31], [28, 30], [30, 32],
 ];
-export function BodyOverlay({ frames, time, guide }: { frames: PoseFrame[]; time: number; guide?: PoseFrame }) {
+export function BodyOverlay({ frames, time, guide, view = "other" }: { frames: PoseFrame[]; time: number; guide?: PoseFrame; view?: MotionView }) {
   const frame = frameAtTime(frames, time);
   if (!frame?.imageLandmarks) return null;
   const points = frame.imageLandmarks;
@@ -19,12 +19,14 @@ export function BodyOverlay({ frames, time, guide }: { frames: PoseFrame[]; time
     const a = visibleHands(previous), b = visibleHands(current);
     if (a && b) trails.push({ from: a, to: b, opacity: 0.2 + (1 - (time - current.t) / 0.6) * 0.6 });
   });
-  const guidePoints = guide?.imageLandmarks;
-  const guideHipL = guidePoints?.[LM.leftHip], guideHipR = guidePoints?.[LM.rightHip];
-  const guideHead = guidePoints?.[LM.nose];
+  const geometry = motionGeometry(frames, 1, view);
+  const guideHip = guide ? geometry.hips(guide) : null;
+  const guideShoulder = guide ? geometry.shoulders(guide) : null;
+  const guideHead = guide ? geometry.head(guide) : null;
   return <svg viewBox="0 0 1 1" preserveAspectRatio="none" className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden>
-    {visiblePoint(guideHipL) && visiblePoint(guideHipR) ? <line x1={(guideHipL.x + guideHipR.x) / 2} x2={(guideHipL.x + guideHipR.x) / 2} y1="0" y2="1" stroke="#3fc1a5" strokeWidth="0.003" strokeDasharray="0.012 0.01" opacity="0.6" /> : null}
-    {visiblePoint(guideHead) ? <line x1={guideHead.x} x2={guideHead.x} y1="0" y2="1" stroke="#e6b85c" strokeWidth="0.002" strokeDasharray="0.01 0.012" opacity="0.4" /> : null}
+    {guideHip ? <line x1={guideHip.x} x2={guideHip.x} y1="0" y2="1" stroke="#3fc1a5" strokeWidth="0.003" strokeDasharray="0.012 0.01" opacity="0.6" /> : null}
+    {guideHead ? <line x1={guideHead.x} x2={guideHead.x} y1="0" y2="1" stroke="#e6b85c" strokeWidth="0.002" strokeDasharray="0.01 0.012" opacity="0.4" /> : null}
+    {view === "down_the_line" && guideHip && guideShoulder ? <line x1={guideHip.x} y1={guideHip.y} x2={guideShoulder.x} y2={guideShoulder.y} stroke="#ff7a59" strokeWidth="0.003" strokeDasharray="0.012 0.01" opacity="0.6" /> : null}
     {trails.map((trail, index) => <line key={index} x1={trail.from.x} y1={trail.from.y} x2={trail.to.x} y2={trail.to.y} stroke="#e6b85c" strokeWidth="0.004" opacity={trail.opacity} />)}
     {BONES.map(([from, to]) => {
       const a = points[from], b = points[to];

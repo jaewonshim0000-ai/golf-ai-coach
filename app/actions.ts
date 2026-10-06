@@ -908,6 +908,7 @@ export async function savePoseModelAction(input: {
   /** The video's width over its height; needed to rebuild from the picture. */
   aspect?: number;
   cameraAngle?: MotionView;
+  ballSide?: "left" | "right";
   clip?: [number, number];
   phases?: SwingPhases;
 }): Promise<PoseState> {
@@ -924,6 +925,7 @@ export async function savePoseModelAction(input: {
     aspect: parsed.data.aspect ?? 0,
     view: parsed.data.cameraAngle ?? (session.camera_angle === "face_on" || session.camera_angle === "down_the_line" ? session.camera_angle : "other"),
     clip: parsed.data.clip,
+    ballSide: parsed.data.ballSide,
     phases: parsed.data.phases,
   });
 }
@@ -950,6 +952,7 @@ export async function retimeSwingAction(input: {
     aspect: model.aspect,
     view: model.cameraAngle ?? "other",
     clip: model.clip,
+    ballSide: model.ballSide,
     phases: parsed.data.phases,
   });
 }
@@ -959,7 +962,7 @@ async function storeMotion(
   sessionId: string,
   handedness: "right" | "left",
   frames: PoseFrame[],
-  options: { aspect: number; view: MotionView; phases?: SwingPhases; clip?: [number, number] },
+  options: { aspect: number; view: MotionView; phases?: SwingPhases; clip?: [number, number]; ballSide?: "left" | "right" },
 ): Promise<PoseState> {
   const analysis = analyseMotion(frames, options.aspect, options.view, handedness, options.phases);
   if (analysis.quality.coverage < 0.65 || frames.length < 8 || (options.phases && !analysis.usable)) {
@@ -983,6 +986,7 @@ async function storeMotion(
       ...packFrames(frames),
       aspect: options.aspect,
       cameraAngle: options.view,
+      ballSide: options.ballSide,
       motionVersion: 1,
       phasesConfirmed: Boolean(options.phases),
       timingStatus: options.phases ? "confirmed" : analysis.phases ? "estimated" : "unresolved",
@@ -1000,7 +1004,7 @@ async function storeMotion(
   return {
     ok: true,
     measurements: analysis.readings.length,
-    message: !analysis.phases ? analysis.summary : `Analyzed ${motionCriteria(options.view).filter((criterion) => analysis.readings.some((reading) => reading.id === criterion.id)).length} of 12 video criteria across ${analysis.quality.total} body samples. ${analysis.timing?.topWindow ? "The briefly hidden backswing transition is reported as a range." : "Swing positions were detected automatically."}`,
+    message: !analysis.phases ? analysis.summary : `Analyzed ${motionCriteria(options.view).filter((criterion) => analysis.readings.some((reading) => reading.id === criterion.id)).length} of ${motionCriteria(options.view).length} video criteria across ${analysis.quality.total} body samples. ${analysis.timing?.topWindow ? "The briefly hidden backswing transition is reported as a range." : "Swing positions were detected automatically."}`,
   };
 }
 

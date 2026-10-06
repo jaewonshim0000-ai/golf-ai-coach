@@ -683,6 +683,8 @@ export type PoseModel = {
   /** Original video shape and view for projected movement analysis. */
   aspect?: number;
   cameraAngle?: "face_on" | "down_the_line" | "other";
+  /** Where the ball lies in the displayed DTL video, including mirrored recordings. */
+  ballSide?: "left" | "right";
   motionVersion?: 1;
   phasesConfirmed?: boolean;
   timingStatus?: "unresolved" | "estimated" | "confirmed";

@@ -32,19 +32,46 @@ describe("projected swing movement", () => {
     assert.equal(findMotionPhases(swing().map((frame) => ({ ...frame, imageLandmarks: frame.imageLandmarks?.map((point, index) => index === 15 || index === 16 ? { ...point, y: 0.65 } : point) })), 1), null);
   });
 
-  it("analyzes all twelve visible video criteria automatically in either camera view", () => {
+  it("analyzes the criteria appropriate to the selected camera view", () => {
     for (const view of ["face_on", "down_the_line", "other"] as const) {
       const report = analyseMotion(swing(), 9 / 16, view);
       const criteria = motionCriteria(view);
-      assert.equal(criteria.length, 12);
-      assert.equal(new Set(criteria.map((row) => row.id)).size, 12);
+      const expected = view === "down_the_line" ? 9 : 12;
+      assert.equal(criteria.length, expected);
+      assert.equal(new Set(criteria.map((row) => row.id)).size, expected);
       assert.deepEqual(report.phases, phases);
       assert.equal(report.timing?.source, "hands");
-      assert.equal(criteria.filter((criterion) => report.readings.some((reading) => reading.id === criterion.id)).length, 12);
+      assert.equal(criteria.filter((criterion) => report.readings.some((reading) => reading.id === criterion.id)).length, expected);
       assert.ok(report.readings.every((reading) => describeMotionReading(reading, report).length > 20));
-      assert.equal(report.readings.find((reading) => reading.id === "shoulders_address")?.value, 0);
+      assert.equal(report.readings.find((reading) => reading.id === "shoulders_address")?.value, view === "down_the_line" ? undefined : 0);
       if (view !== "face_on") assert.equal(report.readings.find((reading) => reading.id === "head_impact")?.unit, "% body height");
     }
+  });
+
+  it("tracks a down-the-line clip with only one visible body side without drawing hidden joints", () => {
+    const frames = swing();
+    for (const frame of frames) for (const joint of [12, 14, 16, 24, 26, 28]) frame.imageLandmarks![joint]!.visibility = 0.1;
+    const before = structuredClone(frames);
+    const report = analyseMotion(frames, 9 / 16, "down_the_line");
+    assert.deepEqual(report.phases, phases);
+    assert.equal(report.usable, true);
+    assert.equal(report.quality.coverage, 1);
+    assert.equal(report.quality.cameraStable, true);
+    assert.equal(motionCriteria("down_the_line").filter((row) => report.readings.some((reading) => reading.id === row.id)).length, 9);
+    assert.equal(report.readings.some((reading) => reading.id.startsWith("shoulders_")), false);
+    assert.equal(analyseMotion(frames, 9 / 16, "face_on").usable, false);
+    assert.deepEqual(frames, before);
+  });
+
+  it("does not silently switch body sides or head landmarks across profile occlusions", () => {
+    const frames = swing();
+    for (const frame of frames) for (const joint of [12, 24, 28]) frame.imageLandmarks![joint]!.visibility = 0.1;
+    frames[8]!.imageLandmarks![23]!.visibility = 0.1;
+    const report = analyseMotion(frames, 1, "down_the_line", "right", phases);
+    assert.equal(report.readings.some((row) => row.id === "hips_impact"), false);
+    assert.equal(report.readings.some((row) => row.id === "torso_impact"), false);
+    for (const frame of frames) frame.imageLandmarks![0]!.visibility = 0.1;
+    assert.equal(analyseMotion(frames, 1, "down_the_line", "right", phases).readings.some((row) => row.id === "head_impact"), true);
   });
 
   it("brackets a short hidden transition and measures visible body ranges without inventing a wrist", () => {

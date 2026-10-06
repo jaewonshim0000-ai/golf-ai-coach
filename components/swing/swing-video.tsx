@@ -62,9 +62,10 @@ export function SwingVideo({
   const [aspect, setAspect] = useState(3 / 4);
   const [overlay, setOverlay] = useState(true);
   const [view, setView] = useState<MotionView>(model?.cameraAngle ?? cameraAngle);
+  const [ballSide, setBallSide] = useState<"left" | "right" | "">(model?.ballSide ?? "");
   const savedModel = model?.motionVersion === 1 && model.imageFrames ? model : null;
-  const tracked = useMemo(() => savedModel ? trustworthyFrames(unpackFrames(savedModel), savedModel.aspect ?? aspect) : [], [model, aspect]);
-  const phases = useMemo(() => savedModel?.phasesConfirmed ? savedModel.phases : findAutomaticTiming(tracked, savedModel?.aspect ?? aspect)?.phases, [model, tracked, aspect]);
+  const tracked = useMemo(() => savedModel ? trustworthyFrames(unpackFrames(savedModel), savedModel.aspect ?? aspect, savedModel.cameraAngle ?? "other") : [], [model, aspect]);
+  const phases = useMemo(() => savedModel?.phasesConfirmed ? savedModel.phases : findAutomaticTiming(tracked, savedModel?.aspect ?? aspect, savedModel?.cameraAngle ?? "other")?.phases, [model, tracked, aspect]);
   /*
     Reading frames off the canvas needs a cross-origin-enabled element, but a
     host that does not send the matching header will refuse to play at all
@@ -139,7 +140,7 @@ export function SwingVideo({
       if (!element.videoWidth || !element.videoHeight) throw new Error("The video has not loaded yet.");
       const span: [number, number] = end > start ? [start, end] : [0, element.duration];
       const posed = await readSwing(element, span[0], span[1], (done, total) =>
-        setProgress("Tracking visible joints: " + Math.min(100, Math.round(done / total * 100)) + "%"),
+        setProgress("Tracking visible joints: " + Math.min(100, Math.round(done / total * 100)) + "%"), view,
       );
       if (posed.length < 8) throw new Error("Too few clear body frames. Trim to one complete swing, keep the whole body visible, and use a brighter clip.");
       setProgress("Checking tracking and visible movement");
@@ -148,6 +149,7 @@ export function SwingVideo({
         ...packFrames(posed),
         aspect: element.videoWidth / element.videoHeight,
         cameraAngle: view,
+        ballSide: view === "down_the_line" && ballSide ? ballSide : undefined,
         clip: span,
       });
       setAnalysis(saved);
@@ -200,6 +202,7 @@ export function SwingVideo({
     <div className="space-y-2.5">
       <div className={cn("relative overflow-hidden rounded-2xl bg-black", className)} style={{ aspectRatio: aspect }}>
       <video
+        data-swing-player
         ref={video}
         src={src}
         crossOrigin={crossOrigin ? "anonymous" : undefined}
@@ -233,7 +236,7 @@ export function SwingVideo({
         }}
         onSeeked={(event) => setTime(event.currentTarget.currentTime)}
       />
-      {trackedModel && tracked.length > 0 && overlay && !analysing ? <BodyOverlay frames={tracked} time={time} guide={phases ? tracked[phases.address] : undefined} /> : null}
+      {trackedModel && tracked.length > 0 && overlay && !analysing ? <BodyOverlay frames={tracked} time={time} guide={phases ? tracked[phases.address] : undefined} view={trackedModel.cameraAngle ?? "other"} /> : null}
       {analysing ? <div role="status" className="pointer-events-none absolute inset-x-3 bottom-3 rounded-lg bg-black/75 px-3 py-2 text-center text-[12px] text-white">{progress}</div> : null}
       </div>
       {trackedModel ? <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-fg-muted">
@@ -295,6 +298,16 @@ export function SwingVideo({
               <option value="other">Other / unsure</option>
             </select>
           </label>
+          {view === "down_the_line" ? <div className="mt-3 space-y-3">
+            <label className="block text-[11px] text-fg-muted">In this video, the ball is on which side of your body?
+              <select aria-label="Ball side in the video" value={ballSide} disabled={analysing} onChange={(event) => setBallSide(event.target.value as "left" | "right" | "")} className="mt-1.5 w-full rounded-lg border border-border bg-surface px-3 py-2 text-[12px]">
+                <option value="">Select to score hip space</option><option value="left">Screen left</option><option value="right">Screen right</option>
+              </select>
+            </label>
+            <p className="text-[11px] leading-relaxed text-fg-muted">Place the camera behind your hands at address, at hand height, looking parallel to the target line. Keep the phone level and fixed, with your feet, head and full swing in view. Use good light and 60 fps or higher when available.</p>
+            <p className="text-[10.5px] leading-relaxed text-fg-subtle">We track the visible body side and compare posture and hip space to setup. This view cannot establish exact club path or clubface angle from body tracking alone. Choose the ball side as displayed, including mirrored videos.</p>
+          </div> : view === "face_on" ? <p className="mt-3 text-[11px] leading-relaxed text-fg-muted">Place the camera directly opposite your hands, perpendicular to the target line. Keep it fixed and level with both feet, hips, shoulders and your whole swing visible.</p> : null}
+          {savedModel && (view !== savedModel.cameraAngle || (view === "down_the_line" && ballSide !== (savedModel.ballSide ?? ""))) ? <p className="mt-2 text-[11px] text-fg-muted">Analyze again to save the selected view and ball side and update your score.</p> : null}
         </div>
       ) : null}
 

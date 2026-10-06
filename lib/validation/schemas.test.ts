@@ -32,6 +32,9 @@ describe("3D swing model validation", () => {
 
   it("accepts a skeleton per frame", () => {
     assert.equal(poseModelSchema.safeParse(model([frame(), frame(), frame()])).success, true);
+    const profile = { ...model([frame(), frame(), frame()]), cameraAngle: "down_the_line", ballSide: "left" };
+    assert.equal(poseModelSchema.parse(profile).ballSide, "left");
+    assert.equal(poseModelSchema.safeParse({ ...profile, ballSide: "guess" }).success, false);
     assert.equal(
       poseModelSchema.safeParse({ ...model([frame(), frame(), frame()]), imageFrames: [frame(), frame(), frame()] }).success,
       true,

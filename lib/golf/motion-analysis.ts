@@ -37,8 +37,29 @@ export function visibleHands(frame: PoseFrame, aspect = 1): Point | null {
 }
 const hands = visibleHands;
 
+/** Use one consistent visible side for a profile clip; never substitute hidden joints. */
+export function motionGeometry(frames: PoseFrame[], aspect: number, view: MotionView) {
+  const sides = [[LM.leftShoulder, LM.leftHip, LM.leftAnkle], [LM.rightShoulder, LM.rightHip, LM.rightAnkle]];
+  const counts = sides.map((side) => frames.filter((frame) => side.every((joint) => visiblePoint(frame.imageLandmarks?.[joint]))).length);
+  const side = sides[counts[1]! > counts[0]! ? 1 : 0]!;
+  const profile = view === "down_the_line";
+  // Pick one head landmark for the whole clip, so an ear never becomes a nose mid-swing.
+  const headJoint = profile ? [LM.nose, 7, 8].sort((a, b) =>
+    frames.filter((frame) => visiblePoint(frame.imageLandmarks?.[b])).length -
+    frames.filter((frame) => visiblePoint(frame.imageLandmarks?.[a])).length)[0]! : LM.nose;
+  return {
+    side,
+    visibleBody: (frame: PoseFrame) => (profile ? side : CORE).every((joint) => visiblePoint(frame.imageLandmarks?.[joint])),
+    hips: (frame: PoseFrame, scale = aspect) => profile ? at(frame, side[1]!, scale) : hips(frame, scale),
+    shoulders: (frame: PoseFrame, scale = aspect) => profile ? at(frame, side[0]!, scale) : shoulders(frame, scale),
+    feet: (frame: PoseFrame, scale = aspect) => profile ? at(frame, side[2]!, scale) : feet(frame, scale),
+    head: (frame: PoseFrame) => at(frame, headJoint, aspect),
+  };
+}
+
 /** Reject isolated body jumps rather than smooth them into plausible movement. */
-export function trustworthyFrames(frames: PoseFrame[], aspect: number): PoseFrame[] {
+export function trustworthyFrames(frames: PoseFrame[], aspect: number, view: MotionView = "other"): PoseFrame[] {
+  const { hips, shoulders } = motionGeometry(frames, aspect, view);
   return frames.map((frame, index) => {
     const before = frames[index - 1], after = frames[index + 1];
     const current = hips(frame, aspect);
@@ -53,7 +74,8 @@ export function trustworthyFrames(frames: PoseFrame[], aspect: number): PoseFram
 }
 
 /** One complete visible hand arc. Never fill in impact for a truncated clip. */
-export function findMotionPhases(frames: PoseFrame[], aspect = 1): SwingPhases | null {
+export function findMotionPhases(frames: PoseFrame[], aspect = 1, view: MotionView = "other"): SwingPhases | null {
+  const { hips, shoulders, feet } = motionGeometry(frames, aspect, view);
   if (frames.length < 8) return null;
   const body = median(frames.flatMap((frame) => {
     const s = shoulders(frame, aspect), f = feet(frame, aspect);
@@ -132,9 +154,10 @@ export type MotionTiming = {
  * return through the bottom into follow-through. Measure the visible body
  * across that interval; do not claim to have seen the hidden hand at the top.
  */
-export function findAutomaticTiming(frames: PoseFrame[], aspect = 1): { phases: SwingPhases; timing: MotionTiming } | null {
+export function findAutomaticTiming(frames: PoseFrame[], aspect = 1, view: MotionView = "other"): { phases: SwingPhases; timing: MotionTiming } | null {
+  const { hips, shoulders, feet, visibleBody } = motionGeometry(frames, aspect, view);
   if (frames.length < 8 || !(aspect > 0)) return null;
-  const direct = findMotionPhases(frames, aspect);
+  const direct = findMotionPhases(frames, aspect, view);
   if (direct) return { phases: direct, timing: { source: "hands", uncertainty: 0 } };
   const body = median(frames.flatMap((frame) => {
     const s = shoulders(frame, aspect), f = feet(frame, aspect);
@@ -155,7 +178,7 @@ export function findAutomaticTiming(frames: PoseFrame[], aspect = 1): { phases: 
     if (!rise || fall.t - after.t > 0.101 ||
         before.y >= rise.y - 0.015 || fall.y <= after.y + 0.025) continue;
     const hidden = frames.slice(before.index + 1, after.index);
-    if (!hidden.length || !hidden.every((frame, n) => CORE.every((joint) => visiblePoint(frame.imageLandmarks?.[joint])) &&
+    if (!hidden.length || !hidden.every((frame, n) => visibleBody(frame) &&
         frame.t - frames[before.index + n]!.t <= 0.101)) continue;
     const setup = observed.slice(0, index);
     const baseline = median(setup.slice(0, Math.max(2, Math.floor(setup.length / 3))).map((point) => point.y));
@@ -196,6 +219,7 @@ export type MotionReading = {
   range?: [number, number];
 };
 export type MotionReport = {
+  view: MotionView;
   usable: boolean;
   phases: SwingPhases | null;
   timing: MotionTiming | null;
@@ -210,7 +234,7 @@ export type MotionReport = {
 export function motionCriteria(view: MotionView) {
   return (["address", "top", "impact"] as const).flatMap((phase) => [
     { id: `torso_${phase}`, label: "Torso inclination", phase },
-    { id: `shoulders_${phase}`, label: "Shoulder line tilt", phase },
+    ...(view === "down_the_line" ? [] : [{ id: `shoulders_${phase}`, label: "Shoulder line tilt", phase }]),
     ...(phase === "address" ? [] : [
       { id: `lift_${phase}`, label: "Hip height change", phase },
       { id: `hips_${phase}`, label: view === "face_on" ? "Hip shift along target" : "Hip movement across picture", phase },
@@ -222,6 +246,7 @@ export function motionCriteria(view: MotionView) {
 /** Interpret observed geometry against the player's setup, without ideal bands. */
 export function describeMotionReading(reading: MotionReading, report: MotionReport): string {
   const kind = reading.id.split("_")[0];
+  const hipLabel = report.view === "down_the_line" ? "tracked hip" : "hip centre";
   const amount = Math.abs(reading.value);
   const baseline = report.readings.find((row) => row.id === `${kind}_address`);
   if (reading.range) {
@@ -229,10 +254,10 @@ export function describeMotionReading(reading: MotionReading, report: MotionRepo
     const span = `${Math.min(Math.abs(low), Math.abs(high))} to ${Math.max(Math.abs(low), Math.abs(high))}`;
     if (kind === "torso") return `Torso inclination ranges from ${low}° to ${high}° across the estimated transition${baseline ? `, compared with ${baseline.value}° at address` : ""}. Body rotation also affects this camera view.`;
     if (kind === "shoulders") return `Shoulder-line tilt ranges from ${low}° to ${high}° across the transition${baseline ? `; setup was ${baseline.value}°` : ""}. Positive means the lead shoulder is higher, negative means lower.`;
-    if (kind === "lift" && low * high >= 0) return `The hip centre sits ${span}% of visible body height ${high <= 0 ? "lower" : "higher"} than at address across the transition.`;
+    if (kind === "lift" && low * high >= 0) return `The ${hipLabel} sits ${span}% of visible body height ${high <= 0 ? "lower" : "higher"} than at address across the transition.`;
     if (kind === "lift") return "Hip height crosses its address level during the transition. Negative is lower than setup; positive is higher.";
     if (kind === "hips" || kind === "head") {
-      const part = kind === "hips" ? "hip centre" : "head";
+      const part = kind === "hips" ? hipLabel : "head";
       if (low < 0 && high > 0) return `The ${part} crosses its address position during the estimated transition. ${reading.unit === "% stance" ? "Negative is toward the trail foot; positive is toward the lead foot." : "Negative is screen left; positive is screen right."}`;
       return reading.unit === "% stance" ? `The ${part} moves ${span}% of stance width toward the ${high <= 0 ? "trail" : "lead"} foot from address across the transition.` : `The ${part} moves ${span}% of visible body height to screen ${high <= 0 ? "left" : "right"} from address across the transition.`;
     }
@@ -243,11 +268,11 @@ export function describeMotionReading(reading: MotionReading, report: MotionRepo
     return `The visible torso is ${Math.abs(change)}° ${change >= 0 ? "more inclined" : "closer to vertical"} than at address (${baseline.value}°). Body rotation also affects this camera view.`;
   }
   if (kind === "shoulders") return `The lead shoulder is ${reading.value >= 0 ? "higher" : "lower"} than the trail shoulder in the picture. The shoulder line slopes by ${amount}°${baseline && reading.phase !== "address" ? `, compared with ${baseline.value}° at address` : " at setup"}.`;
-  if (kind === "lift") return `The hip centre sits ${amount}% of visible body height ${reading.value >= 0 ? "higher" : "lower"} than at address.`;
+  if (kind === "lift") return `The ${hipLabel} sits ${amount}% of visible body height ${reading.value >= 0 ? "higher" : "lower"} than at address.`;
   if ((kind === "hips" || kind === "head") && reading.unit === "% stance") {
     return `The ${kind === "hips" ? "hip centre" : "head"} moved ${amount}% of stance width toward the ${reading.value >= 0 ? "lead" : "trail"} foot from address${kind === "hips" ? ". This shows position, not foot pressure" : ""}.`;
   }
-  if (kind === "hips" || kind === "head") return `The ${kind === "hips" ? "hip centre" : "head"} moved ${amount}% of visible body height to screen ${reading.value >= 0 ? "right" : "left"} from address. Use the overlay to relate this direction to the ball.`;
+  if (kind === "hips" || kind === "head") return `The ${kind === "hips" ? hipLabel : "head"} moved ${amount}% of visible body height to screen ${reading.value >= 0 ? "right" : "left"} from address. Use the overlay to relate this direction to the ball.`;
   return reading.note;
 }
 
@@ -255,13 +280,14 @@ export function describeMotionReading(reading: MotionReading, report: MotionRepo
 export function analyseMotion(
   input: PoseFrame[], aspect: number, view: MotionView, handedness: "right" | "left" = "right", override?: SwingPhases | null,
 ): MotionReport {
-  const frames = trustworthyFrames(input, aspect);
-  const visible = frames.filter((frame) => CORE.every((joint) => visiblePoint(frame.imageLandmarks?.[joint]))).length;
+  const frames = trustworthyFrames(input, aspect, view);
+  const { hips, shoulders, feet, head, visibleBody } = motionGeometry(frames, aspect, view);
+  const visible = frames.filter(visibleBody).length;
   const coverage = frames.length ? visible / frames.length : 0;
-  const automatic = override === undefined ? findAutomaticTiming(frames, aspect) : null;
+  const automatic = override === undefined ? findAutomaticTiming(frames, aspect, view) : null;
   const phases = override === undefined ? automatic?.phases ?? null : override;
   const report: MotionReport = {
-    usable: false, phases, timing: override ? { source: "marked", uncertainty: 0 } : automatic?.timing ?? null,
+    view, usable: false, phases, timing: override ? { source: "marked", uncertainty: 0 } : automatic?.timing ?? null,
     quality: { visible, total: frames.length, coverage, cameraStable: false, largestGap: 0 },
     readings: [], observations: [], warnings: [], tempo: null,
     summary: "A complete swing with clearly visible shoulders, hips and hands is needed. Trim to one swing and keep the whole body in view.",
@@ -274,8 +300,8 @@ export function analyseMotion(
   const address = frames[phases.address]!;
   const window = frames.slice(phases.address, phases.impact + 1);
   const body = median(window.flatMap((frame) => {
-    const head = at(frame, LM.nose, aspect), foot = feet(frame, aspect);
-    return head && foot ? [Math.abs(foot.y - head.y)] : [];
+    const h = head(frame), foot = feet(frame, aspect);
+    return h && foot ? [Math.abs(foot.y - h.y)] : [];
   }));
   if (!body || body < 0.1) return report;
   const gaps = window.slice(1).map((frame, index) => frame.t - window[index]!.t);
@@ -304,7 +330,7 @@ export function analyseMotion(
   const leftFoot = at(address, LM.leftAnkle, aspect), rightFoot = at(address, LM.rightAnkle, aspect);
   const stance = leftFoot && rightFoot ? Math.abs(leftFoot.x - rightFoot.x) : 0;
   const direction = leftFoot && rightFoot ? Math.sign((handedness === "right" ? leftFoot.x - rightFoot.x : rightFoot.x - leftFoot.x)) : 0;
-  const referenceHip = hips(address, aspect), referenceHead = at(address, LM.nose, aspect);
+  const referenceHip = hips(address, aspect), referenceHead = head(address);
   function record(id: string, label: string, phase: keyof SwingPhases, value: number | null, unit: MotionReading["unit"], note: string) {
     if (value !== null && Number.isFinite(value)) report.readings.push({ id, label, phase, value: rounded(value), unit, note, time: frames[phases![phase]]!.t });
   }
@@ -324,7 +350,7 @@ export function analyseMotion(
       return h && s && distance(h, s) > body * 0.1 ? Math.atan2(Math.abs(s.x - h.x), h.y - s.y) * 180 / Math.PI : null;
     },
     "° in picture", "Angle to vertical in this camera view. This is not a 3D spine bend or rotation.");
-    observed(`shoulders_${phase}`, "Shoulder line tilt", phase, (sample) => {
+    if (view !== "down_the_line") observed(`shoulders_${phase}`, "Shoulder line tilt", phase, (sample) => {
       const l = at(sample, leadShoulder, aspect), r = at(sample, lead === "left" ? LM.rightShoulder : LM.leftShoulder, aspect);
       return l && r && Math.abs(l.x - r.x) > body * 0.04 ? Math.atan2(r.y - l.y, Math.abs(r.x - l.x)) * 180 / Math.PI : null;
     }, "° in picture", "Positive means the lead shoulder is higher in the picture; negative means lower. This describes tilt, not chest rotation.");
@@ -335,7 +361,7 @@ export function analyseMotion(
     "° in picture", "Projected shoulder–elbow–wrist angle; a limb pointing at the camera can appear shorter or more bent.");
     if (phase === "address" || !report.quality.cameraStable) continue;
     observed(`lift_${phase}`, "Hip height change", phase, (sample) => { const h = hips(sample, aspect); return h && referenceHip ? (referenceHip.y - h.y) / body * 100 : null; },
-      "% body height", "Positive means higher than address. Scaled to nose-to-ankle height in the picture, not inches.");
+      "% body height", "Positive means higher than address. Scaled to visible head-to-ankle height in the picture, not inches.");
     if (view === "face_on" && stance > body * 0.12 && direction) {
       observed(`hips_${phase}`, "Hip shift along target", phase, (sample) => { const h = hips(sample, aspect); return h && referenceHip ? (h.x - referenceHip.x) * direction / stance * 100 : null; },
         "% stance", "Positive is toward the lead foot; negative is toward the trail foot. Position cannot measure weight or pressure.");
@@ -344,7 +370,7 @@ export function analyseMotion(
     } else {
       observed(`hips_${phase}`, "Hip movement across picture", phase, (sample) => { const h = hips(sample, aspect); return h && referenceHip ? (h.x - referenceHip.x) / body * 100 : null; },
         "% body height", "Positive is screen right, negative is screen left. Check the overlay to see which direction faces the ball.");
-      observed(`head_${phase}`, "Head movement across picture", phase, (sample) => { const h = at(sample, LM.nose, aspect); return h && referenceHead ? (h.x - referenceHead.x) / body * 100 : null; },
+      observed(`head_${phase}`, "Head movement across picture", phase, (sample) => { const h = head(sample); return h && referenceHead ? (h.x - referenceHead.x) / body * 100 : null; },
         "% body height", "Head position relative to address. Positive is screen right, negative is screen left.");
     }
   }
@@ -362,11 +388,11 @@ export function analyseMotion(
   const hip = report.readings.find((reading) => reading.id === "hips_impact");
   if (hip) report.observations.push({ title: "Hip movement", detail: view === "face_on" ?
     `At the impact marker, the hip centre is ${Math.abs(hip.value)}% of stance width ${hip.value < 0 ? "toward the trail foot" : "toward the lead foot"} from address. Compare the green hip line with the dashed address guide; this does not establish pressure transfer or a swing fault.` :
-    `At the impact marker, the hip centre moved ${Math.abs(hip.value)}% of visible body height to screen ${hip.value < 0 ? "left" : "right"}. Compare the green hip line against address to review whether the body moved toward the ball.` });
+    `At the impact marker, the ${view === "down_the_line" ? "tracked hip" : "hip centre"} moved ${Math.abs(hip.value)}% of visible body height to screen ${hip.value < 0 ? "left" : "right"}. Compare the green hip guide against address to review whether the body moved toward the ball.` });
   const torsoAddress = report.readings.find((reading) => reading.id === "torso_address"), torsoImpact = report.readings.find((reading) => reading.id === "torso_impact");
   if (torsoAddress && torsoImpact) report.observations.push({ title: "Posture through the swing", detail: `Torso inclination in the picture changes from ${torsoAddress.value}° at address to ${torsoImpact.value}° at the impact marker. Review the orange shoulder line and green hips together. Turning changes this projected angle, so it is not a diagnosis of early extension.` });
   report.usable = report.readings.length > 0;
-  report.summary = report.usable ? `Analyzed visible posture, shoulder tilt and body movement across ${frames.length} samples. ${override ? "Using the previously saved swing positions." : "Swing positions are detected automatically."} Angles describe the picture, and movement is compared with your own address position.` : report.summary;
+  report.summary = report.usable ? `Analyzed ${view === "down_the_line" ? "visible side posture and body movement" : "visible posture, shoulder tilt and body movement"} across ${frames.length} samples. ${override ? "Using the previously saved swing positions." : "Swing positions are detected automatically."} Movement is compared with your own address position.` : report.summary;
   return report;
 }
 

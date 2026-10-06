@@ -1,8 +1,11 @@
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@/components/ui/primitives";
 import { PHASE_LABELS } from "@/lib/golf/swing-metrics";
 import { describeMotionReading, motionCriteria, type MotionReading, type MotionReport, type MotionView } from "@/lib/golf/motion-analysis";
+import { scoreSwing } from "@/lib/golf/swing-score";
+import { SwingSeekButton } from "./seek-button";
 
-export function SwingMotionSummary({ report }: { report: MotionReport }) {
+export function SwingMotionSummary({ report, ballSide }: { report: MotionReport; ballSide?: "left" | "right" }) {
+  const score = scoreSwing(report, ballSide);
   return <Card>
     <CardHeader className="gap-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -12,6 +15,31 @@ export function SwingMotionSummary({ report }: { report: MotionReport }) {
       <p className="text-[12px] leading-relaxed text-fg-muted">{report.summary}</p>
     </CardHeader>
     <CardContent className="space-y-3">
+      <div className="rounded-xl border border-border bg-surface-2 p-4">
+        <p className="text-[12px] font-semibold">Overall swing score · {report.view === "down_the_line" ? "Down the line" : report.view === "face_on" ? "Face on" : "Choose a view"}</p>
+        <p className="tabular mt-2 text-[38px] font-semibold leading-none text-accent">{score.total === null ? "Awaiting clear video" : <>{score.total}<span className="text-[16px] text-fg-muted"> / 100</span></>}</p>
+        <p className="mt-2 text-[12px] leading-relaxed text-fg-muted">{score.reason ?? `${score.components.length} of 3 movement checks scored${score.missing.length ? " · partial score" : ""}. ${score.priorities.length ? "Start with the biggest opportunity below." : "These checks look controlled. Keep working on centered contact and confirm with another recording."}`}</p>
+        <p className="mt-2 text-[11px] leading-relaxed text-fg-subtle">A coaching estimate of visible movement, not a validated rating of technique or ball flight. Compare recordings from the same view and camera position.</p>
+      </div>
+      {score.components.length ? <div className="grid gap-2 sm:grid-cols-3">{score.components.map((item) => <div key={item.id} className="rounded-lg border border-border p-3">
+        <p className="text-[11px] text-fg-muted">{item.label}</p><p className="tabular mt-1 text-[20px] font-semibold">{item.score}<span className="text-[11px] text-fg-subtle"> / 100</span></p>
+      </div>)}</div> : null}
+      {score.priorities.length ? <div className="space-y-3 border-t border-border pt-3">
+        <h3 className="text-[14px] font-semibold">Where to improve</h3>
+        {score.priorities.map((item, index) => <div key={item.id} className="rounded-xl border border-border p-3">
+          <p className="text-[13px] font-semibold">{index + 1}. {item.label}</p>
+          <p className="mt-1 text-[12px] leading-relaxed text-fg-muted">{item.evidence}</p>
+          <p className="mt-2 text-[12px] leading-relaxed"><span className="font-semibold">Try this: </span>{item.cue}</p>
+          <p className="mt-2 text-[11px] leading-relaxed text-fg-muted"><span className="font-semibold">Check the change: </span>{item.check}</p>
+          <SwingSeekButton time={item.time} />
+        </div>)}
+      </div> : null}
+      {score.missing.length ? <div className="rounded-lg bg-info-soft p-3"><p className="text-[12px] font-semibold">Checks still needed</p><ul className="mt-2 space-y-1">{score.missing.map((message) => <li key={message} className="text-[11px] leading-relaxed text-fg-muted">{message}</li>)}</ul></div> : null}
+      {score.components.length ? <details className="text-[11px] leading-relaxed text-fg-subtle"><summary className="min-h-8 cursor-pointer">How the score is calculated</summary>
+        <p>Version 1 uses broad, adjustable coaching thresholds. Each check scores 0–100; the overall score is the weighted mean of available checks. At least two checks covering 70% of the planned weight are required. Tracking quality only determines whether we can score.</p>
+        {score.components.map((item) => <p key={item.id} className="mt-2"><span className="font-semibold">{item.label}: </span>{item.rubric}</p>)}
+        <p className="mt-2">Normal movement varies between players. These thresholds need validation with coach-reviewed clips; a high score does not establish clubface control, swing plane, speed, pressure transfer or a good strike.</p>
+      </details> : null}
       <div className="flex flex-wrap gap-2">
         <Badge tone={report.quality.coverage >= 0.85 ? "good" : "warn"}>Body visible: {Math.round(report.quality.coverage * 100)}%</Badge>
         <Badge tone="neutral">{report.phases ? report.timing?.source === "marked" ? "Video analysis" : "Automatic analysis" : "Complete swing needed"}</Badge>
@@ -74,7 +102,7 @@ export function SwingMotionReport({ report, view = "other" }: { report: MotionRe
         </CardContent>
       </Card>;
     })}
-    <p className="text-[11px] leading-relaxed text-fg-subtle">Video criteria describe movement rather than grade it against 3D reference bands. Exact chest/hip rotation, distances in inches and foot pressure cannot be established from this single view.</p>
+    <p className="text-[11px] leading-relaxed text-fg-subtle">{view === "down_the_line" ? "Down-the-line readings use one consistently visible shoulder, hip and ankle. Shoulder-line tilt is omitted because the shoulders overlap in this view. " : ""}Exact chest/hip rotation, distances in inches and foot pressure cannot be established from this single view.</p>
   </div>;
 }
 

@@ -219,6 +219,7 @@ export const poseModelSchema = z
     // Width over height of the video; phone clips run from 9:16 to 16:9.
     aspect: z.number().finite().min(0.3).max(3.5).optional(),
     cameraAngle: z.enum(["face_on", "down_the_line", "other"]).optional(),
+    ballSide: z.enum(["left", "right"]).optional(),
     clip: z.tuple([z.number().finite().min(0).max(3600), z.number().finite().min(0).max(3600)]).optional(),
     phases: z
       .object({

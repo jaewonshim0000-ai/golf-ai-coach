@@ -1,7 +1,7 @@
 "use client";
 
 import { LM, type Landmark, type PoseFrame } from "./golf/pose";
-import { findAutomaticTiming, visiblePoint } from "./golf/motion-analysis";
+import { findAutomaticTiming, visiblePoint, type MotionView } from "./golf/motion-analysis";
 
 /**
  * Running the pose detector over a swing, in the browser.
@@ -141,19 +141,23 @@ function seek(video: FrameCallbackVideo, time: number): Promise<number> {
 export type PoseProgress = (done: number, total: number) => void;
 
 /** Stay with the same visible body when a coach or spectator is in the shot. */
-export function selectTrackedPose(poses: Landmark[][], previous?: Landmark[]): number {
+export function selectTrackedPose(poses: Landmark[][], previous?: Landmark[], view: MotionView = "other"): number {
   const centre = (points: Landmark[]) => {
     const left = points[LM.leftHip], right = points[LM.rightHip];
-    return visiblePoint(left) && visiblePoint(right) ? { x: (left.x + right.x) / 2, y: (left.y + right.y) / 2 } : null;
+    if (visiblePoint(left) && visiblePoint(right)) return { x: (left.x + right.x) / 2, y: (left.y + right.y) / 2 };
+    return view === "down_the_line" ? visiblePoint(left) ? left : visiblePoint(right) ? right : null : null;
   };
   const prior = previous ? centre(previous) : null;
   let picked = -1, best = -Infinity;
   poses.forEach((points, index) => {
     const core = [LM.leftShoulder, LM.rightShoulder, LM.leftHip, LM.rightHip];
     const body = core.map((joint) => points[joint]);
-    if (!body.every(visiblePoint)) return;
-    const location = centre(points)!;
-    const height = Math.abs((points[LM.leftAnkle]?.y ?? location.y + 0.15) - points[LM.leftShoulder]!.y);
+    const profileSide = [[11, 23, 27], [12, 24, 28]].find((side) => side.every((joint) => visiblePoint(points[joint])));
+    if (view === "down_the_line" ? !profileSide : !body.every(visiblePoint)) return;
+    const location = centre(points);
+    if (!location) return;
+    const height = view === "down_the_line" ? Math.abs(points[profileSide![2]!]!.y - points[profileSide![0]!]!.y) :
+      Math.abs((points[LM.leftAnkle]?.y ?? location.y + 0.15) - points[LM.leftShoulder]!.y);
     const separation = prior ? Math.hypot(location.x - prior.x, location.y - prior.y) : 0;
     if (prior && separation > Math.max(0.12, height * 0.45)) return;
     const score = prior ? -separation : height - Math.abs(location.x - 0.5) * 0.2;
@@ -172,6 +176,7 @@ export async function readSwing(
   from: number,
   to: number,
   onProgress?: PoseProgress,
+  view: MotionView = "other",
 ): Promise<PoseFrame[]> {
   const landmarker = await loadLandmarker();
   const span = to > from ? to - from : video.duration;
@@ -195,7 +200,7 @@ export async function readSwing(
     const result = landmarker.detect(video);
     const nearest = frames.reduce<PoseFrame | null>((best, frame) =>
       !best || Math.abs(frame.t - t) < Math.abs(best.t - t) ? frame : best, null);
-    const selected = selectTrackedPose(result.landmarks, nearest?.imageLandmarks ?? previous);
+    const selected = selectTrackedPose(result.landmarks, nearest?.imageLandmarks ?? previous, view);
     if (selected < 0) return;
     const landmarks = result.worldLandmarks?.[selected];
     const imageLandmarks = result.landmarks?.[selected];
@@ -224,7 +229,7 @@ export async function readSwing(
       real frame rate. This improves temporal coverage without inventing frames
       or claiming the hand-arc minimum establishes exact ball contact.
     */
-    const found = findAutomaticTiming([...frames].sort((a, b) => a.t - b.t), video.videoWidth / video.videoHeight)?.phases;
+    const found = findAutomaticTiming([...frames].sort((a, b) => a.t - b.t), video.videoWidth / video.videoHeight, view)?.phases;
     if (found) {
       const ordered = [...frames].sort((a, b) => a.t - b.t);
       const from = Math.max(start, ordered[found.top]!.t - 0.05);

@@ -6,7 +6,7 @@ import { SwingDiagnostic } from "@/components/swing/diagnostic";
 import { MeasurementForm } from "@/components/swing/measurement-form";
 import { SwingVideo } from "@/components/swing/swing-video";
 import { SwingMotionReport, SwingMotionSummary } from "@/components/swing/motion-report";
-import { analyseMotion } from "@/lib/golf/motion-analysis";
+import { analyseMotion, motionCriteria } from "@/lib/golf/motion-analysis";
 import { unpackFrames } from "@/lib/golf/pose";
 import { DeleteSwingButton } from "@/components/swing/delete-swing";
 import {
@@ -49,6 +49,7 @@ export default async function SwingPage({ params }: { params: Promise<{ id: stri
     (Math.abs(model.clip[0] - (session.clip_start ?? 0)) > 0.1 || (session.clip_end !== null && Math.abs(model.clip[1] - session.clip_end) > 0.1)));
   const motion = !trimChanged && model?.motionVersion === 1 && model.imageFrames && model.aspect ?
     analyseMotion(unpackFrames(model), model.aspect, model.cameraAngle ?? "other", model.handedness, model.phasesConfirmed ? model.phases : undefined) : null;
+  const view = model?.cameraAngle ?? (session.camera_angle === "face_on" || session.camera_angle === "down_the_line" ? session.camera_angle : "other");
   const diagnostic = diagnoseSwing(measurements);
 
   const worst = diagnostic.outOfRange[0] ?? null;
@@ -63,7 +64,7 @@ export default async function SwingPage({ params }: { params: Promise<{ id: stri
         size="sm"
         eyebrow={`${labelize(session.camera_angle)} · ${formatDate(session.created_at.slice(0, 10))}`}
         title={CLUB_LABELS[session.club]}
-        action={<ButtonLink href="#swing-criteria" variant="onHeroSolid" size="sm">View all 12 criteria</ButtonLink>}
+        action={<ButtonLink href="#swing-criteria" variant="onHeroSolid" size="sm">View {motionCriteria(view).length} criteria</ButtonLink>}
         topLeft={
           <ButtonLink href="/swing" variant="onHero" size="sm">
             <ArrowLeft className="h-3.5 w-3.5" /> Swings
@@ -84,7 +85,7 @@ export default async function SwingPage({ params }: { params: Promise<{ id: stri
         />
 
         <div className="space-y-5">
-          {motion ? <SwingMotionSummary report={motion} /> : (
+          {motion ? <SwingMotionSummary report={motion} ballSide={model?.ballSide} /> : (
             <Card>
               <CardHeader><CardTitle>Track your swing on the video</CardTitle></CardHeader>
               <CardContent className="space-y-3 text-[13px] leading-relaxed text-fg-muted">
@@ -211,7 +212,7 @@ export default async function SwingPage({ params }: { params: Promise<{ id: stri
       </div>
 
       <section id="swing-criteria" aria-label="Swing criteria" className="scroll-mt-6">
-        <SwingMotionReport report={motion} view={model?.cameraAngle ?? (session.camera_angle === "face_on" || session.camera_angle === "down_the_line" ? session.camera_angle : "other")} />
+        <SwingMotionReport report={motion} view={view} />
       </section>
       <details id="manual-swing-measurements" className="rounded-2xl border border-border bg-surface p-4">
         <summary className="cursor-pointer text-[13px] font-medium text-accent">Add a measurement from you or your coach</summary>

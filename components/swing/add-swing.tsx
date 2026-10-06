@@ -17,6 +17,7 @@ export function AddSwing() {
   const [file, setFile] = useState<File | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [view, setView] = useState("face_on");
   const dialog = useRef<HTMLDialogElement>(null);
   const upload = useRef<HTMLInputElement>(null);
   const camera = useRef<HTMLInputElement>(null);
@@ -82,7 +83,8 @@ export function AddSwing() {
       <form onSubmit={save} className="space-y-4 p-5">
         <input type="hidden" name="shot_type" value="full swing" />
         <input type="hidden" name="swing_pattern" value="unknown" />
-        <Field label="Camera angle"><Select name="camera_angle" disabled={pending}><option value="face_on">Face on</option><option value="down_the_line">Down the line</option></Select></Field>
+        <Field label="Camera angle"><Select name="camera_angle" value={view} onChange={(event) => setView(event.target.value)} disabled={pending}><option value="face_on">Face on</option><option value="down_the_line">Down the line</option></Select></Field>
+        {view === "down_the_line" ? <p className="rounded-lg bg-info-soft p-3 text-xs leading-relaxed text-fg-muted">Film behind your hands at address, at hand height, parallel to the target line. Keep the camera fixed and level and leave room for your head, feet and club throughout the swing. Bright light and 60 fps or higher help track the downswing.</p> : null}
         <Field label="Club"><Select name="club" defaultValue="7_iron" disabled={pending}>{CLUBS.map((club) => <option key={club} value={club}>{CLUB_LABELS[club]}</option>)}</Select></Field>
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="secondary" disabled={pending} onClick={() => upload.current?.click()}><Upload className="h-4 w-4" /> Upload video</Button>

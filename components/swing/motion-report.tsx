@@ -17,12 +17,15 @@ export function SwingMotionSummary({ report, ballSide }: { report: MotionReport;
     <CardContent className="space-y-3">
       <div className="rounded-xl border border-border bg-surface-2 p-4">
         <p className="text-[12px] font-semibold">Overall swing score · {report.view === "down_the_line" ? "Down the line" : report.view === "face_on" ? "Face on" : "Choose a view"}</p>
-        <p className="tabular mt-2 text-[38px] font-semibold leading-none text-accent">{score.total === null ? "Awaiting clear video" : <>{score.total}<span className="text-[16px] text-fg-muted"> / 100</span></>}</p>
-        <p className="mt-2 text-[12px] leading-relaxed text-fg-muted">{score.reason ?? `${score.components.length} of 3 movement checks scored${score.missing.length ? " · partial score" : ""}. ${score.priorities.length ? "Start with the biggest opportunity below." : "These checks look controlled. Keep working on centered contact and confirm with another recording."}`}</p>
+        {score.total === null ? <p className="mt-2 text-[22px] font-semibold leading-snug text-fg">{report.usable ? "Analysis complete · limited score" : "Complete swing needed"}</p> :
+          <p className="tabular mt-2 text-[38px] font-semibold leading-none text-accent">{formatScore(score.total, score.totalRange)}<span className="text-[16px] text-fg-muted"> / 100</span></p>}
+        <p className="mt-2 text-[12px] leading-relaxed text-fg-muted">{score.reason ?? `${score.components.length} of 3 movement checks scored${score.missing.length ? " · partial score" : ""}. ${score.priorities.length ? "Start with the biggest opportunity below." : score.reviews.length ? "The transition range spans multiple scoring bands. Review that position below before changing your swing." : "These checks look controlled. Keep working on centered contact and confirm with another recording."}`}</p>
         <p className="mt-2 text-[11px] leading-relaxed text-fg-subtle">A coaching estimate of visible movement, not a validated rating of technique or ball flight. Compare recordings from the same view and camera position.</p>
+        {score.totalRange ? <p className="mt-2 text-[11px] leading-relaxed text-fg-muted">{score.totalRange[0] === score.totalRange[1] ? "The observed hip positions across the estimated transition all fall in the same scoring band." : "The score range comes from the observed hip positions across the estimated transition. The exact top was hidden."} Rhythm is included only when its timing is precise enough.</p> : null}
       </div>
       {score.components.length ? <div className="grid gap-2 sm:grid-cols-3">{score.components.map((item) => <div key={item.id} className="rounded-lg border border-border p-3">
-        <p className="text-[11px] text-fg-muted">{item.label}</p><p className="tabular mt-1 text-[20px] font-semibold">{item.score}<span className="text-[11px] text-fg-subtle"> / 100</span></p>
+        <p className="text-[11px] text-fg-muted">{item.label}</p><p className="tabular mt-1 text-[20px] font-semibold">{formatScore(item.score, item.scoreRange)}<span className="text-[11px] text-fg-subtle"> / 100</span></p>
+        {item.scoreRange ? <p className="mt-1 text-[10px] text-fg-subtle">Observed transition range</p> : null}
       </div>)}</div> : null}
       {score.priorities.length ? <div className="space-y-3 border-t border-border pt-3">
         <h3 className="text-[14px] font-semibold">Where to improve</h3>
@@ -34,9 +37,19 @@ export function SwingMotionSummary({ report, ballSide }: { report: MotionReport;
           <SwingSeekButton time={item.time} />
         </div>)}
       </div> : null}
-      {score.missing.length ? <div className="rounded-lg bg-info-soft p-3"><p className="text-[12px] font-semibold">Checks still needed</p><ul className="mt-2 space-y-1">{score.missing.map((message) => <li key={message} className="text-[11px] leading-relaxed text-fg-muted">{message}</li>)}</ul></div> : null}
+      {score.reviews.length ? <div className="space-y-3 border-t border-border pt-3">
+        <h3 className="text-[14px] font-semibold">Position to review</h3>
+        {score.reviews.map((item) => <div key={item.id} className="rounded-xl border border-border p-3">
+          <p className="text-[13px] font-semibold">{item.label}</p>
+          <p className="mt-1 text-[12px] leading-relaxed text-fg-muted">{item.evidence}</p>
+          <p className="mt-2 text-[12px] leading-relaxed">The observed range spans controlled and less controlled positions, so it does not establish an improvement priority.</p>
+          <p className="mt-2 text-[11px] leading-relaxed text-fg-muted">{item.check}</p>
+          <SwingSeekButton time={item.time} />
+        </div>)}
+      </div> : null}
+      {score.missing.length ? <div className="rounded-lg bg-info-soft p-3"><p className="text-[12px] font-semibold">Checks not scored in this recording</p><ul className="mt-2 space-y-1">{score.missing.map((message) => <li key={message} className="text-[11px] leading-relaxed text-fg-muted">{message}</li>)}</ul></div> : null}
       {score.components.length ? <details className="text-[11px] leading-relaxed text-fg-subtle"><summary className="min-h-8 cursor-pointer">How the score is calculated</summary>
-        <p>Version 1 uses broad, adjustable coaching thresholds. Each check scores 0–100; the overall score is the weighted mean of available checks. At least two checks covering 70% of the planned weight are required. Tracking quality only determines whether we can score.</p>
+        <p>Version 1 uses broad, adjustable coaching thresholds. Each check scores 0–100; the overall score is the weighted mean of available checks. At least two checks covering 70% of the planned weight are required. Observed hip-height ranges produce lower and upper score bounds rather than a guessed top position. Tracking quality only determines whether we can score.</p>
         {score.components.map((item) => <p key={item.id} className="mt-2"><span className="font-semibold">{item.label}: </span>{item.rubric}</p>)}
         <p className="mt-2">Normal movement varies between players. These thresholds need validation with coach-reviewed clips; a high score does not establish clubface control, swing plane, speed, pressure transfer or a good strike.</p>
       </details> : null}
@@ -58,6 +71,10 @@ export function SwingMotionSummary({ report, ballSide }: { report: MotionReport;
       <p className="text-[11px] leading-relaxed text-fg-subtle">Joint visibility is not an accuracy score. Contact is estimated from the hand path; timing is less precise when the hands are hidden or the video has fewer frames.</p>
     </CardContent>
   </Card>;
+}
+
+function formatScore(value: number, range?: [number, number]) {
+  return range && range[0] !== range[1] ? `${range[0]}–${range[1]}` : String(value);
 }
 
 export function SwingMotionReport({ report, view = "other" }: { report: MotionReport | null; view?: MotionView }) {

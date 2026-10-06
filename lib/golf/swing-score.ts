@@ -3,11 +3,15 @@ import type { MotionReading, MotionReport } from "./motion-analysis";
 export type SwingScoreComponent = {
   id: string; label: string; score: number; weight: number; value: number; unit: string;
   time: number; evidence: string; cue: string; check: string; rubric: string;
+  /** Bounds from observed body positions across an uncertain transition. */
+  scoreRange?: [number, number];
 };
 export type SwingScore = {
   total: number | null;
+  totalRange?: [number, number];
   components: SwingScoreComponent[];
   priorities: SwingScoreComponent[];
+  reviews: SwingScoreComponent[];
   missing: string[];
   reason: string | null;
 };
@@ -17,17 +21,23 @@ export type SwingScore = {
  * Use only comparable full-swing recordings from the same camera position.
  */
 export function scoreSwing(report: MotionReport, ballSide?: "left" | "right"): SwingScore {
-  const result: SwingScore = { total: null, components: [], priorities: [], missing: [], reason: null };
+  const result: SwingScore = { total: null, components: [], priorities: [], reviews: [], missing: [], reason: null };
   if (!report.usable || !report.phases) result.reason = "Analyze one complete swing before scoring.";
   else if (report.view === "other") result.reason = "Choose Face on or Down the line and analyze again to use the appropriate scoring checks.";
   else if (report.quality.coverage < 0.85 || !report.quality.cameraStable || report.quality.largestGap > 0.12)
     result.reason = "A score needs a fixed camera, at least 85% visible body tracking, and no sample gaps over 0.12 seconds. Re-record with your whole body visible.";
   if (result.reason) return result;
 
-  const reading = (id: string, unit: MotionReading["unit"]) => report.readings.find((row) => row.id === id && row.unit === unit && !row.range && Number.isFinite(row.value));
-  const add = (component: Omit<SwingScoreComponent, "score" | "rubric">, amount: number, free: number, severe: number) => {
-    result.components.push({ ...component,
-      score: Math.round(100 * (1 - Math.min(1, Math.max(0, (amount - free) / (severe - free))))),
+  const reading = (id: string, unit: MotionReading["unit"], allowRange = false) => report.readings.find((row) =>
+    row.id === id && row.unit === unit && Number.isFinite(row.value) &&
+    (!row.range || (allowRange && row.range.every(Number.isFinite) && row.range[0] <= row.range[1])));
+  const absoluteRange = ([low, high]: [number, number]): [number, number] =>
+    [low <= 0 && high >= 0 ? 0 : Math.min(Math.abs(low), Math.abs(high)), Math.max(Math.abs(low), Math.abs(high))];
+  const add = (component: Omit<SwingScoreComponent, "score" | "rubric">, amount: number | [number, number], free: number, severe: number) => {
+    const grade = (value: number) => Math.round(100 * (1 - Math.min(1, Math.max(0, (value - free) / (severe - free)))));
+    const bounds: [number, number] = Array.isArray(amount) ? [grade(amount[1]), grade(amount[0])] : [grade(amount), grade(amount)];
+    result.components.push({ ...component, score: bounds[0],
+      ...(Array.isArray(amount) ? { scoreRange: bounds } : {}),
       rubric: `No deduction through ${free}${component.unit}; linear deduction to 0 at ${severe}${component.unit}. Weight: ${component.weight}%.`,
     });
   };
@@ -38,12 +48,14 @@ export function scoreSwing(report: MotionReport, ballSide?: "left" | "right"): S
       cue: "Try five waist-high swings at half speed. Allow a natural turn while reducing a large sideways lunge; do not try to freeze your head.",
       check: "Film from the same position and compare the head guide at setup and impact. Check strike location as well as the score." }, Math.abs(head.value), 12, 40);
     else result.missing.push("Head control needs a visible head and both ankles at impact in a face-on view.");
-    const lift = reading("lift_top", "% body height");
+    const lift = reading("lift_top", "% body height", true);
     if (lift) add({ id: "height", label: "Height control in the backswing", weight: 30, value: Math.abs(lift.value), unit: "% body height", time: lift.time,
-      evidence: `Hip height changed ${Math.abs(lift.value)}% of visible body height ${lift.value < 0 ? "down" : "up"} from setup at the top.`,
+      evidence: lift.range ? `Hip height ranges from ${lift.range[0]}% to ${lift.range[1]}% of visible body height relative to setup across the estimated backswing transition. Negative is lower; positive is higher. The score uses all observed positions in that interval.` :
+        `Hip height changed ${Math.abs(lift.value)}% of visible body height ${lift.value < 0 ? "down" : "up"} from setup at the top.`,
       cue: "Make five slow backswings with a comfortable knee bend. Review large rises or dips without forcing the hips to stay motionless.",
-      check: "Compare setup and top on the overlay, then hit five half shots and check centered contact." }, Math.abs(lift.value), 4, 15);
-    else result.missing.push("Backswing height needs a clearly visible hip and a resolved top position.");
+      check: lift.range ? "Review the visible hips across the estimated transition, rather than treating one frame as the exact top. Then hit five half shots and check centered contact." :
+        "Compare setup and top on the overlay, then hit five half shots and check centered contact." }, lift.range ? absoluteRange(lift.range) : Math.abs(lift.value), 4, 15);
+    else result.missing.push("Backswing height was not scored because the hip position could not be measured at or across the top.");
   } else {
     const setup = reading("torso_address", "° in picture"), impact = reading("torso_impact", "° in picture");
     if (setup && impact) {
@@ -71,12 +83,20 @@ export function scoreSwing(report: MotionReport, ballSide?: "left" | "right"): S
       cue: "Rehearse a smooth count: one-two-three going back, four coming down. Try five half-speed swings with a gradual change of direction.",
       check: "Re-record at a constant playback speed. Compare the rhythm and strike; avoid clips with speed ramps." }, deviation, 0, 2);
     result.components.at(-1)!.rubric = "No deduction for ratios from 2:1 to 4:1; linear deduction to 0 two ratio points outside that window. Weight: 30%.";
-  } else result.missing.push("Rhythm needs clearly resolved swing positions and sufficiently dense video samples.");
+  } else result.missing.push(report.timing?.source === "occluded_transition" ?
+    "Rhythm was not scored because the hands are hidden around the backswing transition. Body movement can still be scored; a new recording with the hands visible is needed to add rhythm." :
+    "Rhythm was not scored because swing timing is not precise enough. A new recording with clear hands and more frames can add this check.");
   const weight = result.components.reduce((sum, item) => sum + item.weight, 0);
   if (result.components.length >= 2 && weight >= 70) {
     result.total = Math.round(result.components.reduce((sum, item) => sum + item.score * item.weight, 0) / weight);
-    result.priorities = [...result.components].filter((item) => item.score < 85)
-      .sort((a, b) => (100 - b.score) * b.weight - (100 - a.score) * a.weight).slice(0, 3);
-  } else result.reason = "Not enough scorable movement yet. Resolve the missing checks below and analyze again.";
+    if (result.components.some((item) => item.scoreRange)) {
+      result.totalRange = [result.total, Math.round(result.components.reduce((sum, item) => sum + (item.scoreRange?.[1] ?? item.score) * item.weight, 0) / weight)];
+    }
+  } else result.reason = `Movement analysis is complete, but only ${result.components.length} of 3 checks could be scored. An overall score needs at least two checks covering 70% of the planned weight. Review the available results below; repeating this recording will not reveal hidden positions.`;
+  // Keep supported improvement cues even when an overall score is unavailable.
+  // A ranged reading is a priority only if all observed positions score below 85.
+  result.priorities = [...result.components].filter((item) => (item.scoreRange?.[1] ?? item.score) < 85)
+    .sort((a, b) => (100 - (b.scoreRange?.[1] ?? b.score)) * b.weight - (100 - (a.scoreRange?.[1] ?? a.score)) * a.weight).slice(0, 3);
+  result.reviews = result.components.filter((item) => item.scoreRange && item.scoreRange[0] < 85 && item.scoreRange[1] >= 85);
   return result;
 }

@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { analyseMotion, describeMotionReading, findAutomaticTiming, findMotionPhases, frameAtTime, motionCriteria, trustworthyFrames } from "./motion-analysis";
 import { LM, packFrames, unpackFrames, type PoseFrame } from "./pose";
 import { poseModelSchema } from "../validation/schemas";
+import { scoreSwing } from "./swing-score";
 
 // Known positions in the image; the depth values deliberately have no meaning.
 function swing(): PoseFrame[] {
@@ -87,6 +88,13 @@ describe("projected swing movement", () => {
     assert.deepEqual(report.readings.find((row) => row.id === "hips_top")?.range, [0, 10]);
     assert.ok(!report.readings.some((row) => row.id === "arm_top"));
     assert.equal(report.tempo, null);
+    const score = scoreSwing(report);
+    assert.equal(score.total, 100);
+    assert.deepEqual(score.totalRange, [100, 100]);
+    assert.deepEqual(score.components.map((component) => component.id), ["head", "height"]);
+    assert.equal(score.missing.length, 1);
+    // Existing saved joint samples receive the fix on reload, without a new read.
+    assert.deepEqual(scoreSwing(analyseMotion(unpackFrames(packFrames(hidden)), 1, "face_on")), score);
     assert.deepEqual(hidden, before);
   });
 

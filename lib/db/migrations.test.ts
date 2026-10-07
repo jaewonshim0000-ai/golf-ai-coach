@@ -100,6 +100,18 @@ test("live schema: atomic practice, persistent results, and cross-user isolation
     const stored = (await db.query<{ pose_model: PoseModel; bytes: number }>("select pose_model, pg_column_size(pose_model) as bytes from swing_sessions where id = 'swing_test'")).rows[0]!;
     assert.ok(stored.bytes < 262144);
     assert.deepEqual(expandMotionModel(stored.pose_model)!.imageFrames, expandMotionModel(dense)!.imageFrames);
+    // A dense reconstructed replay fits the same constraint, with no migration.
+    const reconstructed = denseMotionModel();
+    reconstructed.reconstructionVersion = 1;
+    reconstructed.reconstructionEngine = "mediapipe-ghum-heavy";
+    reconstructed.frames = reconstructed.imageFrames!.map((frame) => frame.map(([x, y, z, visibility]) => [
+      Math.round((x - 0.5) * 1000) / 1000, Math.round((y - 0.5) * 1000) / 1000, z, visibility,
+    ]));
+    const compact = compactMotionModel(reconstructed);
+    await db.query("update swing_sessions set pose_model = $1 where id = 'swing_test'", [compact]);
+    const replay = (await db.query<{ pose_model: PoseModel; bytes: number }>("select pose_model, pg_column_size(pose_model) as bytes from swing_sessions where id = 'swing_test'")).rows[0]!;
+    assert.ok(replay.bytes < 262144);
+    assert.equal(JSON.stringify(expandMotionModel(replay.pose_model)!.frames.map((frame) => frame.map((point) => point.slice(0, 3)))), JSON.stringify(reconstructed.frames.map((frame) => frame.map((point) => point.slice(0, 3)))));
 
     // A live scorecard has an entry per hole of a 9 or 18 hole course.
     await db.exec(`insert into courses(id,user_id,name,par,holes) values ('course_test', '${user}', 'Test', 36, '[]')`);

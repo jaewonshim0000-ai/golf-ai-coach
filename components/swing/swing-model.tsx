@@ -9,11 +9,12 @@ import { Pause, Play } from "lucide-react";
 import { retimeSwingAction } from "@/app/actions";
 import {
   LM,
-  modelSpace,
   unpackFrames,
   type PoseModel,
   type SwingPhases,
 } from "@/lib/golf/pose";
+import { positionTime, reconstructionTrack, samplePosition } from "@/lib/golf/reconstruction";
+import { visibleHands } from "@/lib/golf/motion-analysis";
 import { cn } from "@/lib/utils";
 import { Button, Card, CardContent, CardHeader, CardTitle } from "@/components/ui/primitives";
 
@@ -56,7 +57,7 @@ const SHOULDER_LINE = BONES.length - 2;
 const HIP_LINE = BONES.length - 1;
 
 const PHASES = ["address", "top", "impact"] as const;
-type View = "face" | "line" | "above";
+type View = "recorded" | "side" | "above";
 
 type Scene = {
   show: (position: number) => void;
@@ -66,16 +67,10 @@ type Scene = {
 
 /** One point per joint per frame, in the player's frame, metres. */
 function buildTrack(model: PoseModel): THREE.Vector3[][] | null {
-  const frames = unpackFrames(model);
-  const address = frames[model.phases.address];
-  if (!address) return null;
-  const space = modelSpace(address, model.handedness);
-  if (!space) return null;
+  const frames = reconstructionTrack(model);
+  if (!frames) return null;
   return frames.map((frame) => {
-    const points = frame.landmarks.map((point) => {
-      const at = space.toModel(point);
-      return new THREE.Vector3(at.x, at.y, at.z);
-    });
+    const points = frame.map((point) => new THREE.Vector3(point.x, point.y, point.z));
     const midpoint = (a: number, b: number) => points[a]!.clone().lerp(points[b]!, 0.5);
     points[SHOULDERS] = midpoint(LM.leftShoulder, LM.rightShoulder);
     points[HIPS] = midpoint(LM.leftHip, LM.rightHip);
@@ -95,11 +90,13 @@ function mannequin(material: THREE.Material, accents?: [THREE.Material, THREE.Ma
   const bones = BONES.map(([, , radius], index) => {
     const paint =
       index === SHOULDER_LINE ? (accents?.[0] ?? material) : index === HIP_LINE ? (accents?.[1] ?? material) : material;
-    const bone = new THREE.Mesh(cylinder, paint);
-    const ends = [new THREE.Mesh(sphere, paint), new THREE.Mesh(sphere, paint)];
+    const ownPaint = paint.clone();
+    ownPaint.transparent = true;
+    const bone = new THREE.Mesh(cylinder, ownPaint);
+    const ends = [new THREE.Mesh(sphere, ownPaint), new THREE.Mesh(sphere, ownPaint)];
     for (const end of ends) end.scale.setScalar(radius);
     group.add(bone, ...ends);
-    return { bone, ends, radius };
+    return { bone, ends, radius, paint: ownPaint, opacity: ownPaint.opacity };
   });
   const head = new THREE.Mesh(sphere, material);
   head.scale.set(0.095, 0.115, 0.095);
@@ -108,11 +105,13 @@ function mannequin(material: THREE.Material, accents?: [THREE.Material, THREE.Ma
   return {
     group,
     geometries: [cylinder, sphere],
-    pose(points: THREE.Vector3[]) {
+    materials: bones.map((bone) => bone.paint),
+    pose(points: THREE.Vector3[], visibility?: number[]) {
       BONES.forEach(([from, to], index) => {
         let a = points[from];
         let b = points[to];
         const part = bones[index]!;
+        if (visibility) part.paint.opacity = part.opacity * (Math.min(visibility[from] ?? 0.8, visibility[to] ?? 0.8) < 0.6 ? 0.25 : 1);
         if (!a || !b) return;
         if (accents && (index === SHOULDER_LINE || index === HIP_LINE)) {
           direction.subVectors(b, a).setLength(TURN_LINE_OVERHANG);
@@ -143,12 +142,12 @@ export function SwingModel({ model, sessionId }: { model: PoseModel; sessionId: 
   const router = useRouter();
   const host = useRef<HTMLDivElement>(null);
   const scene = useRef<Scene | null>(null);
-  const last = model.frames.length - 1;
+  const last = model.t.length - 1;
   const [position, setPosition] = useState(model.phases.top);
   const [playing, setPlaying] = useState(false);
   const [slow, setSlow] = useState(true);
   const [ghost, setGhost] = useState(true);
-  const [view, setView] = useState<View>("face");
+  const [view, setView] = useState<View>("recorded");
   const [failed, setFailed] = useState<string | null>(null);
   const [phaseDraft, setPhaseDraft] = useState<SwingPhases>(model.phases);
   const [phaseMessage, setPhaseMessage] = useState<string | null>(null);
@@ -157,14 +156,14 @@ export function SwingModel({ model, sessionId }: { model: PoseModel; sessionId: 
   useEffect(() => {
     setPhaseDraft(model.phases);
     setPosition(model.phases.top);
-  }, [model.phases.address, model.phases.top, model.phases.impact]);
+  }, [model]);
 
   useEffect(() => {
     const element = host.current;
     if (!element) return;
     const track = buildTrack(model);
     if (!track) {
-      setFailed("This model has no clear address position to stand it up from.");
+      setFailed("Reconstruct this swing again to create the 3D replay.");
       return;
     }
 
@@ -176,6 +175,7 @@ export function SwingModel({ model, sessionId }: { model: PoseModel; sessionId: 
       return;
     }
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    setFailed(null);
     renderer.domElement.setAttribute("role", "img");
     renderer.domElement.setAttribute("aria-label", "3D model of your swing. Drag to turn it.");
     renderer.domElement.className = "block h-full w-full touch-none";
@@ -191,24 +191,21 @@ export function SwingModel({ model, sessionId }: { model: PoseModel; sessionId: 
     const grid = new THREE.GridHelper(4, 16, 0x5d7a70, 0x2e433c);
     world.add(grid);
 
-    const ballSide = modelSpace(unpackFrames(model)[model.phases.address]!, model.handedness)!.ballSide;
-
-    // The target line runs through the stance, with an arrow at the target end.
-    const gold = new THREE.LineBasicMaterial({ color: 0xe6b85c });
-    const targetLine = new THREE.Line(
-      new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-1.8, 0.002, 0), new THREE.Vector3(1.8, 0.002, 0)]),
-      gold,
-    );
-    const arrowMaterial = new THREE.MeshBasicMaterial({ color: 0xe6b85c });
-    const arrow = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.16, 16), arrowMaterial);
-    arrow.rotation.z = -Math.PI / 2;
-    arrow.position.set(1.85, 0.03, 0);
-    world.add(targetLine, arrow);
-
-    // Where the hands travelled, the closest this can get to the swing plane.
-    const handPath = new THREE.Line(
+    const trail: THREE.Vector3[] = [];
+    const observed = unpackFrames(model);
+    const handAt = (index: number) => {
+      if (!visibleHands(observed[index]!, model.aspect ?? 1)) return null;
+      const left = model.frames[index]![15]!, right = model.frames[index]![16]!;
+      if (left[3] >= 0.6 && right[3] >= 0.6) return track[index]![15]!.clone().lerp(track[index]![16]!, 0.5);
+      return left[3] >= 0.6 ? track[index]![15]! : right[3] >= 0.6 ? track[index]![16]! : null;
+    };
+    for (let index = 1; index < track.length; index++) {
+      const before = handAt(index - 1), after = handAt(index);
+      if (before && after && model.t[index]! - model.t[index - 1]! <= 0.12) trail.push(before, after);
+    }
+    const handPath = new THREE.LineSegments(
       new THREE.BufferGeometry().setFromPoints(
-        track.map((points) => points[LM.leftWrist]!.clone().lerp(points[LM.rightWrist]!, 0.5)),
+        trail,
       ),
       new THREE.LineBasicMaterial({ color: 0xe6b85c, transparent: true, opacity: 0.7 }),
     );
@@ -251,14 +248,17 @@ export function SwingModel({ model, sessionId }: { model: PoseModel; sessionId: 
 
     scene.current = {
       show(at) {
-        player.pose(between(track, at));
+        const index = Math.min(last, Math.max(0, Math.floor(at)));
+        const next = Math.min(last, index + 1);
+        player.group.visible = !(model.t[next]! - model.t[index]! > 0.12 && at - index > 0.05 && at - index < 0.95);
+        player.pose(between(track, at), model.frames[index]!.map((point) => point[3]));
         draw();
       },
       view(next) {
         const spots: Record<View, [number, number, number]> = {
-          face: [0, 1.0, 4.4 * ballSide],
-          line: [-4.6, 1.2, 0.3 * ballSide],
-          above: [0, 5, 0.01 * ballSide],
+          recorded: [0, 1.0, 4.4],
+          side: [-4.6, 1.2, 0.3],
+          above: [0, 5, 0.01],
         };
         camera.position.set(...spots[next]);
         controls.update();
@@ -269,7 +269,9 @@ export function SwingModel({ model, sessionId }: { model: PoseModel; sessionId: 
         draw();
       },
     };
-    scene.current.view("face");
+    scene.current.view(view);
+    scene.current.ghost(ghost);
+    scene.current.show(model.phases.top);
     resize();
 
     return () => {
@@ -277,8 +279,8 @@ export function SwingModel({ model, sessionId }: { model: PoseModel; sessionId: 
       observer.disconnect();
       controls.dispose();
       for (const geometry of [...player.geometries, ...addressGhost.geometries]) geometry.dispose();
-      for (const thing of [targetLine, arrow, handPath]) thing.geometry.dispose();
-      for (const material of [body, shoulderPaint, hipPaint, ghostPaint, gold, arrowMaterial, handPath.material]) {
+      handPath.geometry.dispose();
+      for (const material of [body, shoulderPaint, hipPaint, ghostPaint, handPath.material, ...player.materials, ...addressGhost.materials]) {
         material.dispose();
       }
       grid.dispose();
@@ -292,26 +294,56 @@ export function SwingModel({ model, sessionId }: { model: PoseModel; sessionId: 
   useEffect(() => scene.current?.view(view), [view]);
 
   useEffect(() => {
+    const followVideo = (event: Event) => {
+      const detail = (event as CustomEvent<{ id: string; time: number; paused: boolean }>).detail;
+      if (detail?.id !== sessionId) return;
+      setPosition(samplePosition(model.t, detail.time));
+      setPlaying(!detail.paused);
+    };
+    window.addEventListener("swing:frame", followVideo);
+    return () => window.removeEventListener("swing:frame", followVideo);
+  }, [sessionId, model.t]);
+
+  useEffect(() => {
     if (!playing) return;
     const span = Math.max(0.1, (model.t[last] ?? 1) - (model.t[0] ?? 0));
-    const framesPerSecond = (last / span) * (slow ? 0.25 : 1);
     let previous = performance.now();
     let frame = requestAnimationFrame(function tick(now) {
-      const step = ((now - previous) / 1000) * framesPerSecond;
+      const video = document.querySelector<HTMLVideoElement>("video[data-swing-player]");
+      if (video) {
+        setPosition(samplePosition(model.t, video.currentTime));
+        frame = requestAnimationFrame(tick);
+        return;
+      }
+      const step = ((now - previous) / 1000) * (slow ? 0.25 : 1);
       previous = now;
-      setPosition((at) => (at + step >= last ? 0 : at + step));
+      setPosition((at) => samplePosition(model.t, model.t[0]! + ((positionTime(model.t, at) - model.t[0]! + step) % span)));
       frame = requestAnimationFrame(tick);
     });
     return () => cancelAnimationFrame(frame);
   }, [playing, slow, last, model.t]);
 
   const nearest = PHASES.find((phase) => Math.abs(phaseDraft[phase] - position) < 0.5);
-  const seconds = (model.t[Math.round(position)] ?? 0) - (model.t[0] ?? 0);
+  const seconds = positionTime(model.t, position) - (model.t[0] ?? 0);
+  const seekPosition = (at: number) => {
+    setPlaying(false);
+    setPosition(at);
+    const video = document.querySelector<HTMLVideoElement>("video[data-swing-player]");
+    if (video) { video.pause(); video.currentTime = positionTime(model.t, at); }
+  };
+  const togglePlayback = () => {
+    const video = document.querySelector<HTMLVideoElement>("video[data-swing-player]");
+    if (video) {
+      if (playing) video.pause();
+      else { video.playbackRate = slow ? 0.25 : 1; void video.play().catch(() => setPlaying(false)); }
+    }
+    setPlaying((on) => !on);
+  };
   const validPhaseOrder =
     phaseDraft.address < phaseDraft.top && phaseDraft.top < phaseDraft.impact;
 
   const markPhase = (phase: keyof SwingPhases) => {
-    setPlaying(false);
+    seekPosition(position);
     setPhaseMessage(null);
     setPhaseDraft((current) => ({ ...current, [phase]: Math.round(position) }));
   };
@@ -332,12 +364,12 @@ export function SwingModel({ model, sessionId }: { model: PoseModel; sessionId: 
   return (
     <Card>
       <CardHeader className="flex-row flex-wrap items-center justify-between gap-3">
-        <CardTitle>3D swing model</CardTitle>
+        <CardTitle>Your swing in 3D</CardTitle>
         <div className="flex flex-wrap gap-1" role="group" aria-label="Camera">
           {(
             [
-              ["face", "Face on"],
-              ["line", "Down the line"],
+              ["recorded", "Recorded view"],
+              ["side", "Side"],
               ["above", "Above"],
             ] as const
           ).map(([id, label]) => (
@@ -369,7 +401,7 @@ export function SwingModel({ model, sessionId }: { model: PoseModel; sessionId: 
             <p className="pointer-events-none absolute left-3 top-3 text-[10.5px] leading-[1.5] text-ink-fg/60">
               <span className="text-[#ff7a59]">Shoulders</span> ·{" "}
               <span className="text-[#3fc1a5]">Hips</span> ·{" "}
-              <span className="text-[#e6b85c]">Hand path, target line</span>
+              <span className="text-[#e6b85c]">Hand path</span>
               <br />
               Drag to turn · pinch or scroll to zoom
             </p>
@@ -382,7 +414,7 @@ export function SwingModel({ model, sessionId }: { model: PoseModel; sessionId: 
             size="sm"
             variant="secondary"
             aria-label={playing ? "Pause" : "Play"}
-            onClick={() => setPlaying((on) => !on)}
+            onClick={togglePlayback}
           >
             {playing ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
           </Button>
@@ -394,8 +426,7 @@ export function SwingModel({ model, sessionId }: { model: PoseModel; sessionId: 
             step={0.01}
             value={position}
             onChange={(event) => {
-              setPlaying(false);
-              setPosition(Number(event.target.value));
+              seekPosition(Number(event.target.value));
             }}
             className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-track accent-accent"
           />
@@ -412,8 +443,7 @@ export function SwingModel({ model, sessionId }: { model: PoseModel; sessionId: 
               size="sm"
               variant={nearest === phase ? "primary" : "secondary"}
               onClick={() => {
-                setPlaying(false);
-                setPosition(phaseDraft[phase]);
+                seekPosition(phaseDraft[phase]);
               }}
               className="capitalize"
             >
@@ -425,7 +455,7 @@ export function SwingModel({ model, sessionId }: { model: PoseModel; sessionId: 
             size="sm"
             variant="ghost"
             aria-pressed={slow}
-            onClick={() => setSlow((on) => !on)}
+            onClick={() => { const video = document.querySelector<HTMLVideoElement>("video[data-swing-player]"); if (video) video.playbackRate = slow ? 1 : 0.25; setSlow((on) => !on); }}
           >
             {slow ? "¼ speed" : "Full speed"}
           </Button>
@@ -439,7 +469,8 @@ export function SwingModel({ model, sessionId }: { model: PoseModel; sessionId: 
             Show address
           </label>
         </div>
-        <div className="space-y-2 rounded-xl border border-border bg-surface-2 p-3">
+        <details className="space-y-2 rounded-xl border border-border bg-surface-2 p-3">
+          <summary className="cursor-pointer text-[12px] font-medium">Adjust swing timing</summary>
           <div>
             <p className="text-[12px] font-semibold text-fg">Correct phase timing</p>
             <p className="mt-0.5 text-[11px] leading-[1.5] text-fg-muted">
@@ -481,10 +512,9 @@ export function SwingModel({ model, sessionId }: { model: PoseModel; sessionId: 
               </p>
             ) : null}
           </div>
-        </div>
+        </details>
         <p className="text-[11px] leading-[1.5] text-fg-subtle">
-          Built from one camera, so depth is inferred: turns are the softest numbers. The club is
-          not tracked.
+          Reconstructed with MediaPipe’s 3D body model. Depth and faint limbs are estimated from one camera. The gold trail follows the hands; the club is not tracked.
         </p>
       </CardContent>
     </Card>

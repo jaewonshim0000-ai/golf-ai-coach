@@ -6,6 +6,6 @@ export function SwingSeekButton({ time }: { time: number }) {
     if (!video || !Number.isFinite(video.duration)) return;
     video.pause();
     video.currentTime = Math.min(video.duration, Math.max(0, time));
-    video.scrollIntoView({ block: "center", behavior: "smooth" });
+    window.dispatchEvent(new Event("swing:review"));
   }}>Review at {time.toFixed(2)}s</button>;
 }

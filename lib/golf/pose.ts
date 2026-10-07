@@ -680,6 +680,10 @@ export type PoseModel = {
   imageFrames?: PackedLandmark[][];
   /** Storage-only encoding of projected x/y/visibility; expanded by the repository. */
   imageData?: string;
+  /** Compact millimetre coordinates for a stabilized inferred 3D replay. */
+  worldData?: string;
+  reconstructionVersion?: 1;
+  reconstructionEngine?: "mediapipe-ghum-heavy";
   /** Original video shape and view for projected movement analysis. */
   aspect?: number;
   cameraAngle?: "face_on" | "down_the_line" | "other";

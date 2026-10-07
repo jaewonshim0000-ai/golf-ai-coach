@@ -23,6 +23,7 @@ import {
   visionNote,
 } from "@/lib/ai/vision";
 import { METRICS_BY_ID } from "@/lib/golf/swing-metrics";
+import { inferBallSide, reconstructSwing } from "@/lib/golf/reconstruction";
 import {
   packFrames,
   unpackFrames,
@@ -30,7 +31,7 @@ import {
   type PoseFrame,
   type SwingPhases,
 } from "@/lib/golf/pose";
-import { analyseMotion, motionCriteria, type MotionView } from "@/lib/golf/motion-analysis";
+import { analyseMotion, type MotionView } from "@/lib/golf/motion-analysis";
 import { holeShots, type HoleRow } from "@/lib/golf/hole-entry";
 import { DRILLS_BY_ID } from "@/lib/seed/drills";
 import { loadPlayerState } from "@/lib/player-state";
@@ -911,6 +912,7 @@ export async function savePoseModelAction(input: {
   ballSide?: "left" | "right";
   clip?: [number, number];
   phases?: SwingPhases;
+  reconstruct?: boolean;
 }): Promise<PoseState> {
   const user = await requireUser();
   const parsed = poseModelSchema.safeParse(input);
@@ -927,6 +929,7 @@ export async function savePoseModelAction(input: {
     clip: parsed.data.clip,
     ballSide: parsed.data.ballSide,
     phases: parsed.data.phases,
+    reconstruct: parsed.data.reconstruct,
   });
 }
 
@@ -954,6 +957,7 @@ export async function retimeSwingAction(input: {
     clip: model.clip,
     ballSide: model.ballSide,
     phases: parsed.data.phases,
+    reconstructionVersion: model.reconstructionVersion,
   });
 }
 
@@ -962,9 +966,11 @@ async function storeMotion(
   sessionId: string,
   handedness: "right" | "left",
   frames: PoseFrame[],
-  options: { aspect: number; view: MotionView; phases?: SwingPhases; clip?: [number, number]; ballSide?: "left" | "right" },
+  options: { aspect: number; view: MotionView; phases?: SwingPhases; clip?: [number, number]; ballSide?: "left" | "right"; reconstruct?: boolean; reconstructionVersion?: 1 },
 ): Promise<PoseState> {
   const analysis = analyseMotion(frames, options.aspect, options.view, handedness, options.phases);
+  const rebuilt = options.reconstruct ? reconstructSwing(frames, options.aspect, options.view) : null;
+  if (options.reconstruct && !rebuilt) return { ok: false, noSwing: true, message: "Could not reconstruct a clear 3D body. Include the full body and legs in a bright recording, then try again." };
   if (analysis.quality.coverage < 0.65 || frames.length < 8 || (options.phases && !analysis.usable)) {
     return { ok: false, noSwing: true, message: analysis.summary };
   }
@@ -983,11 +989,12 @@ async function storeMotion(
       // Legacy storage requires indices even when timing cannot be resolved.
       // The report and overlay use detected timing, never these placeholders.
       phases: analysis.phases ?? { address: 0, top: Math.floor(frames.length / 2), impact: frames.length - 1 },
-      ...packFrames(frames),
+      ...packFrames(rebuilt ?? frames),
       aspect: options.aspect,
       cameraAngle: options.view,
-      ballSide: options.ballSide,
+      ballSide: options.ballSide ?? (options.view === "down_the_line" ? inferBallSide(frames, options.aspect) : undefined),
       motionVersion: 1,
+      ...(rebuilt || options.reconstructionVersion ? { reconstructionVersion: 1, reconstructionEngine: "mediapipe-ghum-heavy" } : {}),
       phasesConfirmed: Boolean(options.phases),
       timingStatus: options.phases ? "confirmed" : analysis.phases ? "estimated" : "unresolved",
       clip: options.clip,
@@ -1004,7 +1011,8 @@ async function storeMotion(
   return {
     ok: true,
     measurements: analysis.readings.length,
-    message: !analysis.phases ? analysis.summary : `Analyzed ${motionCriteria(options.view).filter((criterion) => analysis.readings.some((reading) => reading.id === criterion.id)).length} of ${motionCriteria(options.view).length} video criteria across ${analysis.quality.total} body samples. ${analysis.timing?.topWindow ? "The briefly hidden backswing transition is reported as a range." : "Swing positions were detected automatically."}`,
+    message: rebuilt ? `3D swing reconstructed from ${frames.length} video samples. ${analysis.phases ? "Your score and coaching analysis are ready." : "The replay is ready; a complete visible hand arc is needed for a score."}` :
+      !analysis.phases ? analysis.summary : "Swing analysis updated using the saved positions.",
   };
 }
 

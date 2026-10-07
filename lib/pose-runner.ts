@@ -1,7 +1,7 @@
 "use client";
 
 import { LM, type Landmark, type PoseFrame } from "./golf/pose";
-import { findAutomaticTiming, visiblePoint, type MotionView } from "./golf/motion-analysis";
+import { findAutomaticTiming, swingSamplingWindow, trustworthyFrames, visiblePoint, type MotionView } from "./golf/motion-analysis";
 
 /**
  * Running the pose detector over a swing, in the browser.
@@ -30,12 +30,12 @@ const MODEL =
  * How many frames to sample across the swing.
  *
  * The downswing takes about a quarter of a second, so impact is a narrow
- * target. The first pass takes up to 96 samples, with room for a second pass
+ * target. The first pass takes up to 64 samples, with room for a second pass
  * up to 128 total. Repeated source frames are discarded.
  */
 export const POSE_SAMPLES = 64;
 /** The first pass stops here, leaving room for the downswing pass. */
-const COARSE_SAMPLES_MAX = 96;
+const COARSE_SAMPLES_MAX = 64;
 /** What the server accepts in one model. */
 const MAX_POSE_SAMPLES = 128;
 /**
@@ -166,6 +166,34 @@ export function selectTrackedPose(poses: Landmark[][], previous?: Landmark[], vi
   return picked;
 }
 
+/** Spend the remaining frame budget on the swing rather than idle footage.
+ * A coarse hand arc guides sampling even when it is too sparse to measure.
+ * Bisect the largest gaps first, with a finer target during the downswing. */
+export function refinementTimes(frames: PoseFrame[], from: number, to: number, aspect: number, view: MotionView, budget: number): number[] {
+  if (budget <= 0 || to <= from) return [];
+  const ordered = trustworthyFrames([...frames].sort((a, b) => a.t - b.t), aspect, view);
+  const found = findAutomaticTiming(ordered, aspect, view)?.phases;
+  const arc = found ? [ordered[found.address]!.t, ordered[found.top]!.t, ordered[found.impact]!.t] : swingSamplingWindow(ordered, aspect, view);
+  const lower = arc ? Math.max(from, arc[0]! - 0.1) : from;
+  const upper = arc ? Math.min(to, arc[2]! + 0.2) : to;
+  const anchors = [...new Set([lower, ...ordered.map((frame) => frame.t).filter((time) => time > lower && time < upper), upper])].sort((a, b) => a - b);
+  const planned: number[] = [];
+  for (let index = 0; index < budget; index++) {
+    let chosen = -1, priority = 1;
+    for (let n = 1; n < anchors.length; n++) {
+      const midpoint = (anchors[n - 1]! + anchors[n]!) / 2;
+      const step = arc && midpoint >= arc[1]! - 0.08 && midpoint <= arc[2]! + 0.12 ? 1 / DENSE_RATE : 1 / 30;
+      const gap = (anchors[n]! - anchors[n - 1]!) / step;
+      if (gap > priority) { priority = gap; chosen = n; }
+    }
+    if (chosen < 0) break;
+    const time = (anchors[chosen - 1]! + anchors[chosen]!) / 2;
+    planned.push(time);
+    anchors.splice(chosen, 0, time);
+  }
+  return planned.sort((a, b) => a - b);
+}
+
 /**
  * Walk the clip and return one skeleton per sample. Frames where no body was
  * found are dropped rather than filled in, so a clip that only shows a player
@@ -198,12 +226,16 @@ export async function readSwing(
     if (seenFrames.has(key)) return;
     seenFrames.add(key);
     const result = landmarker.detect(video);
+    // Apply presence before choosing a person, not only after selection.
+    const imagePoses = result.landmarks.map((pose) => pose.map((point) => ({
+      ...point, visibility: Math.min(point.visibility ?? 0, point.presence ?? 1),
+    })));
     const nearest = frames.reduce<PoseFrame | null>((best, frame) =>
       !best || Math.abs(frame.t - t) < Math.abs(best.t - t) ? frame : best, null);
-    const selected = selectTrackedPose(result.landmarks, nearest?.imageLandmarks ?? previous, view);
+    const selected = selectTrackedPose(imagePoses, nearest?.imageLandmarks ?? previous, view);
     if (selected < 0) return;
     const landmarks = result.worldLandmarks?.[selected];
-    const imageLandmarks = result.landmarks?.[selected];
+    const imageLandmarks = imagePoses[selected];
     if (landmarks && landmarks.length >= 33) {
       previous = imageLandmarks;
       frames.push({
@@ -224,31 +256,24 @@ export async function readSwing(
       onProgress?.(index + 1, expected);
     }
 
-    /*
-      Second pass: sample the downswing more closely, up to the source video's
-      real frame rate. This improves temporal coverage without inventing frames
-      or claiming the hand-arc minimum establishes exact ball contact.
-    */
-    const found = findAutomaticTiming([...frames].sort((a, b) => a.t - b.t), video.videoWidth / video.videoHeight, view)?.phases;
-    if (found) {
-      const ordered = [...frames].sort((a, b) => a.t - b.t);
-      const from = Math.max(start, ordered[found.top]!.t - 0.05);
-      const until = Math.min(start + span - 0.001, ordered[found.impact]!.t + 0.12);
+    const aspect = video.videoWidth / video.videoHeight;
+    // Re-plan after a first refinement: the newly observed arc may resolve
+    // timing which was unavailable in the coarse pass. Leave real frames and
+    // timestamps intact, including when a requested sample decodes a repeat.
+    const attempted = new Set<number>();
+    let reads = 0;
+    for (let pass = 0; pass < 3 && frames.length < MAX_POSE_SAMPLES; pass++) {
       const room = MAX_POSE_SAMPLES - frames.length;
-      const steps = Math.min(room, Math.ceil((until - from) * DENSE_RATE));
-      for (let index = 0; index < steps; index += 1) {
-        const time = from + ((until - from) * index) / Math.max(1, steps - 1);
-        // Skip times the first pass already covered.
-        if (!frames.some((frame) => Math.abs(frame.t - time) < 0.5 / DENSE_RATE)) await readAt(time);
-        onProgress?.(coarse + index + 1, coarse + steps);
-      }
-    } else {
-      // Fill first-pass gaps to improve the visible evidence for automatic
-      // timing. Missing source frames and hidden joints are never fabricated.
-      const room = MAX_POSE_SAMPLES - frames.length;
-      for (let index = 0; index < room; index++) {
-        await readAt(start + (span * (index + 0.25)) / room);
-        onProgress?.(coarse + index + 1, coarse + room);
+      const times = refinementTimes(frames, start, start + span - 0.001, aspect, view, Math.min(room, pass === 0 ? 40 : room))
+        .filter((time) => !attempted.has(Math.round(time * 1000000)));
+      if (!times.length) break;
+      const total = coarse + reads + times.length;
+      for (const time of times) {
+        if (frames.length >= MAX_POSE_SAMPLES) break;
+        attempted.add(Math.round(time * 1000000));
+        await readAt(time);
+        reads++;
+        onProgress?.(coarse + reads, total);
       }
     }
   } finally {

@@ -1,14 +1,14 @@
 "use client";
 
 import type { PoseFrame } from "@/lib/golf/pose";
-import { frameAtTime, motionGeometry, visibleHands, visiblePoint, type MotionView } from "@/lib/golf/motion-analysis";
+import { overlayFrameAtTime, motionGeometry, visibleHands, visiblePoint, type MotionView } from "@/lib/golf/motion-analysis";
 
 const BONES: [number, number][] = [
   [11, 12], [11, 13], [13, 15], [12, 14], [14, 16], [11, 23], [12, 24], [23, 24],
   [23, 25], [25, 27], [24, 26], [26, 28], [27, 29], [29, 31], [28, 30], [30, 32],
 ];
-export function BodyOverlay({ frames, time, guide, view = "other" }: { frames: PoseFrame[]; time: number; guide?: PoseFrame; view?: MotionView }) {
-  const frame = frameAtTime(frames, time);
+export function BodyOverlay({ frames, time, guide, view = "other", aspect = 1 }: { frames: PoseFrame[]; time: number; guide?: PoseFrame; view?: MotionView; aspect?: number }) {
+  const frame = overlayFrameAtTime(frames, time);
   if (!frame?.imageLandmarks) return null;
   const points = frame.imageLandmarks;
   // Separate segments stop a lost hand from drawing a line across a gap.
@@ -16,8 +16,8 @@ export function BodyOverlay({ frames, time, guide, view = "other" }: { frames: P
   frames.forEach((current, index) => {
     const previous = frames[index - 1];
     if (!previous || current.t > time || current.t < time - 0.6 || current.t - previous.t > 0.12) return;
-    const a = visibleHands(previous), b = visibleHands(current);
-    if (a && b) trails.push({ from: a, to: b, opacity: 0.2 + (1 - (time - current.t) / 0.6) * 0.6 });
+    const a = visibleHands(previous, aspect), b = visibleHands(current, aspect);
+    if (a && b) trails.push({ from: { x: a.x / aspect, y: a.y }, to: { x: b.x / aspect, y: b.y }, opacity: 0.2 + (1 - (time - current.t) / 0.6) * 0.6 });
   });
   const geometry = motionGeometry(frames, 1, view);
   const guideHip = guide ? geometry.hips(guide) : null;

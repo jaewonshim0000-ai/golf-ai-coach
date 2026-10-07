@@ -32,8 +32,16 @@ const feet = (frame: PoseFrame, aspect: number) => centre(frame, LM.leftAnkle, L
 export function visibleHands(frame: PoseFrame, aspect = 1): Point | null {
   // Hands share the grip. Track the visible wrist if the other is hidden,
   // rather than use its guessed coordinate or lose the entire hand arc.
-  return centre(frame, LM.leftWrist, LM.rightWrist, aspect) ??
-    at(frame, LM.leftWrist, aspect) ?? at(frame, LM.rightWrist, aspect);
+  const left = at(frame, LM.leftWrist, aspect), right = at(frame, LM.rightWrist, aspect);
+  if (!left || !right) return left ?? right;
+  // Two wrists on a shared grip must agree. Averaging a mistracked wrist with
+  // the real grip creates a hand path which neither hand actually followed.
+  const torso = median([[LM.leftShoulder, LM.leftHip], [LM.rightShoulder, LM.rightHip]].flatMap(([s, h]) => {
+    const shoulder = at(frame, s!, aspect), hip = at(frame, h!, aspect);
+    return shoulder && hip ? [distance(shoulder, hip)] : [];
+  })) ?? 0;
+  if (torso > 0 && distance(left, right) > torso * 0.45) return null;
+  return { x: (left.x + right.x) / 2, y: (left.y + right.y) / 2 };
 }
 const hands = visibleHands;
 
@@ -69,12 +77,30 @@ export function trustworthyFrames(frames: PoseFrame[], aspect: number, view: Mot
     const bad = before && after && current && previous && next && scale > 0 &&
       after.t - before.t < 0.25 && distance(previous, next) < scale * 0.3 &&
       Math.min(distance(current, previous), distance(current, next)) > scale * 0.5;
-    return bad ? { ...frame, imageLandmarks: frame.imageLandmarks?.map((point) => ({ ...point, visibility: 0 })) } : frame;
+    if (bad) return { ...frame, imageLandmarks: frame.imageLandmarks?.map((point) => ({ ...point, visibility: 0 })) };
+    // Reject isolated joint spikes independently. Preserve a correct wrist
+    // when its partner jumps, and preserve genuine fast, continuous movement.
+    if (!before || !after || scale <= 0 || frame.t - before.t > 0.101 || after.t - frame.t > 0.101) return frame;
+    const imageLandmarks = frame.imageLandmarks?.map((point, joint) => {
+      const p = at(before, joint, aspect), n = at(after, joint, aspect), c = at(frame, joint, aspect);
+      if (!p || !n || !c) return point;
+      const fraction = (frame.t - before.t) / (after.t - before.t);
+      const expected = { x: p.x + (n.x - p.x) * fraction, y: p.y + (n.y - p.y) * fraction };
+      const limb = joint >= 13 && joint <= 22;
+      const threshold = scale * (limb ? 0.65 : 0.3);
+      return distance(c, expected) > threshold && distance(p, n) < threshold &&
+        Math.min(distance(c, p), distance(c, n)) > threshold ? { ...point, visibility: 0 } : point;
+    });
+    return { ...frame, imageLandmarks };
   });
 }
 
 /** One complete visible hand arc. Never fill in impact for a truncated clip. */
 export function findMotionPhases(frames: PoseFrame[], aspect = 1, view: MotionView = "other"): SwingPhases | null {
+  return findHandArc(frames, aspect, view, 0.101);
+}
+
+function findHandArc(frames: PoseFrame[], aspect: number, view: MotionView, maximumGap: number): SwingPhases | null {
   const { hips, shoulders, feet } = motionGeometry(frames, aspect, view);
   if (frames.length < 8) return null;
   const body = median(frames.flatMap((frame) => {
@@ -109,7 +135,7 @@ export function findMotionPhases(frames: PoseFrame[], aspect = 1, view: MotionVi
     if (value === null || value === undefined) continue;
     // A missing hand through the reversal hides the true peak. A local high
     // point before that gap must not be presented as the top of backswing.
-    if (top >= 0 && previousHand >= 0 && frames[index]!.t - frames[previousHand]!.t > 0.1) return null;
+    if (top >= 0 && previousHand >= 0 && frames[index]!.t - frames[previousHand]!.t > maximumGap) return null;
     previousHand = index;
     if (address < 0 || (!locked && top < 0 && value >= baseline - 0.015)) {
       baseline = value;
@@ -139,6 +165,14 @@ export function findMotionPhases(frames: PoseFrame[], aspect = 1, view: MotionVi
   }
   // A low hand position alone cannot prove contact without the return upward.
   return null;
+}
+
+/** A sampling hint only. Sparse observations may guide a closer read, but
+ * cannot establish timing until that read supplies the missing evidence. */
+export function swingSamplingWindow(frames: PoseFrame[], aspect: number, view: MotionView): [number, number, number] | null {
+  const arc = findHandArc(frames, aspect, view, Infinity);
+  if (!arc) return null;
+  return [frames[arc.address]!.t, frames[arc.top]!.t, frames[arc.impact]!.t];
 }
 
 export type MotionTiming = {
@@ -306,20 +340,26 @@ export function analyseMotion(
   if (!body || body < 0.1) return report;
   const gaps = window.slice(1).map((frame, index) => frame.t - window[index]!.t);
   report.quality.largestGap = Math.max(0, ...gaps);
-  const referenceFeet = feet(address, aspect);
-  const footMoves = referenceFeet ? window.flatMap((frame) => {
-    const foot = feet(frame, aspect);
-    return foot ? [distance(foot, referenceFeet) / body] : [];
-  }) : [];
-  const bodySizes = window.flatMap((frame) => {
-    const s = shoulders(frame, aspect), f = feet(frame, aspect);
-    return s && f ? [distance(s, f)] : [];
+  // A normal trail-foot pivot is not camera movement. Require one consistently
+  // planted ankle, using the same joint throughout rather than the feet's
+  // moving midpoint. Shin length checks scale without confusing a torso turn
+  // or a change of posture with zoom.
+  report.quality.cameraStable = [LM.leftAnkle, LM.rightAnkle].some((joint) => {
+    const reference = at(address, joint, aspect);
+    if (!reference) return false;
+    const moves = window.flatMap((frame) => {
+      const foot = at(frame, joint, aspect);
+      return foot ? [distance(foot, reference) / body] : [];
+    });
+    const sizes = window.flatMap((frame) => {
+      const foot = at(frame, joint, aspect), knee = at(frame, joint - 2, aspect);
+      return foot && knee ? [distance(foot, knee)] : [];
+    });
+    const size = median(sizes) ?? 0;
+    return moves.length >= window.length * 0.85 && Math.max(...moves) < 0.05 &&
+      sizes.length >= window.length * 0.65 && size > body * 0.08 &&
+      (Math.max(...sizes) - Math.min(...sizes)) / size < 0.2;
   });
-  const size = median(bodySizes) ?? 0;
-  // A pan/zoom or moving stance invalidates absolute displacement. Angles remain projected observations.
-  report.quality.cameraStable = footMoves.length >= window.length * 0.7 &&
-    Math.max(...footMoves) < 0.05 && size > 0 &&
-    (Math.max(...bodySizes) - Math.min(...bodySizes)) / size < 0.2;
   if (!report.quality.cameraStable) report.warnings.push("The feet or camera moved, or the image scale changed. Body displacement is withheld; keep the camera fixed and the feet visible.");
   if (report.quality.largestGap > 0.12) report.warnings.push("There are gaps in the sampled swing. A recording with more frames will give better timing.");
   if (report.timing?.topWindow) report.warnings.push("The hands briefly disappear around the top. The backswing transition is estimated between the visible rising and descending hands; its body readings show the range across that interval.");
@@ -401,4 +441,26 @@ export function frameAtTime(frames: PoseFrame[], time: number): PoseFrame | null
   if (!frames.length || time < frames[0]!.t - 0.05 || time > frames.at(-1)!.t + 0.05) return null;
   const frame = frames.reduce((best, candidate) => Math.abs(candidate.t - time) < Math.abs(best.t - time) ? candidate : best);
   return Math.abs(frame.t - time) <= 0.06 ? frame : null;
+}
+
+/** Render between nearby observed frames only. This does not change the
+ * samples used for measurements, and never reveals a hidden endpoint joint. */
+export function overlayFrameAtTime(frames: PoseFrame[], time: number): PoseFrame | null {
+  if (!Number.isFinite(time) || !frames.length) return null;
+  const afterIndex = frames.findIndex((frame) => frame.t >= time);
+  const after = frames[afterIndex], before = frames[afterIndex - 1];
+  if (after && Math.abs(after.t - time) < 0.0001) return after;
+  if (before?.imageLandmarks && after?.imageLandmarks && after.t - before.t <= 0.05) {
+    const fraction = (time - before.t) / (after.t - before.t);
+    return { ...before, t: time, imageLandmarks: before.imageLandmarks.map((point, joint) => {
+      const next = after.imageLandmarks![joint];
+      if (!visiblePoint(point) || !visiblePoint(next)) return { ...point, visibility: 0 };
+      return { ...point, x: point.x + (next.x - point.x) * fraction,
+        y: point.y + (next.y - point.y) * fraction,
+        visibility: Math.min(point.visibility!, next.visibility!) };
+    }) };
+  }
+  const nearest = frameAtTime(frames, time);
+  // Do not leave a fast-moving wrist attached to a picture up to 60 ms away.
+  return nearest && Math.abs(nearest.t - time) <= 0.02 ? nearest : null;
 }

@@ -60,7 +60,7 @@ export function SwingVideo({
   const [progress, setProgress] = useState<string | null>(null);
   const [time, setTime] = useState(0);
   const [aspect, setAspect] = useState(3 / 4);
-  const [overlay, setOverlay] = useState(true);
+  const [overlay, setOverlay] = useState(false);
   const [view, setView] = useState<MotionView>(model?.cameraAngle ?? cameraAngle);
   const [ballSide, setBallSide] = useState<"left" | "right" | "">(model?.ballSide ?? "");
   const savedModel = model?.motionVersion === 1 && model.imageFrames ? model : null;
@@ -118,19 +118,20 @@ export function SwingVideo({
       callback = element.requestVideoFrameCallback((_, metadata) => {
         if (stopped) return;
         setTime(metadata.mediaTime);
+        window.dispatchEvent(new CustomEvent("swing:frame", { detail: { id, time: metadata.mediaTime, paused: element.paused } }));
         sample();
       });
     };
     sample();
     return () => { stopped = true; element.cancelVideoFrameCallback(callback); };
-  }, [src]);
+  }, [src, id]);
 
   async function analyse() {
     const element = video.current;
     if (!element || analysing) return;
     setAnalysing(true);
     setAnalysis(null);
-    setProgress("Loading the body tracker");
+    setProgress("Loading the 3D body model");
     // Frame callbacks depend on presenting the video. A button below a tall
     // player can scroll it offscreen, causing the browser to skip callbacks.
     element.scrollIntoView({ block: "center", behavior: "instant" });
@@ -143,7 +144,7 @@ export function SwingVideo({
         setProgress("Tracking visible joints: " + Math.min(100, Math.round(done / total * 100)) + "%"), view,
       );
       if (posed.length < 8) throw new Error("Too few clear body frames. Trim to one complete swing, keep the whole body visible, and use a brighter clip.");
-      setProgress("Checking tracking and visible movement");
+      setProgress("Reconstructing your 3D swing and analysis");
       const saved = await savePoseModelAction({
         swing_session_id: id,
         ...packFrames(posed),
@@ -151,6 +152,7 @@ export function SwingVideo({
         cameraAngle: view,
         ballSide: view === "down_the_line" && ballSide ? ballSide : undefined,
         clip: span,
+        reconstruct: true,
       });
       setAnalysis(saved);
       if (saved.ok) router.refresh();
@@ -228,15 +230,22 @@ export function SwingVideo({
         }}
         onTimeUpdate={(event) => {
           const element = event.currentTarget;
-          setTime(element.currentTime);
+          if (!element.requestVideoFrameCallback) {
+            setTime(element.currentTime);
+            window.dispatchEvent(new CustomEvent("swing:frame", { detail: { id, time: element.currentTime, paused: element.paused } }));
+          }
           if (analysing || end <= start) return;
           if (element.currentTime > end || element.currentTime < start - 0.3) {
             element.currentTime = start;
           }
         }}
-        onSeeked={(event) => setTime(event.currentTarget.currentTime)}
+        onSeeked={(event) => {
+          setTime(event.currentTarget.currentTime);
+          window.dispatchEvent(new CustomEvent("swing:frame", { detail: { id, time: event.currentTarget.currentTime, paused: event.currentTarget.paused } }));
+        }}
+        onPause={(event) => window.dispatchEvent(new CustomEvent("swing:frame", { detail: { id, time: event.currentTarget.currentTime, paused: true } }))}
       />
-      {trackedModel && tracked.length > 0 && overlay && !analysing ? <BodyOverlay frames={tracked} time={time} guide={phases ? tracked[phases.address] : undefined} view={trackedModel.cameraAngle ?? "other"} /> : null}
+      {trackedModel && tracked.length > 0 && overlay && !analysing ? <BodyOverlay frames={tracked} time={time} guide={phases ? tracked[phases.address] : undefined} view={trackedModel.cameraAngle ?? "other"} aspect={aspect} /> : null}
       {analysing ? <div role="status" className="pointer-events-none absolute inset-x-3 bottom-3 rounded-lg bg-black/75 px-3 py-2 text-center text-[12px] text-white">{progress}</div> : null}
       </div>
       {trackedModel ? <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-fg-muted">
@@ -244,18 +253,18 @@ export function SwingVideo({
         <span>Orange shoulders · green hips · gold hand path</span>
       </div> : null}
       {error ? <p role="alert" className="text-xs text-bad">{error}</p> : null}
-      {trimChanged ? <p role="status" className="text-[11px] text-fg-muted">The trim changed. Analyze movement again to use this part of the clip.</p> : null}
+      {trimChanged ? <p role="status" className="text-[11px] text-fg-muted">The trim changed. Rebuild the swing to use this part of the clip.</p> : null}
 
       {analysable ? (
         <div className="rounded-xl border border-border bg-surface-2 p-3">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
-              <p className="dsp text-[10px] tracking-[0.17em] text-fg-subtle">Read the swing</p>
+              <p className="dsp text-[10px] tracking-[0.17em] text-fg-subtle">Video → 3D → Analysis</p>
               <p className="mt-1 text-[11px] leading-[1.5] text-fg-muted">
                 {!crossOrigin
                   ? "This video will play but cannot be read, because its storage does not allow it."
                   : (progress ??
-                    "Tracks visible joints on the original video and analyses their movement. Select the camera view below, trim to one complete swing and keep your whole body visible. The first read downloads the body tracker (about 30 MB).")}
+                    "Reconstructs your body in 3D, then scores and analyzes your swing. Trim to one complete swing and keep your whole body visible. The first run downloads the model (about 30 MB).")}
               </p>
             </div>
             <Button
@@ -269,7 +278,7 @@ export function SwingVideo({
               ) : (
                 <Sparkles className="h-3.5 w-3.5" />
               )}
-              {analysing ? "Tracking" : "Analyze movement"}
+              {analysing ? "Reconstructing" : model?.reconstructionVersion === 1 ? "Rebuild swing" : "Build 3D swing"}
             </Button>
           </div>
           {analysis ? (
@@ -301,13 +310,13 @@ export function SwingVideo({
           {view === "down_the_line" ? <div className="mt-3 space-y-3">
             <label className="block text-[11px] text-fg-muted">In this video, the ball is on which side of your body?
               <select aria-label="Ball side in the video" value={ballSide} disabled={analysing} onChange={(event) => setBallSide(event.target.value as "left" | "right" | "")} className="mt-1.5 w-full rounded-lg border border-border bg-surface px-3 py-2 text-[12px]">
-                <option value="">Select to score hip space</option><option value="left">Screen left</option><option value="right">Screen right</option>
+                <option value="">Detect automatically</option><option value="left">Screen left</option><option value="right">Screen right</option>
               </select>
             </label>
             <p className="text-[11px] leading-relaxed text-fg-muted">Place the camera behind your hands at address, at hand height, looking parallel to the target line. Keep the phone level and fixed, with your feet, head and full swing in view. Use good light and 60 fps or higher when available.</p>
-            <p className="text-[10.5px] leading-relaxed text-fg-subtle">We track the visible body side and compare posture and hip space to setup. This view cannot establish exact club path or clubface angle from body tracking alone. Choose the ball side as displayed, including mirrored videos.</p>
+            <p className="text-[10.5px] leading-relaxed text-fg-subtle">The ball side is inferred from your setup when clear. You can correct it here for mirrored recordings.</p>
           </div> : view === "face_on" ? <p className="mt-3 text-[11px] leading-relaxed text-fg-muted">Place the camera directly opposite your hands, perpendicular to the target line. Keep it fixed and level with both feet, hips, shoulders and your whole swing visible.</p> : null}
-          {savedModel && (view !== savedModel.cameraAngle || (view === "down_the_line" && ballSide !== (savedModel.ballSide ?? ""))) ? <p className="mt-2 text-[11px] text-fg-muted">Analyze again to save the selected view and ball side and update your score.</p> : null}
+          {savedModel && (view !== savedModel.cameraAngle || (view === "down_the_line" && ballSide && ballSide !== (savedModel.ballSide ?? ""))) ? <p className="mt-2 text-[11px] text-fg-muted">Rebuild the swing to update the view, model and score.</p> : null}
         </div>
       ) : null}
 

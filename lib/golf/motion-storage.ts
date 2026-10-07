@@ -1,14 +1,19 @@
 import type { PackedLandmark, PoseModel } from "./pose";
 
-/** JSONB numeric arrays are much larger than their JSON text. Store only the
- * observed coordinates used by motion analysis, without reducing precision. */
+/** Store numeric arrays as JSON text to stay inside the existing JSONB size
+ * limit. New reconstructions retain inferred 3D at millimetre precision. */
 export function compactMotionModel(model: PoseModel): PoseModel {
   if (model.motionVersion !== 1 || !model.imageFrames) return model;
-  const { imageFrames, imageData: _previous, ...rest } = model;
+  const { imageFrames, imageData: _previous, worldData: _world, ...rest } = model;
   return {
     ...rest,
     frames: [],
     imageData: JSON.stringify(imageFrames.map((frame) => frame.map(([x, y, , visibility]) => [x, y, visibility]))),
+    ...(model.reconstructionVersion === 1 && model.frames.length === model.t.length ? {
+      worldData: JSON.stringify(model.frames.map((frame) => frame.map(([x, y, z]) => [
+        Math.round(x * 1000), Math.round(y * 1000), Math.round(z * 1000),
+      ]))),
+    } : {}),
   };
 }
 
@@ -29,8 +34,25 @@ export function expandMotionModel(model: PoseModel | null): PoseModel | null {
       }
       imageFrames.push(points);
     }
-    const { imageData: _stored, ...rest } = model;
-    return { ...rest, imageFrames };
+    let frames: PackedLandmark[][] = model.frames;
+    if (model.reconstructionVersion === 1) {
+      if (!model.worldData || model.worldData.length > 110000) return null;
+      const world: unknown = JSON.parse(model.worldData);
+      if (!Array.isArray(world) || world.length !== model.t.length) return null;
+      frames = [];
+      for (const [index, frame] of world.entries()) {
+        if (!Array.isArray(frame) || frame.length !== 33) return null;
+        const joints: PackedLandmark[] = [];
+        for (const [joint, point] of frame.entries()) {
+          if (!Array.isArray(point) || point.length !== 3 || !point.every((value) =>
+            typeof value === "number" && Number.isInteger(value) && Math.abs(value) <= 5000)) return null;
+          joints.push([point[0] / 1000, point[1] / 1000, point[2] / 1000, imageFrames[index]![joint]![3]]);
+        }
+        frames.push(joints);
+      }
+    }
+    const { imageData: _stored, worldData: _inferred, ...rest } = model;
+    return { ...rest, frames, imageFrames };
   } catch {
     return null;
   }

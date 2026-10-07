@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { analyseMotion, describeMotionReading, findAutomaticTiming, findMotionPhases, frameAtTime, motionCriteria, trustworthyFrames } from "./motion-analysis";
+import { analyseMotion, describeMotionReading, findAutomaticTiming, findMotionPhases, frameAtTime, motionCriteria, overlayFrameAtTime, trustworthyFrames, visibleHands } from "./motion-analysis";
 import { LM, packFrames, unpackFrames, type PoseFrame } from "./pose";
 import { poseModelSchema } from "../validation/schemas";
 import { scoreSwing } from "./swing-score";
@@ -198,6 +198,60 @@ describe("projected swing movement", () => {
     assert.equal(frameAtTime([swing()[0]!, swing().at(-1)!], 0.2), null);
     assert.equal(frameAtTime(swing(), -1), null);
     assert.equal(frameAtTime(swing(), 0.201)?.t, 0.2);
+  });
+
+  it("rejects an isolated wrist spike without losing its correctly tracked partner or changing source samples", () => {
+    const frames = swing();
+    frames[5]!.imageLandmarks![15]!.x = 0.95;
+    const original = structuredClone(frames);
+    const clean = trustworthyFrames(frames, 1, "face_on");
+    assert.equal(clean[5]!.imageLandmarks![15]!.visibility, 0);
+    assert.equal(clean[5]!.imageLandmarks![16]!.visibility, 0.95);
+    assert.equal(visibleHands(frames[5]!), null);
+    assert.deepEqual(findMotionPhases(clean), phases);
+    assert.equal(analyseMotion(frames, 1, "face_on").readings.some((row) => row.id === "arm_top"), false);
+    assert.deepEqual(frames, original);
+  });
+
+  it("accepts a normal trail-foot pivot but withholds displacement during pan or zoom", () => {
+    const frames = swing();
+    for (const frame of frames.slice(6)) {
+      frame.imageLandmarks![28]!.x += 0.1;
+      frame.imageLandmarks![28]!.y -= 0.07;
+    }
+    for (const view of ["face_on", "down_the_line"] as const) {
+      const report = analyseMotion(frames, 1, view, "right", phases);
+      assert.equal(report.quality.cameraStable, true);
+      assert.ok(report.readings.some((row) => row.id === "hips_impact"));
+    }
+    const zoomed = swing().map((frame, index) => ({ ...frame, imageLandmarks: frame.imageLandmarks!.map((point) => ({
+      ...point, x: 0.5 + (point.x - 0.5) * (1 + index * 0.04), y: 0.5 + (point.y - 0.5) * (1 + index * 0.04),
+    })) }));
+    assert.equal(analyseMotion(zoomed, 1, "down_the_line", "right", phases).quality.cameraStable, false);
+  });
+
+  it("keeps stable-camera measurements when a shin briefly hides but the planted ankle stays visible", () => {
+    const frames = swing().flatMap((frame) => [0, 0.013, 0.026].map((offset) => ({ ...structuredClone(frame), t: frame.t + offset })));
+    const marked = { address: 3, top: 15, impact: 24 };
+    for (const frame of frames.slice(9, 16)) for (const joint of [25, 26]) frame.imageLandmarks![joint]!.visibility = 0.1;
+    assert.equal(analyseMotion(frames, 1, "face_on", "right", marked).quality.cameraStable, true);
+    for (const frame of frames) for (const joint of [25, 26]) frame.imageLandmarks![joint]!.visibility = 0.1;
+    assert.equal(analyseMotion(frames, 1, "face_on", "right", marked).quality.cameraStable, false);
+  });
+
+  it("renders between adjacent clear video samples without revealing hidden joints or spanning tracking gaps", () => {
+    const frames = swing();
+    const original = structuredClone(frames);
+    const midway = overlayFrameAtTime(frames, 0.1)!;
+    assert.equal(midway.t, 0.1);
+    assert.ok(Math.abs(midway.imageLandmarks![15]!.y - 0.54) < 1e-10);
+    assert.deepEqual(frames, original);
+    frames[3]!.imageLandmarks![15]!.visibility = 0.1;
+    assert.equal(overlayFrameAtTime(frames, 0.1)!.imageLandmarks![15]!.visibility, 0);
+    assert.equal(overlayFrameAtTime([frames[0]!, frames[3]!], 0.06), null);
+    assert.equal(overlayFrameAtTime(frames, -0.03), null);
+    assert.equal(overlayFrameAtTime(frames, NaN), null);
+    assert.equal(overlayFrameAtTime(frames, 0.12), frames[3]);
   });
 
   it("withholds timing ratios when the impact interval is undersampled", () => {

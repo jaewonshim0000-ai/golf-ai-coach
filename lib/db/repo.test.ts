@@ -21,16 +21,16 @@ describe("practice priorities storage", () => {
   beforeEach(() => resetDemoStore());
 
   it("saves, reopens, and clears a player's choices", async () => {
-    await savePracticeDrillPriorities(DEMO_USER_ID, ["drill_gate_putting", "drill_chip_circle"]);
-    assert.deepEqual(await getPracticeDrillPriorities(DEMO_USER_ID), ["drill_gate_putting", "drill_chip_circle"]);
+    await savePracticeDrillPriorities(DEMO_USER_ID, ["test_putt_gate", "test_short_chip"]);
+    assert.deepEqual(await getPracticeDrillPriorities(DEMO_USER_ID), ["test_putt_gate", "test_short_chip"]);
     await savePracticeDrillPriorities(DEMO_USER_ID, []);
     assert.deepEqual(await getPracticeDrillPriorities(DEMO_USER_ID), []);
   });
 
   it("rejects another player's write without changing the current priorities", async () => {
-    await savePracticeDrillPriorities(DEMO_USER_ID, ["drill_gate_putting"]);
-    await assert.rejects(savePracticeDrillPriorities("another-player", ["drill_chip_circle"]));
-    assert.deepEqual(await getPracticeDrillPriorities(DEMO_USER_ID), ["drill_gate_putting"]);
+    await savePracticeDrillPriorities(DEMO_USER_ID, ["test_putt_gate"]);
+    await assert.rejects(savePracticeDrillPriorities("another-player", ["test_short_chip"]));
+    assert.deepEqual(await getPracticeDrillPriorities(DEMO_USER_ID), ["test_putt_gate"]);
   });
 });
 

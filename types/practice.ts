@@ -137,7 +137,9 @@ export type DrillAttempt = {
   successes: number;
   /** Normalised 0-1 result on the drill metric. */
   score: number;
+  /** Distance measurement, legacy metric, or spiral restart count. */
   raw_value: number | null;
+  /** Legacy miss estimates, or test samples: carry yards / ordered 1 (success), 0 (miss). */
   shot_offsets?: number[] | null;
   /** Where each ball finished on the target, [left(-)/right(+), short(-)/long(+)]. */
   shot_points?: [number, number][] | null;

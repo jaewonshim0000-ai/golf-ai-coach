@@ -29,6 +29,14 @@ function fixture(view: MotionView = "face_on") {
 }
 
 describe("reconstructed swing score", () => {
+  it("withholds posture when the reconstructed torso is uncertain despite clear image tracking", () => {
+    const { model, report } = fixture();
+    model.frames[report.phases!.impact]![12]![3] = 0.5;
+    const score = scoreReconstruction(model, report);
+    assert.equal(score.components.some((component) => component.id === "posture_3d"), false);
+    assert.equal(score.total, null);
+    assert.match(score.missing[0]!, /posture/);
+  });
   it("scores actual reconstructed depth rather than substituting a face-on projected angle", () => {
     const { model, report } = fixture();
     const score = scoreReconstruction(model, report);
@@ -76,5 +84,31 @@ describe("reconstructed swing score", () => {
     assert.deepEqual(score.totalRange, [60, 100]);
     assert.equal(score.priorities.some((component) => component.id === "posture_3d"), false);
     assert.equal(score.reviews[0]!.id, "posture_3d");
+  });
+
+  it("keeps supported posture and body control when a sampling gap excludes rhythm", () => {
+    for (const view of ["face_on", "down_the_line"] as const) {
+      const { model, report } = fixture(view);
+      report.quality.largestGap = 0.16;
+      report.tempo = null;
+      const score = scoreReconstruction(model, report);
+      assert.equal(score.total, 43);
+      assert.deepEqual(score.components.map((component) => component.id), ["posture_3d", view === "face_on" ? "head" : "hip_depth"]);
+      assert.equal(score.missing.length, 1);
+      report.quality.cameraStable = false;
+      assert.equal(scoreReconstruction(model, report).total, null);
+      assert.deepEqual(scoreReconstruction(model, report).components.map((component) => component.id), ["posture_3d"]);
+    }
+  });
+
+  it("explains unresolved timing on an existing reconstruction and accepts corrected positions", () => {
+    const { model, report } = fixture();
+    const unresolved = { ...report, usable: false, phases: null };
+    const score = scoreReconstruction(model, unresolved);
+    assert.equal(score.total, null);
+    assert.match(score.reason!, /automatic swing timing/);
+    assert.match(score.reason!, /mark address, top and impact/);
+    assert.doesNotMatch(score.reason!, /Build a 3D model/);
+    assert.equal(scoreReconstruction(model, report).total, 60);
   });
 });

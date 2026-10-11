@@ -29,10 +29,10 @@ describe("practice plans", () => {
   });
 
   it("uses matching saved drills without replacing the goal test or repeating exercises", () => {
-    const plan = buildPlan(60, "driver_accuracy", null, ["drill_gate_putting", "drill_driver_fairway_finder", "drill_driver_pressure_ladder"]);
-    assert.ok(plan.items.some((item) => item.drill_id === "drill_driver_fairway_finder"));
-    assert.ok(plan.items.some((item) => item.drill_id === "drill_driver_pressure_ladder"));
-    assert.ok(!plan.items.some((item) => item.drill_id === "drill_gate_putting"));
+    const plan = buildPlan(60, "driver_accuracy", null, ["test_putt_gate", "test_driver_distance", "test_driver_accuracy"]);
+    assert.ok(plan.items.some((item) => item.drill_id === "test_driver_distance"));
+    assert.ok(plan.items.some((item) => item.drill_id === "test_driver_accuracy"));
+    assert.ok(!plan.items.some((item) => item.drill_id === "test_putt_gate"));
     assert.ok(plan.items.some((item) => item.block === "skill" && item.drill_id === "drill_driver_accuracy"));
     assert.equal(new Set(plan.items.map((item) => item.drill_id)).size, plan.items.length);
     assert.equal(plan.items.reduce((sum, item) => sum + item.duration, 0), 60);

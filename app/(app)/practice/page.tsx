@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { User } from "lucide-react";
+import { ChevronDown, User } from "lucide-react";
 
 import { resetDemoAction } from "@/app/actions";
 import { DemoNotice, PriorityCard, TodaysSession } from "@/components/dashboard/sections";
@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/primitives";
 import { benchmarkFor, benchmarkNote } from "@/lib/practice/benchmark";
 import { rankPracticeDrills } from "@/lib/practice/drill-priorities";
+import { practiceTest } from "@/lib/practice/tests";
 import * as repo from "@/lib/db/repo";
 import { loadPlayerState } from "@/lib/player-state";
 import { formatDate, greeting, relativeDays } from "@/lib/utils";
@@ -74,43 +75,54 @@ export default async function PracticePage() {
 
       <TodaysSession session={state.session} attempts={state.drillAttempts} />
 
-      <SectionHeading
-        title="Your benchmarks"
-        description="Every drill has a number to beat. Log the result and it is tracked here."
-      />
-      {benchmarks.length === 0 ? (
-        <EmptyState
-          title="No drills tracked yet"
-          message="Run a session and the standards you are chasing show up here."
-          action={
-            <ButtonLink href="/practice/drills" size="sm" variant="secondary">
-              Browse drills
-            </ButtonLink>
-          }
-        />
-      ) : (
-        <div className="grid gap-2.5 md:grid-cols-2">
-          {benchmarks.map((benchmark) => {
-            const note = benchmarkNote(benchmark);
-            return (
-              <MiniCard key={benchmark.drill.id} className="space-y-2 p-3.5">
-                <div className="flex items-start justify-between gap-3">
-                  <p className="min-w-0 truncate text-[13px] font-semibold">
-                    {benchmark.drill.name}
+      <details open className="group space-y-3">
+        <summary aria-label="Your benchmarks" className="flex min-h-11 cursor-pointer list-none items-center gap-3 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent [&::-webkit-details-marker]:hidden">
+          <div className="min-w-0 flex-1">
+            <SectionHeading
+              title="Your benchmarks"
+              description="Every drill has a number to beat. Log the result and it is tracked here."
+            />
+          </div>
+          <span className="flex shrink-0 items-center gap-1.5 text-[12px] font-medium text-accent">
+            <span className="group-open:hidden">Expand</span>
+            <span className="hidden group-open:inline">Collapse</span>
+            <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" aria-hidden />
+          </span>
+        </summary>
+        {benchmarks.length === 0 ? (
+          <EmptyState
+            title="No drills tracked yet"
+            message="Run a session and the standards you are chasing show up here."
+            action={
+              <ButtonLink href="/practice/drills" size="sm" variant="secondary">
+                Browse drills
+              </ButtonLink>
+            }
+          />
+        ) : (
+          <div className="grid gap-2.5 md:grid-cols-2">
+            {benchmarks.map((benchmark) => {
+              const note = benchmarkNote(benchmark);
+              return (
+                <MiniCard key={benchmark.drill.id} className="space-y-2 p-3.5">
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="min-w-0 truncate text-[13px] font-semibold">
+                      {benchmark.drill.name}
+                    </p>
+                    <Badge tone={benchmark.beaten ? "good" : "neutral"}>
+                      {practiceTest(benchmark.drill.id) ? benchmark.beaten ? "completed" : benchmark.best ? "tracked" : "open" : benchmark.beaten ? "beaten" : "open"}
+                    </Badge>
+                  </div>
+                  <p className="tabular text-[15px] font-semibold text-accent">{benchmark.label}</p>
+                  <p className="text-[11.5px] leading-[1.5] text-fg-muted">
+                    {note ?? `${benchmark.drill.metric_to_track}. No result logged yet.`}
                   </p>
-                  <Badge tone={benchmark.beaten ? "good" : "neutral"}>
-                    {benchmark.beaten ? "beaten" : "open"}
-                  </Badge>
-                </div>
-                <p className="tabular text-[15px] font-semibold text-accent">{benchmark.label}</p>
-                <p className="text-[11.5px] leading-[1.5] text-fg-muted">
-                  {note ?? `${benchmark.drill.metric_to_track}. No result logged yet.`}
-                </p>
-              </MiniCard>
-            );
-          })}
-        </div>
-      )}
+                </MiniCard>
+              );
+            })}
+          </div>
+        )}
+      </details>
 
       <Card>
         <CardHeader className="flex-row items-center justify-between gap-3">

@@ -17,6 +17,7 @@ import { PRACTICE_GOALS, type GoalId } from "../practice/goals";
 import { PLAN_LENGTHS, type PlanLength } from "../practice/plan";
 import { START_OPTION_IDS } from "../golf/hole-entry";
 import { PRACTICE_DRILL_IDS } from "../practice/drill-priorities";
+import { practiceTest } from "../practice/tests";
 
 /** Input validation at the trust boundary. Every server action parses through here. */
 
@@ -144,7 +145,7 @@ export const drillAttemptSchema = z
     drill_id: z.string().min(1),
     attempts: z.coerce.number().int().min(1).max(500),
     successes: z.coerce.number().int().min(0).max(500),
-    shot_offsets: z.array(z.number().finite().min(-300).max(300)).max(40).nullable().default(null),
+    shot_offsets: z.array(z.number().finite().min(-300).max(600)).max(500).nullable().default(null),
     shot_points: z
       .array(z.tuple([z.number().finite().min(-300).max(300), z.number().finite().min(-300).max(300)]))
       .max(40)
@@ -155,6 +156,13 @@ export const drillAttemptSchema = z
   .refine((a) => a.successes <= a.attempts, {
     message: "Successes cannot exceed attempts",
     path: ["successes"],
+  })
+  .superRefine((attempt, context) => {
+    const test = practiceTest(attempt.drill_id);
+    const samples = attempt.shot_offsets;
+    if (!samples) return;
+    if (test?.kind !== "spiral" && samples.length > 40) context.addIssue({ code: "custom", message: "Too many shot estimates", path: ["shot_offsets"] });
+    if (test?.kind !== "carry" && samples.some((value) => Math.abs(value) > 300)) context.addIssue({ code: "custom", message: "Shot estimate is outside the allowed range", path: ["shot_offsets"] });
   });
 export type DrillAttemptInput = z.infer<typeof drillAttemptSchema>;
 

@@ -36,12 +36,12 @@ describe("practice drill priorities", () => {
     const ranked = rankPracticeDrills(DRILLS, {
       rounds, shots: [...shots("r1", "putting", -0.5), ...shots("r1", "off_the_tee", -0.1)], profile: seed.profile,
     });
-    assert.equal(ranked[0]!.drill.id, "drill_putting_conversion");
+    assert.equal(ranked[0]!.drill.id, "test_putt_3");
     assert.match(ranked[0]!.reason!, /strokes lost/);
     const changed = rankPracticeDrills(DRILLS, {
       rounds, shots: [...shots("r1", "putting", 0.2), ...shots("r1", "off_the_tee", -0.6)], profile: seed.profile,
     });
-    assert.equal(changed[0]!.drill.id, "drill_driver_accuracy");
+    assert.equal(changed[0]!.drill.id, "test_driver_accuracy");
   });
 
   it("uses only the ten latest played rounds, regardless of array order", () => {
@@ -49,28 +49,28 @@ describe("practice drill priorities", () => {
     const ranked = rankPracticeDrills(DRILLS, {
       rounds, shots: [...shots("r0", "putting", -10), ...shots("r10", "off_the_tee", -0.3)], profile: null,
     });
-    assert.equal(ranked[0]!.drill.id, "drill_driver_accuracy");
-    assert.equal(ranked.find((entry) => entry.drill.id === "drill_putting_conversion")!.reason, null);
+    assert.equal(ranked[0]!.drill.id, "test_driver_accuracy");
+    assert.equal(ranked.find((entry) => entry.drill.id === "test_putt_3")!.reason, null);
   });
 
   it("does not recommend wedges for losses recorded with a numbered iron", () => {
     const ranked = rankPracticeDrills(DRILLS, {
       rounds: [round("r1")], shots: shots("r1", "approach", -0.5), profile: seed.profile,
     });
-    assert.notEqual(ranked.find((entry) => entry.drill.id === "drill_iron_accuracy")!.reason, null);
-    assert.equal(ranked.find((entry) => entry.drill.id === "drill_wedge_accuracy")!.reason, null);
+    assert.notEqual(ranked.find((entry) => entry.drill.id === "test_line_100_150")!.reason, null);
+    assert.equal(ranked.find((entry) => entry.drill.id === "test_line_50_100")!.reason, null);
   });
 
   it("ranks recorded scorecard misses without inventing strokes gained", () => {
     const card = { ...round("card"), hole_stats: Array.from({ length: 18 }, () => ({ score: 5, putts: 3, fairway: "hit" as const, penalties: 0 })) };
     const ranked = rankPracticeDrills(DRILLS, { rounds: [card], shots: [], profile: null });
-    assert.equal(ranked[0]!.drill.id, "drill_lag_ladder");
+    assert.equal(ranked[0]!.drill.id, "test_lag_20_30");
     assert.match(ranked[0]!.reason!, /18 three-putt holes/);
     assert.doesNotMatch(ranked[0]!.reason!, /strokes lost/);
     const driver = rankPracticeDrills(DRILLS, {
       rounds: [{ ...card, hole_stats: [{ score: 5, putts: 2, fairway: "left", penalties: 0 }] }], shots: [], profile: null,
     });
-    assert.equal(driver[0]!.drill.id, "drill_driver_accuracy");
+    assert.equal(driver[0]!.drill.id, "test_driver_accuracy");
     assert.equal(driver[0]!.signal, "early");
   });
 
@@ -90,8 +90,8 @@ describe("practice drill priorities", () => {
   });
 
   it("validates saved choices, deduplicates them, and permits clearing", () => {
-    assert.deepEqual(cleanDrillPriorities(["drill_gate_putting", "made-up", null, "drill_gate_putting"]), ["drill_gate_putting"]);
-    assert.deepEqual(cleanDrillPriorities("drill_gate_putting"), []);
+    assert.deepEqual(cleanDrillPriorities(["test_putt_gate", "made-up", null, "test_putt_gate"]), ["test_putt_gate"]);
+    assert.deepEqual(cleanDrillPriorities("test_putt_gate"), []);
     assert.equal(practicePrioritiesSchema.safeParse({ drill_ids: ["made-up"] }).success, false);
     assert.equal(practicePrioritiesSchema.safeParse({ drill_ids: [] }).success, true);
   });

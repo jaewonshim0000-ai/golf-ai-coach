@@ -28,6 +28,29 @@ export function scoreSwing(report: MotionReport, ballSide?: "left" | "right"): S
     result.reason = "A score needs a fixed camera, at least 85% visible body tracking, and no sample gaps over 0.12 seconds. Re-record with your whole body visible.";
   if (result.reason) return result;
 
+  Object.assign(result, swingScoreChecks(report, ballSide));
+  const weight = result.components.reduce((sum, item) => sum + item.weight, 0);
+  if (result.components.length >= 2 && weight >= 70) {
+    result.total = Math.round(result.components.reduce((sum, item) => sum + item.score * item.weight, 0) / weight);
+    if (result.components.some((item) => item.scoreRange)) {
+      result.totalRange = [result.total, Math.round(result.components.reduce((sum, item) => sum + (item.scoreRange?.[1] ?? item.score) * item.weight, 0) / weight)];
+    }
+  } else result.reason = `Movement analysis is complete, but only ${result.components.length} of 3 checks could be scored. An overall score needs at least two checks covering 70% of the planned weight. Review the available results below; repeating this recording will not reveal hidden positions.`;
+  // Keep supported improvement cues even when an overall score is unavailable.
+  // A ranged reading is a priority only if all observed positions score below 85.
+  result.priorities = [...result.components].filter((item) => (item.scoreRange?.[1] ?? item.score) < 85)
+    .sort((a, b) => (100 - (b.scoreRange?.[1] ?? b.score)) * b.weight - (100 - (a.scoreRange?.[1] ?? a.score)) * a.weight).slice(0, 3);
+  result.reviews = result.components.filter((item) => item.scoreRange && item.scoreRange[0] < 85 && item.scoreRange[1] >= 85);
+  return result;
+}
+
+/** Individual checks use the supported readings and timing supplied by the
+ * motion report. A gap elsewhere must not discard a visible body position.
+ * Absolute displacement still requires a stable camera. */
+export function swingScoreChecks(report: MotionReport, ballSide?: "left" | "right"): Pick<SwingScore, "components" | "missing"> {
+  const result: Pick<SwingScore, "components" | "missing"> = { components: [], missing: [] };
+  if (!report.usable || !report.phases || report.view === "other") return result;
+
   const reading = (id: string, unit: MotionReading["unit"], allowRange = false) => report.readings.find((row) =>
     row.id === id && row.unit === unit && Number.isFinite(row.value) &&
     (!row.range || (allowRange && row.range.every(Number.isFinite) && row.range[0] <= row.range[1])));
@@ -43,13 +66,13 @@ export function scoreSwing(report: MotionReport, ballSide?: "left" | "right"): S
   };
   if (report.view === "face_on") {
     const head = reading("head_impact", "% stance");
-    if (head) add({ id: "head", label: "Head control at impact", weight: 40, value: Math.abs(head.value), unit: "% stance", time: head.time,
+    if (head && report.quality.cameraStable) add({ id: "head", label: "Head control at impact", weight: 40, value: Math.abs(head.value), unit: "% stance", time: head.time,
       evidence: `Your head shifted ${Math.abs(head.value)}% of stance width ${head.value < 0 ? "toward the trail foot" : "toward the lead foot"} from setup at estimated impact.`,
       cue: "Try five waist-high swings at half speed. Allow a natural turn while reducing a large sideways lunge; do not try to freeze your head.",
       check: "Film from the same position and compare the head guide at setup and impact. Check strike location as well as the score." }, Math.abs(head.value), 12, 40);
     else result.missing.push("Head control needs a visible head and both ankles at impact in a face-on view.");
     const lift = reading("lift_top", "% body height", true);
-    if (lift) add({ id: "height", label: "Height control in the backswing", weight: 30, value: Math.abs(lift.value), unit: "% body height", time: lift.time,
+    if (lift && report.quality.cameraStable) add({ id: "height", label: "Height control in the backswing", weight: 30, value: Math.abs(lift.value), unit: "% body height", time: lift.time,
       evidence: lift.range ? `Hip height ranges from ${lift.range[0]}% to ${lift.range[1]}% of visible body height relative to setup across the estimated backswing transition. Negative is lower; positive is higher. The score uses all observed positions in that interval.` :
         `Hip height changed ${Math.abs(lift.value)}% of visible body height ${lift.value < 0 ? "down" : "up"} from setup at the top.`,
       cue: "Make five slow backswings with a comfortable knee bend. Review large rises or dips without forcing the hips to stay motionless.",
@@ -66,7 +89,7 @@ export function scoreSwing(report: MotionReport, ballSide?: "left" | "right"): S
         check: "Pause setup and estimated impact from the same camera position. Compare the visible shoulder-to-hip line and check centered contact." }, loss, 10, 30);
     } else result.missing.push("Posture needs the same visible shoulder and hip at setup and impact.");
     const hip = reading("hips_impact", "% body height");
-    if (hip && ballSide) {
+    if (hip && ballSide && report.quality.cameraStable) {
       const toward = Math.max(0, hip.value * (ballSide === "right" ? 1 : -1));
       add({ id: "hip_depth", label: "Hip space toward the ball", weight: 35, value: Math.round(toward * 10) / 10, unit: "% body height", time: hip.time,
         evidence: `The tracked hip moved ${Math.abs(hip.value)}% of visible body height ${toward > 0 ? "toward" : "away from"} the ball side at estimated impact. This is a projected hip landmark, not the rear edge of the pelvis.`,
@@ -86,17 +109,5 @@ export function scoreSwing(report: MotionReport, ballSide?: "left" | "right"): S
   } else result.missing.push(report.timing?.source === "occluded_transition" ?
     "Rhythm was not scored because the hands are hidden around the backswing transition. Body movement can still be scored; a new recording with the hands visible is needed to add rhythm." :
     "Rhythm was not scored because swing timing is not precise enough. A new recording with clear hands and more frames can add this check.");
-  const weight = result.components.reduce((sum, item) => sum + item.weight, 0);
-  if (result.components.length >= 2 && weight >= 70) {
-    result.total = Math.round(result.components.reduce((sum, item) => sum + item.score * item.weight, 0) / weight);
-    if (result.components.some((item) => item.scoreRange)) {
-      result.totalRange = [result.total, Math.round(result.components.reduce((sum, item) => sum + (item.scoreRange?.[1] ?? item.score) * item.weight, 0) / weight)];
-    }
-  } else result.reason = `Movement analysis is complete, but only ${result.components.length} of 3 checks could be scored. An overall score needs at least two checks covering 70% of the planned weight. Review the available results below; repeating this recording will not reveal hidden positions.`;
-  // Keep supported improvement cues even when an overall score is unavailable.
-  // A ranged reading is a priority only if all observed positions score below 85.
-  result.priorities = [...result.components].filter((item) => (item.scoreRange?.[1] ?? item.score) < 85)
-    .sort((a, b) => (100 - (b.scoreRange?.[1] ?? b.score)) * b.weight - (100 - (a.scoreRange?.[1] ?? a.score)) * a.weight).slice(0, 3);
-  result.reviews = result.components.filter((item) => item.scoreRange && item.scoreRange[0] < 85 && item.scoreRange[1] >= 85);
   return result;
 }

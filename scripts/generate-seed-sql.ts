@@ -171,11 +171,11 @@ const demoSql = [
 
 mkdirSync(outDir, { recursive: true });
 writeFileSync(join(outDir, "seed.sql"), referenceSql, "utf8");
-writeFileSync(join(outDir, "demo-player.sql"), demoSql, "utf8");
+if (!process.argv.includes("--reference-only")) writeFileSync(join(outDir, "demo-player.sql"), demoSql, "utf8");
 
 console.log(
   `Wrote supabase/seed/seed.sql (${DRILLS.length} drills, ${REFERENCE_SWINGS.length} reference swings)`,
 );
-console.log(
+if (!process.argv.includes("--reference-only")) console.log(
   `Wrote supabase/seed/demo-player.sql (${demo.rounds.length} rounds, ${demo.shots.length} shots, ${demo.practiceSessions.length} practice sessions)`,
 );

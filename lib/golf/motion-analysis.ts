@@ -95,13 +95,31 @@ export function trustworthyFrames(frames: PoseFrame[], aspect: number, view: Mot
   });
 }
 
+/** A planted ankle is a reference for image displacement. Knee flexion and
+ * rotation change projected shin length even with a fixed camera, so shin
+ * length must not decide whether the recording can be reviewed. */
+export function hasStableFoot(frames: PoseFrame[], reference: PoseFrame, aspect: number, body: number): boolean {
+  if (!(body > 0) || frames.length < 3) return false;
+  return [LM.leftAnkle, LM.rightAnkle].some((joint) => {
+    const base = at(reference, joint, aspect);
+    if (!base) return false;
+    const moves = frames.flatMap((frame) => {
+      const foot = at(frame, joint, aspect);
+      return foot ? [distance(foot, base) / body] : [];
+    }).sort((a, b) => a - b);
+    // An isolated tracking error is not evidence that the camera moved.
+    // Sustained movement of both ankles still withholds displacement.
+    return moves.length >= frames.length * 0.85 && moves[Math.ceil(moves.length * 0.9) - 1]! < 0.045;
+  });
+}
+
 /** One complete visible hand arc. Never fill in impact for a truncated clip. */
 export function findMotionPhases(frames: PoseFrame[], aspect = 1, view: MotionView = "other"): SwingPhases | null {
   return findHandArc(frames, aspect, view, 0.101);
 }
 
 function findHandArc(frames: PoseFrame[], aspect: number, view: MotionView, maximumGap: number): SwingPhases | null {
-  const { hips, shoulders, feet } = motionGeometry(frames, aspect, view);
+  const { hips, shoulders, feet, visibleBody } = motionGeometry(frames, aspect, view);
   if (frames.length < 8) return null;
   const body = median(frames.flatMap((frame) => {
     const s = shoulders(frame, aspect), f = feet(frame, aspect);
@@ -135,7 +153,21 @@ function findHandArc(frames: PoseFrame[], aspect: number, view: MotionView, maxi
     if (value === null || value === undefined) continue;
     // A missing hand through the reversal hides the true peak. A local high
     // point before that gap must not be presented as the top of backswing.
-    if (top >= 0 && previousHand >= 0 && frames[index]!.t - frames[previousHand]!.t > maximumGap) return null;
+    if (top >= 0 && previousHand >= 0 && frames[index]!.t - frames[previousHand]!.t > maximumGap) {
+      const previous = path[previousHand]!;
+      const hidden = frames.slice(previousHand + 1, index);
+      const nextHand = path.findIndex((point, n) => n > index && point !== null);
+      const next = nextHand >= 0 ? path[nextHand]! : null;
+      // Brief wrist loss away from either reversal does not hide the top or
+      // bottom when the hands resume in the same direction and the body stays
+      // tracked. Never bridge a hidden peak, contact or a sparse source clip.
+      const continues = next !== null && frames[nextHand]!.t - frames[index]!.t <= 0.101 &&
+        ((!locked && value < previous && value < highest && next < value) ||
+        (locked && value > previous && value > lowest && next > value));
+      if (frames[index]!.t - frames[previousHand]!.t > 0.201 || !continues || !hidden.length ||
+          !hidden.every((frame, n) => visibleBody(frame) && frame.t - frames[previousHand + n]!.t <= 0.101) ||
+          frames[index]!.t - frames[index - 1]!.t > 0.101) return null;
+    }
     previousHand = index;
     if (address < 0 || (!locked && top < 0 && value >= baseline - 0.015)) {
       baseline = value;
@@ -192,7 +224,13 @@ export function findAutomaticTiming(frames: PoseFrame[], aspect = 1, view: Motio
   const { hips, shoulders, feet, visibleBody } = motionGeometry(frames, aspect, view);
   if (frames.length < 8 || !(aspect > 0)) return null;
   const direct = findMotionPhases(frames, aspect, view);
-  if (direct) return { phases: direct, timing: { source: "hands", uncertainty: 0 } };
+  if (direct) {
+    const times = frames.slice(direct.address, direct.impact + 1).filter((frame) => hands(frame, aspect) && hips(frame, aspect)).map((frame) => frame.t);
+    const gaps = times.slice(1).map((time, index) => time - times[index]!);
+    // Carry accepted hand gaps into timing uncertainty; nearby body samples
+    // alone cannot make an occluded hand path precise enough for rhythm.
+    return { phases: direct, timing: { source: "hands", uncertainty: Math.max(0, ...gaps.filter((gap) => gap > 0.101)) } };
+  }
   const body = median(frames.flatMap((frame) => {
     const s = shoulders(frame, aspect), f = feet(frame, aspect);
     return s && f ? [distance(s, f)] : [];
@@ -316,23 +354,27 @@ export function analyseMotion(
 ): MotionReport {
   const frames = trustworthyFrames(input, aspect, view);
   const { hips, shoulders, feet, head, visibleBody } = motionGeometry(frames, aspect, view);
-  const visible = frames.filter(visibleBody).length;
-  const coverage = frames.length ? visible / frames.length : 0;
   const automatic = override === undefined ? findAutomaticTiming(frames, aspect, view) : null;
   const phases = override === undefined ? automatic?.phases ?? null : override;
+  const validPhases = phases && Number.isInteger(phases.address) && Number.isInteger(phases.top) &&
+    Number.isInteger(phases.impact) && phases.address >= 0 && phases.address < phases.top &&
+    phases.top < phases.impact && phases.impact < frames.length;
+  // Idle footage and the finish do not supply evidence for the scored swing.
+  // Judge coverage over the same address-to-impact window as the readings.
+  const window = validPhases ? frames.slice(phases.address, phases.impact + 1) : frames;
+  const visible = window.filter(visibleBody).length;
+  const coverage = window.length ? visible / window.length : 0;
   const report: MotionReport = {
     view, usable: false, phases, timing: override ? { source: "marked", uncertainty: 0 } : automatic?.timing ?? null,
-    quality: { visible, total: frames.length, coverage, cameraStable: false, largestGap: 0 },
+    quality: { visible, total: window.length, coverage, cameraStable: false, largestGap: 0 },
     readings: [], observations: [], warnings: [], tempo: null,
     summary: "A complete swing with clearly visible shoulders, hips and hands is needed. Trim to one swing and keep the whole body in view.",
   };
   const hiddenHands = frames.filter((frame) => !hands(frame, aspect)).length;
   if (hiddenHands > frames.length * 0.05) report.warnings.push(`The hands are hidden or unclear in ${hiddenHands} of ${frames.length} samples. Hidden joints and unsupported arm angles are omitted; the overlay does not fill them in.`);
-  if (coverage >= 0.65 && !phases) report.summary = `Tracked the body in ${visible} of ${frames.length} samples, but could not identify a complete swing. Trim to include setup, backswing, contact and follow-through, then analyze again.`;
-  if (!(aspect > 0) || coverage < 0.65 || !phases ||
-      !(phases.address < phases.top && phases.top < phases.impact) || !frames[phases.impact]) return report;
+  if (coverage >= 0.65 && !validPhases) report.summary = `Tracked the body in ${visible} of ${window.length} samples, but could not identify a complete swing. Review and mark address, top and impact in Adjust swing timing, or trim to include setup through follow-through and rebuild.`;
+  if (!(aspect > 0) || coverage < 0.65 || !phases || !validPhases) return report;
   const address = frames[phases.address]!;
-  const window = frames.slice(phases.address, phases.impact + 1);
   const body = median(window.flatMap((frame) => {
     const h = head(frame), foot = feet(frame, aspect);
     return h && foot ? [Math.abs(foot.y - h.y)] : [];
@@ -340,26 +382,7 @@ export function analyseMotion(
   if (!body || body < 0.1) return report;
   const gaps = window.slice(1).map((frame, index) => frame.t - window[index]!.t);
   report.quality.largestGap = Math.max(0, ...gaps);
-  // A normal trail-foot pivot is not camera movement. Require one consistently
-  // planted ankle, using the same joint throughout rather than the feet's
-  // moving midpoint. Shin length checks scale without confusing a torso turn
-  // or a change of posture with zoom.
-  report.quality.cameraStable = [LM.leftAnkle, LM.rightAnkle].some((joint) => {
-    const reference = at(address, joint, aspect);
-    if (!reference) return false;
-    const moves = window.flatMap((frame) => {
-      const foot = at(frame, joint, aspect);
-      return foot ? [distance(foot, reference) / body] : [];
-    });
-    const sizes = window.flatMap((frame) => {
-      const foot = at(frame, joint, aspect), knee = at(frame, joint - 2, aspect);
-      return foot && knee ? [distance(foot, knee)] : [];
-    });
-    const size = median(sizes) ?? 0;
-    return moves.length >= window.length * 0.85 && Math.max(...moves) < 0.05 &&
-      sizes.length >= window.length * 0.65 && size > body * 0.08 &&
-      (Math.max(...sizes) - Math.min(...sizes)) / size < 0.2;
-  });
+  report.quality.cameraStable = hasStableFoot(window, address, aspect, body);
   if (!report.quality.cameraStable) report.warnings.push("The feet or camera moved, or the image scale changed. Body displacement is withheld; keep the camera fixed and the feet visible.");
   if (report.quality.largestGap > 0.12) report.warnings.push("There are gaps in the sampled swing. A recording with more frames will give better timing.");
   if (report.timing?.topWindow) report.warnings.push("The hands briefly disappear around the top. The backswing transition is estimated between the visible rising and descending hands; its body readings show the range across that interval.");

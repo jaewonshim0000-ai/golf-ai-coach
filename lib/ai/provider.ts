@@ -32,6 +32,8 @@ export type GenerateRequest<T> = {
   schema: ZodType<T, ZodTypeDef, unknown>;
   fallback: () => T;
   maxTokens?: number;
+  /** Bound optional interactive coaching without lengthy automatic retries. */
+  timeoutMs?: number;
   /** Base64 JPEG frames, sent before the prompt so the model reads them first. */
   images?: string[];
 };
@@ -100,7 +102,7 @@ export class AnthropicProvider implements AIProvider {
             ],
           },
         ],
-      });
+      }, request.timeoutMs ? { timeout: request.timeoutMs, maxRetries: 0 } : undefined);
 
       const text = message.content
         .map((block) => (block.type === "text" ? block.text : ""))

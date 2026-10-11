@@ -1,17 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { Pause, Play } from "lucide-react";
 
-import { retimeSwingAction } from "@/app/actions";
 import {
   LM,
   unpackFrames,
   type PoseModel,
-  type SwingPhases,
 } from "@/lib/golf/pose";
 import { positionTime, reconstructionTrack, samplePosition } from "@/lib/golf/reconstruction";
 import { visibleHands } from "@/lib/golf/motion-analysis";
@@ -139,7 +136,6 @@ function between(track: THREE.Vector3[][], position: number): THREE.Vector3[] {
 }
 
 export function SwingModel({ model, sessionId }: { model: PoseModel; sessionId: string }) {
-  const router = useRouter();
   const host = useRef<HTMLDivElement>(null);
   const scene = useRef<Scene | null>(null);
   const last = model.t.length - 1;
@@ -149,12 +145,8 @@ export function SwingModel({ model, sessionId }: { model: PoseModel; sessionId: 
   const [ghost, setGhost] = useState(true);
   const [view, setView] = useState<View>("recorded");
   const [failed, setFailed] = useState<string | null>(null);
-  const [phaseDraft, setPhaseDraft] = useState<SwingPhases>(model.phases);
-  const [phaseMessage, setPhaseMessage] = useState<string | null>(null);
-  const [phasePending, startPhaseTransition] = useTransition();
 
   useEffect(() => {
-    setPhaseDraft(model.phases);
     setPosition(model.phases.top);
   }, [model]);
 
@@ -251,7 +243,8 @@ export function SwingModel({ model, sessionId }: { model: PoseModel; sessionId: 
         const index = Math.min(last, Math.max(0, Math.floor(at)));
         const next = Math.min(last, index + 1);
         player.group.visible = !(model.t[next]! - model.t[index]! > 0.12 && at - index > 0.05 && at - index < 0.95);
-        player.pose(between(track, at), model.frames[index]!.map((point) => point[3]));
+        player.pose(between(track, at), model.frames[index]!.map((point, joint) =>
+          at === index ? point[3] : Math.min(point[3], model.frames[next]![joint]![3])));
         draw();
       },
       view(next) {
@@ -323,7 +316,7 @@ export function SwingModel({ model, sessionId }: { model: PoseModel; sessionId: 
     return () => cancelAnimationFrame(frame);
   }, [playing, slow, last, model.t]);
 
-  const nearest = PHASES.find((phase) => Math.abs(phaseDraft[phase] - position) < 0.5);
+  const nearest = model.timingStatus === "unresolved" ? undefined : PHASES.find((phase) => Math.abs(model.phases[phase] - position) < 0.5);
   const seconds = positionTime(model.t, position) - (model.t[0] ?? 0);
   const seekPosition = (at: number) => {
     setPlaying(false);
@@ -339,28 +332,6 @@ export function SwingModel({ model, sessionId }: { model: PoseModel; sessionId: 
     }
     setPlaying((on) => !on);
   };
-  const validPhaseOrder =
-    phaseDraft.address < phaseDraft.top && phaseDraft.top < phaseDraft.impact;
-
-  const markPhase = (phase: keyof SwingPhases) => {
-    seekPosition(position);
-    setPhaseMessage(null);
-    setPhaseDraft((current) => ({ ...current, [phase]: Math.round(position) }));
-  };
-
-  const recalculate = () => {
-    if (!validPhaseOrder) return;
-    startPhaseTransition(async () => {
-      const result = await retimeSwingAction({ swing_session_id: sessionId, phases: phaseDraft });
-      setPhaseMessage(
-        result.ok
-          ? "Timing saved. The measurements now use these three frames."
-          : (result.message ?? "The phase timing could not be saved."),
-      );
-      if (result.ok) router.refresh();
-    });
-  };
-
   return (
     <Card>
       <CardHeader className="flex-row flex-wrap items-center justify-between gap-3">
@@ -441,9 +412,10 @@ export function SwingModel({ model, sessionId }: { model: PoseModel; sessionId: 
               key={phase}
               type="button"
               size="sm"
+              disabled={model.timingStatus === "unresolved"}
               variant={nearest === phase ? "primary" : "secondary"}
               onClick={() => {
-                seekPosition(phaseDraft[phase]);
+                seekPosition(model.phases[phase]);
               }}
               className="capitalize"
             >
@@ -469,50 +441,6 @@ export function SwingModel({ model, sessionId }: { model: PoseModel; sessionId: 
             Show address
           </label>
         </div>
-        <details className="space-y-2 rounded-xl border border-border bg-surface-2 p-3">
-          <summary className="cursor-pointer text-[12px] font-medium">Adjust swing timing</summary>
-          <div>
-            <p className="text-[12px] font-semibold text-fg">Correct phase timing</p>
-            <p className="mt-0.5 text-[11px] leading-[1.5] text-fg-muted">
-              Scrub to the exact frame, mark it, then recalculate the measurements.
-            </p>
-          </div>
-          <div className="grid gap-1.5 sm:grid-cols-3">
-            {PHASES.map((phase) => (
-              <Button
-                key={`mark-${phase}`}
-                type="button"
-                size="sm"
-                variant="secondary"
-                onClick={() => markPhase(phase)}
-                className="justify-between capitalize"
-              >
-                <span>Mark {phase}</span>
-                <span className="ml-2 tabular-nums text-fg-muted">
-                  {((model.t[phaseDraft[phase]] ?? 0) - (model.t[0] ?? 0)).toFixed(2)}s
-                </span>
-              </Button>
-            ))}
-          </div>
-          {!validPhaseOrder ? (
-            <p className="text-[11px] text-red-700">Mark address first, top second, and impact third.</p>
-          ) : null}
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              size="sm"
-              disabled={!validPhaseOrder || phasePending}
-              onClick={recalculate}
-            >
-              {phasePending ? "Recalculating…" : "Use these frames"}
-            </Button>
-            {phaseMessage ? (
-              <p className="text-[11px] leading-[1.4] text-fg-muted" role="status">
-                {phaseMessage}
-              </p>
-            ) : null}
-          </div>
-        </details>
         <p className="text-[11px] leading-[1.5] text-fg-subtle">
           Reconstructed with MediaPipe’s 3D body model. Depth and faint limbs are estimated from one camera. The gold trail follows the hands; the club is not tracked.
         </p>

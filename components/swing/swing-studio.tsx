@@ -16,6 +16,11 @@ export function SwingStudio({ video, reconstruction, ready }: { video: ReactNode
     window.addEventListener("swing:review", review);
     return () => window.removeEventListener("swing:review", review);
   }, []);
+  useEffect(() => {
+    const timing = () => setTab("video");
+    window.addEventListener("swing:timing", timing);
+    return () => window.removeEventListener("swing:timing", timing);
+  }, []);
   return <div className="space-y-3">
     <div className="flex gap-2" role="tablist" aria-label="Swing replay">
       <Button type="button" role="tab" id="original-video-tab" aria-selected={tab === "video"} aria-controls="original-video-panel"

@@ -1,4 +1,5 @@
 import type { Drill, DrillAttempt } from "../../types/practice";
+import { measuredTest, practiceTest, testResultLabel } from "./tests";
 
 /**
  * Drill benchmarks.
@@ -21,8 +22,8 @@ export type Benchmark = {
   /** "Make at least 6 of 10." */
   label: string;
   /** Best recorded attempt, as a count out of its own attempt total. */
-  best: { successes: number; attempts: number; score: number; on: string } | null;
-  latest: { successes: number; attempts: number; score: number; on: string } | null;
+  best: { successes: number; attempts: number; score: number; raw_value: number | null; on: string } | null;
+  latest: { successes: number; attempts: number; score: number; raw_value: number | null; on: string } | null;
   /** True once any recorded attempt has met or beaten the standard. */
   beaten: boolean;
   /** Successes above the standard on the best attempt, scaled to `reps`. */
@@ -31,6 +32,7 @@ export type Benchmark = {
 };
 
 export function benchmarkFor(drill: Drill, attempts: DrillAttempt[]): Benchmark {
+  const test = practiceTest(drill.id);
   const reps = drill.recommended_reps > 0 ? drill.recommended_reps : 10;
   const target = Math.max(1, Math.ceil(drill.success_threshold * reps));
 
@@ -42,11 +44,21 @@ export function benchmarkFor(drill: Drill, attempts: DrillAttempt[]): Benchmark 
     successes: attempt.successes,
     attempts: attempt.attempts,
     score: attempt.score,
+    raw_value: attempt.raw_value,
     on: attempt.completed_at.slice(0, 10),
   });
 
   const bestAttempt = mine.reduce<DrillAttempt | null>(
-    (best, attempt) => (best === null || attempt.score > best.score ? attempt : best),
+    (best, attempt) => {
+      if (best === null) return attempt;
+      if (test && measuredTest(test)) {
+        if (attempt.raw_value === null) return best;
+        if (best.raw_value === null) return attempt;
+        return (test.kind === "carry" ? attempt.raw_value > best.raw_value : attempt.raw_value < best.raw_value) ? attempt : best;
+      }
+      if (test?.kind === "spiral" && attempt.score === best.score && attempt.score === 1) return attempt.attempts < best.attempts ? attempt : best;
+      return attempt.score > best.score ? attempt : best;
+    },
     null,
   );
   const best = bestAttempt ? toResult(bestAttempt) : null;
@@ -56,10 +68,10 @@ export function benchmarkFor(drill: Drill, attempts: DrillAttempt[]): Benchmark 
     drill,
     target,
     reps,
-    label: `Make at least ${target} of ${reps}`,
+    label: test ? test.scoring : `Make at least ${target} of ${reps}`,
     best,
     latest: last ? toResult(last) : null,
-    beaten: best !== null && best.score >= drill.success_threshold,
+    beaten: best !== null && (test ? test.kind === "spiral" && best.score === 1 : best.score >= drill.success_threshold),
     // Compared on the rate, then expressed in reps, so a 7/9 and a 7/10 do not
     // claim the same margin.
     margin: best ? Math.round((best.score - drill.success_threshold) * reps) : 0,
@@ -70,6 +82,8 @@ export function benchmarkFor(drill: Drill, attempts: DrillAttempt[]): Benchmark 
 /** One line about the best attempt, or nothing if there is not one yet. */
 export function benchmarkNote(benchmark: Benchmark): string | null {
   if (!benchmark.best) return null;
+  const test = practiceTest(benchmark.drill.id);
+  if (test) return `Best recorded: ${testResultLabel(test, benchmark.best)}.`;
   const { successes, attempts } = benchmark.best;
   if (!benchmark.beaten) {
     return `Best so far ${successes} of ${attempts}. Standard is ${benchmark.target} of ${benchmark.reps}.`;

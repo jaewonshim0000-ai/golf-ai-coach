@@ -9,8 +9,8 @@ const BONES: [number, number][] = [
 ];
 export function BodyOverlay({ frames, time, guide, view = "other", aspect = 1 }: { frames: PoseFrame[]; time: number; guide?: PoseFrame; view?: MotionView; aspect?: number }) {
   const frame = overlayFrameAtTime(frames, time);
-  if (!frame?.imageLandmarks) return null;
-  const points = frame.imageLandmarks;
+  const points = frame?.imageLandmarks ?? [];
+  if (!points.length && !guide?.imageLandmarks) return null;
   // Separate segments stop a lost hand from drawing a line across a gap.
   const trails: { from: { x: number; y: number }; to: { x: number; y: number }; opacity: number }[] = [];
   frames.forEach((current, index) => {
@@ -24,8 +24,17 @@ export function BodyOverlay({ frames, time, guide, view = "other", aspect = 1 }:
   const guideShoulder = guide ? geometry.shoulders(guide) : null;
   const guideHead = guide ? geometry.head(guide) : null;
   return <svg viewBox="0 0 1 1" preserveAspectRatio="none" className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden>
-    {guideHip ? <line x1={guideHip.x} x2={guideHip.x} y1="0" y2="1" stroke="#3fc1a5" strokeWidth="0.003" strokeDasharray="0.012 0.01" opacity="0.6" /> : null}
-    {guideHead ? <line x1={guideHead.x} x2={guideHead.x} y1="0" y2="1" stroke="#e6b85c" strokeWidth="0.002" strokeDasharray="0.01 0.012" opacity="0.4" /> : null}
+    {guide ? BONES.map(([from, to]) => {
+      const a = guide.imageLandmarks?.[from], b = guide.imageLandmarks?.[to];
+      return visiblePoint(a) && visiblePoint(b) ? <line key={`setup-${from}-${to}`} x1={a.x} y1={a.y} x2={b.x} y2={b.y}
+        stroke="#f8fafc" strokeWidth="0.003" opacity="0.18" /> : null;
+    }) : null}
+    {guideHead ? <circle cx={guideHead.x} cy={guideHead.y} r="0.012" fill="none" stroke="#e6b85c" strokeWidth="0.002" opacity="0.7" /> : null}
+    {guideHip ? <>
+      <line x1={guideHip.x} x2={guideHip.x} y1={guideHip.y - 0.15} y2={guideHip.y + 0.15} stroke="#3fc1a5" strokeWidth="0.003" strokeDasharray="0.012 0.01" opacity="0.6" />
+      <line x1={guideHip.x - 0.12} x2={guideHip.x + 0.12} y1={guideHip.y} y2={guideHip.y} stroke="#3fc1a5" strokeWidth="0.002" strokeDasharray="0.012 0.01" opacity="0.5" />
+    </> : null}
+    {guideHead ? <line x1={guideHead.x} x2={guideHead.x} y1={guideHead.y - 0.08} y2={guideHead.y + 0.08} stroke="#e6b85c" strokeWidth="0.002" strokeDasharray="0.01 0.012" opacity="0.4" /> : null}
     {view === "down_the_line" && guideHip && guideShoulder ? <line x1={guideHip.x} y1={guideHip.y} x2={guideShoulder.x} y2={guideShoulder.y} stroke="#ff7a59" strokeWidth="0.003" strokeDasharray="0.012 0.01" opacity="0.6" /> : null}
     {trails.map((trail, index) => <line key={index} x1={trail.from.x} y1={trail.from.y} x2={trail.to.x} y2={trail.to.y} stroke="#e6b85c" strokeWidth="0.004" opacity={trail.opacity} />)}
     {BONES.map(([from, to]) => {

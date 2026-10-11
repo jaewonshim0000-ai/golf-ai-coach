@@ -6,6 +6,69 @@ import { packFrames, type Landmark, type PoseModel } from "./pose";
 import { ASPECT, DOWN_THE_LINE, FACE_ON, PHASES, film } from "./swing.fixture";
 
 describe("3D swing reconstruction", () => {
+  it("fits visible endpoints without giving noisy inferred wrist depth authority over limb geometry", () => {
+    for (const [camera, view] of [[FACE_ON, "face_on"], [DOWN_THE_LINE, "down_the_line"]] as const) {
+      const frames = film(camera, 17).detected;
+      const rebuilt = reconstructSwing(frames, ASPECT, view)!;
+      const centred = (points: Landmark[], joint: number) => ({
+        x: points[joint]!.x - (points[23]!.x + points[24]!.x) / 2,
+        y: points[joint]!.y - (points[23]!.y + points[24]!.y) / 2,
+      });
+      const errors = rebuilt.flatMap((frame, index) => [15, 16, 27, 28].map((joint) => {
+        const a = centred(frame.landmarks, joint), b = centred(frames[index]!.landmarks, joint);
+        return Math.hypot(a.x - b.x, a.y - b.y);
+      }));
+      assert.ok(errors.reduce((sum, value) => sum + value, 0) / errors.length < 0.035,
+        `${view}: constrained camera-plane endpoint error should stay below 35 mm in this fixture`);
+    }
+  });
+  it("calibrates proportions from visible observations even when most limb samples are hidden and wrong", () => {
+    const detected = film(FACE_ON, 17).detected;
+    const baseline = reconstructSwing(detected, ASPECT, "face_on")!;
+    const corrupt = structuredClone(detected);
+    for (const frame of corrupt.slice(15)) {
+      for (const joint of [13, 15]) {
+        frame.landmarks[joint]!.z += 0.9;
+        frame.landmarks[joint]!.visibility = 0.1;
+        frame.imageLandmarks![joint]!.visibility = 0.1;
+      }
+    }
+    const rebuilt = reconstructSwing(corrupt, ASPECT, "face_on")!;
+    const size = (points: Landmark[]) => Math.hypot(points[11]!.x - points[13]!.x, points[11]!.y - points[13]!.y, points[11]!.z - points[13]!.z);
+    assert.ok(Math.abs(size(baseline[0]!.landmarks) - size(rebuilt[0]!.landmarks)) < 0.04);
+    assert.equal(rebuilt[20]!.landmarks[13]!.visibility, 0.1);
+  });
+
+  it("does not inflate picture translation when the same projected leg has more inferred depth", () => {
+    const detected = film(FACE_ON, 8).detected;
+    const depth = structuredClone(detected);
+    for (const frame of depth) for (const joint of [25, 26, 27, 28]) frame.landmarks[joint]!.z += joint < 27 ? 0.15 : 0.3;
+    const a = reconstructSwing(detected, ASPECT, "face_on")!;
+    const b = reconstructSwing(depth, ASPECT, "face_on")!;
+    for (let index = 0; index < a.length; index++) {
+      const centre = (points: Landmark[]) => (points[23]!.x + points[24]!.x) / 2;
+      assert.ok(Math.abs(centre(a[index]!.landmarks) - centre(b[index]!.landmarks)) < 1e-10);
+    }
+  });
+
+  it("preserves reduced reconstruction confidence through storage and refuses invalid timing", () => {
+    const frames = film(FACE_ON, 6).detected;
+    const duplicate = structuredClone(frames); duplicate[1]!.t = duplicate[0]!.t;
+    assert.equal(reconstructSwing(duplicate, ASPECT, "face_on"), null);
+    const rebuilt = reconstructSwing(frames, ASPECT, "face_on")!;
+    rebuilt[5]!.landmarks[11]!.visibility = 0.2;
+    rebuilt[6]!.landmarks[11]!.visibility = 0.5998;
+    const model: PoseModel = { v: 1, ...packFrames(rebuilt), handedness: "right", phases: PHASES,
+      motionVersion: 1, reconstructionVersion: 1 };
+    const stored = compactMotionModel(model);
+    const restored = expandMotionModel(stored)!;
+    assert.equal(restored.frames[5]![11]![3], 0.2);
+    assert.ok(restored.frames[6]![11]![3] < 0.6, "storage must not round uncertainty into a supported measurement");
+    assert.ok(restored.imageFrames![5]![11]![3] > 0.6);
+    assert.ok(JSON.stringify(stored).length < 250000);
+    assert.equal(expandMotionModel({ ...stored, worldVisibility: "[[101]]" }), null);
+  });
+
   it("retains inferred depth, moves with the observed body and keeps limbs rigid in both camera views", () => {
     for (const [camera, view] of [[FACE_ON, "face_on"], [DOWN_THE_LINE, "down_the_line"]] as const) {
       const detected = film(camera, 17).detected;

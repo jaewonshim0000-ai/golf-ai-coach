@@ -2,6 +2,7 @@ import type { PracticeMetricTrend, RoundSummaryStats, TrendPoint } from "../../t
 import type { HoleResult } from "../../types/rounds";
 import type { Drill, DrillAttempt, PracticeSession } from "../../types/practice";
 import { SG_CATEGORY_LABELS } from "../../types/golf";
+import { measuredTest, practiceTest, testResultLabel } from "../practice/tests";
 import { COACH_SYSTEM_PROMPT, getProvider, type AIResult } from "./provider";
 import {
   practiceSummarySchema,
@@ -154,12 +155,13 @@ export async function summarizePracticeSession(
     minutes: facts.session.actual_duration ?? facts.session.planned_duration,
     results: facts.attempts.map((a) => {
       const drill = drillById.get(a.drill_id);
+      const test = practiceTest(a.drill_id);
       return {
         drill: drill?.name ?? a.drill_id,
         metric: drill?.metric_to_track ?? "score",
-        result: `${a.successes}/${a.attempts}`,
-        score: a.score,
-        target: drill?.success_threshold ?? null,
+        result: test ? testResultLabel(test, a) : `${a.successes}/${a.attempts}`,
+        score: test && measuredTest(test) ? null : a.score,
+        target: test ? null : drill?.success_threshold ?? null,
       };
     }),
     history: facts.trends.filter((trend) => facts.attempts.some((attempt) => attempt.drill_id === trend.drill_id)).map((t) => ({
@@ -200,6 +202,8 @@ export function ruleBasedPracticeSummary(facts: PracticeSessionFacts): PracticeS
 
   const lines = facts.attempts.map((a) => {
     const drill = drillById.get(a.drill_id);
+    const test = practiceTest(a.drill_id);
+    if (test) return `${test.name}: ${testResultLabel(test, a)}.`;
     const trend = facts.trends.find((t) => t.drill_id === a.drill_id);
     const previous = trend && trend.points.length > 1 ? trend.points[trend.points.length - 2]?.value : null;
     const change =
@@ -232,10 +236,15 @@ export function ruleBasedPracticeSummary(facts: PracticeSessionFacts): PracticeS
   const best = facts.attempts.reduce((a, b) => (b.score > a.score ? b : a));
 
   return {
-    headline: `${facts.attempts.length} drill${facts.attempts.length === 1 ? "" : "s"} logged, best result ${Math.round(best.score * 100)}% on ${drillById.get(best.drill_id)?.name ?? best.drill_id}`,
+    headline: facts.attempts.some((attempt) => practiceTest(attempt.drill_id))
+      ? `${facts.attempts.length} practice result${facts.attempts.length === 1 ? "" : "s"} recorded`
+      : `${facts.attempts.length} drill${facts.attempts.length === 1 ? "" : "s"} logged, best result ${Math.round(best.score * 100)}% on ${drillById.get(best.drill_id)?.name ?? best.drill_id}`,
     results: lines.slice(0, 5),
     verdict,
-    next_step: nextStep[verdict],
+    next_step: facts.attempts.every((attempt) => {
+      const test = practiceTest(attempt.drill_id);
+      return test && measuredTest(test);
+    }) ? "Repeat these measurements under similar conditions and compare the recorded values in yards." : nextStep[verdict],
   };
 }
 

@@ -4,40 +4,10 @@ import type { Round, ScoredShot } from "../../types/rounds";
 import { buildSegments } from "../analytics/aggregate";
 import { identifyWeaknesses } from "../analytics/weaknesses";
 import { goalForWeakness, practiceGoal, type GoalId } from "./goals";
+import { PRACTICE_TEST_IDS, practiceTest } from "./tests";
 
-/** A stable selection of 30 drills spanning every part of the game. */
-export const PRACTICE_DRILL_IDS = [
-  "drill_driver_accuracy",
-  "drill_iron_accuracy",
-  "drill_wedge_accuracy",
-  "drill_chip_accuracy",
-  "drill_putting_conversion",
-  "drill_9_ball_contact",
-  "drill_half_swing_contact",
-  "drill_towel_gate_contact",
-  "drill_gate_face_control",
-  "drill_split_hand_face",
-  "drill_headcover_path",
-  "drill_pause_at_top",
-  "drill_three_to_one_tempo",
-  "drill_driver_fairway_finder",
-  "drill_tee_height_strike",
-  "drill_driver_pressure_ladder",
-  "drill_long_iron_ladder",
-  "drill_short_iron_dartboard",
-  "drill_wedge_matrix",
-  "drill_strike_zone_wedge",
-  "drill_pitch_landing_zone",
-  "drill_chip_circle",
-  "drill_one_club_chipping",
-  "drill_up_and_down_game",
-  "drill_bunker_line",
-  "drill_gate_putting",
-  "drill_clock_putting",
-  "drill_lag_ladder",
-  "drill_speed_control_uphill",
-  "drill_pressure_putting_ladder",
-] as const;
+/** The 30 supplied range, chipping and putting tests, in reference order. */
+export const PRACTICE_DRILL_IDS = PRACTICE_TEST_IDS;
 
 const catalog = new Set<string>(PRACTICE_DRILL_IDS);
 
@@ -48,6 +18,13 @@ export function cleanDrillPriorities(value: unknown): string[] {
 }
 
 export function goalsForDrill(drill: Drill): GoalId[] {
+  const test = practiceTest(drill.id);
+  if (test) {
+    if (test.group === "putting") return ["putting_conversion"];
+    if (test.group === "chipping") return ["chip_accuracy"];
+    if (test.category === "driver") return ["driver_accuracy"];
+    return [test.focus === "50–100 yd" ? "wedge_accuracy" : "iron_accuracy"];
+  }
   const quick = practiceGoal(drill.id);
   if (quick) return [quick.id];
   if (["chipping", "pitching", "bunker"].includes(drill.category) ||
@@ -70,6 +47,8 @@ export function goalsForDrill(drill: Drill): GoalId[] {
 
 /** Keep a selected drill in the part of the plan its exercise is designed for. */
 export function blocksForDrill(drill: Drill): PracticeBlock[] {
+  const test = practiceTest(drill.id);
+  if (test) return test.kind === "spiral" || test.kind === "up_down" ? ["pressure"] : ["technical", "variable", "pressure"];
   if (practiceGoal(drill.id) || drill.category === "full_swing") return [];
   if (drill.category === "pressure_practice" || drill.category === "course_simulation") return ["pressure"];
   if (drill.category === "random_practice") return ["variable"];
@@ -111,6 +90,7 @@ export function rankPracticeDrills(
   const threePutts = countedPutts.filter((hole) => hole.putts! >= 3).length;
 
   return drills.filter((drill) => catalog.has(drill.id)).map((drill) => {
+    const test = practiceTest(drill.id);
     const goals = goalsForDrill(drill);
     let score = 0;
     let reason: string | null = null;
@@ -121,13 +101,13 @@ export function rankPracticeDrills(
       if (drill.category === "bunker" && !weakness.key.includes("bunker")) continue;
       const clubMatch = weakness.kind === "club" && drill.clubs.includes(weakness.key as Drill["clubs"][number]);
       const skillMatch = weakness.related_skills.includes(drill.skill_trained);
-      const candidate = weakness.priority * (clubMatch ? 1.3 : skillMatch ? 1.15 : 1);
+      const candidate = weakness.priority * (clubMatch ? 1.3 : skillMatch ? 1.15 : 1) * (test?.kind === "carry" ? 0.9 : 1);
       if (candidate <= score) continue;
       score = candidate;
       reason = `${weakness.title}: ${weakness.strokes_lost_per_round.toFixed(2)} strokes lost per round across ${weakness.sample_size} recorded shots.`;
       signal = weakness.sufficient_sample ? "rounds" : "early";
     }
-    if (goals.includes("driver_accuracy") && missed > 0) {
+    if (goals.includes("driver_accuracy") && test?.kind !== "carry" && missed > 0) {
       const candidate = missed / (cards.length || 1) * Math.min(1, fairways.length / 14) * 0.1;
       if (candidate > score) {
         score = candidate;

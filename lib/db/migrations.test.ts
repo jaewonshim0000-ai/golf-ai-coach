@@ -20,7 +20,7 @@ test("live schema: atomic practice, persistent results, and cross-user isolation
       create table storage.objects(id text primary key, bucket_id text, name text);
       create function storage.foldername(text) returns text[] language sql as $$ select string_to_array($1, '/') $$;
     `);
-    for (const path of ["supabase/migrations/0001_init.sql", "supabase/migrations/0002_live_practice.sql", "supabase/migrations/0003_swing_vision.sql", "supabase/migrations/0004_swing_clips.sql", "supabase/migrations/0005_delete_account.sql", "supabase/migrations/0006_pose_source.sql", "supabase/migrations/0007_scorecards.sql", "supabase/migrations/0008_swing_model.sql", "supabase/migrations/0009_plans_plots_scorecards.sql", "supabase/migrations/0010_round_type.sql", "supabase/seed/seed.sql"]) {
+    for (const path of ["supabase/migrations/0001_init.sql", "supabase/migrations/0002_live_practice.sql", "supabase/migrations/0003_swing_vision.sql", "supabase/migrations/0004_swing_clips.sql", "supabase/migrations/0005_delete_account.sql", "supabase/migrations/0006_pose_source.sql", "supabase/migrations/0007_scorecards.sql", "supabase/migrations/0008_swing_model.sql", "supabase/migrations/0009_plans_plots_scorecards.sql", "supabase/migrations/0010_round_type.sql", "supabase/migrations/0011_practice_tests.sql", "supabase/seed/seed.sql"]) {
       const sql = (await readFile(path, "utf8")).replace('create extension if not exists "pgcrypto";', "");
       await db.exec(sql);
     }
@@ -43,6 +43,12 @@ test("live schema: atomic practice, persistent results, and cross-user isolation
       values ('updated', $1, 'practice_test', 'item_test', 'drill_wedge_accuracy', 10, 8, 0.8)
       on conflict(session_id,drill_id) do update set successes=excluded.successes, score=excluded.score`, [user]);
     assert.equal((await db.query<{ successes: number }>("select successes from drill_attempts")).rows[0]!.successes, 8);
+    await db.query(`insert into practice_items(id,session_id,drill_id,block,order_index,duration,target_reps,target_value,objective)
+      values ('spiral_item','practice_test','test_putt_spiral','pressure',1,15,4,1,'Four consecutive makes')`);
+    await db.query(`insert into drill_attempts(id,user_id,session_id,practice_item_id,drill_id,attempts,successes,score,raw_value,shot_offsets)
+      values ('spiral_result',$1,'practice_test','spiral_item','test_putt_spiral',45,4,1,41,$2::jsonb)`, [user, JSON.stringify([...Array(41).fill(0), 1, 1, 1, 1])]);
+    assert.equal((await db.query<{ count: number }>("select jsonb_array_length(shot_offsets) as count from drill_attempts where id='spiral_result'")).rows[0]!.count, 45);
+    await assert.rejects(db.query("update drill_attempts set shot_offsets=$1::jsonb where id='spiral_result'", [JSON.stringify(Array(501).fill(0))]));
     await db.exec(`set request.jwt.claim.sub = '${other}'`);
     assert.equal((await db.query("select * from practice_sessions")).rows.length, 0);
     assert.equal((await db.query("select * from drill_attempts")).rows.length, 0);

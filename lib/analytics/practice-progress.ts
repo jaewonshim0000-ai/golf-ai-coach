@@ -1,6 +1,7 @@
 import type { PracticeMetricTrend, TrendPoint } from "../../types/analytics";
 import type { Drill, DrillAttempt, PracticeSession, Skill } from "../../types/practice";
 import { round2 } from "./aggregate";
+import { measuredTest, practiceTest } from "../practice/tests";
 
 /**
  * Practice volume and practice improvement are different questions.
@@ -22,6 +23,9 @@ export function practiceTrends(attempts: DrillAttempt[], drills: Drill[]): Pract
   for (const [drillId, drillAttempts] of byDrill) {
     const drill = drillById.get(drillId);
     if (!drill) continue;
+    const test = practiceTest(drill.id);
+    // Carry and dispersion are measurements in yards, not success rates.
+    if (test && measuredTest(test)) continue;
 
     const ordered = [...drillAttempts].sort((a, b) => a.completed_at.localeCompare(b.completed_at));
     const points: TrendPoint[] = ordered.map((a) => ({

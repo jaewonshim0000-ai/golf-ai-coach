@@ -25,6 +25,8 @@ export function TargetPlot({
   onChange,
   balls,
   disabled = false,
+  measurement = false,
+  landing = false,
 }: {
   goal: PracticeGoal;
   tolerance: number;
@@ -32,6 +34,8 @@ export function TargetPlot({
   onChange: (points: Point[]) => void;
   balls: number;
   disabled?: boolean;
+  measurement?: boolean;
+  landing?: boolean;
 }) {
   const [typing, setTyping] = useState(false);
   const chip = goal.id === "chip_accuracy";
@@ -72,9 +76,9 @@ export function TargetPlot({
           )}
           onPointerDown={place}
           role="img"
-          aria-label={`Target, ${points.length} of ${balls} balls plotted${pattern ? `. ${pattern.successes} inside ${tolerance} ${unit}` : ""}`}
+          aria-label={`${landing ? "Landing spot" : "Target"}, ${points.length} of ${balls} balls plotted${pattern && !measurement ? `. ${pattern.successes} inside ${tolerance} ${unit}` : ""}`}
         >
-          {chip ? (
+          {measurement ? null : chip ? (
             <>
               <circle cx={50} cy={50} r={tolerance * 2 * scale} className="fill-none stroke-border-strong" strokeDasharray="1.5 1.5" strokeWidth={0.4} />
               <circle cx={50} cy={50} r={tolerance * scale} className="fill-good-soft stroke-good" strokeWidth={0.5} />
@@ -95,9 +99,9 @@ export function TargetPlot({
           <text x={50} y={98} textAnchor="middle" className="fill-fg-subtle text-[3.2px]">Short</text>
           <text x={2} y={51.2} className="fill-fg-subtle text-[3.2px]">Left</text>
           <text x={98} y={51.2} textAnchor="end" className="fill-fg-subtle text-[3.2px]">Right</text>
-          <text x={50 + tolerance * scale + 1} y={97} className="fill-good text-[3px]">
+          {!measurement ? <text x={50 + tolerance * scale + 1} y={97} className="fill-good text-[3px]">
             {tolerance} {unit}
-          </text>
+          </text> : null}
           {points.map((point, index) => {
             const [cx, cy] = toSvg(point);
             const good = Math.abs(offsetFor(goal, point)) <= tolerance;
@@ -107,7 +111,7 @@ export function TargetPlot({
                   cx={Math.max(2, Math.min(98, cx))}
                   cy={Math.max(2, Math.min(98, cy))}
                   r={index === points.length - 1 ? 3 : 2.4}
-                  className={good ? "fill-good" : "fill-bad"}
+                  className={measurement ? "fill-accent" : good ? "fill-good" : "fill-bad"}
                   stroke="white"
                   strokeWidth={0.5}
                 />
@@ -127,7 +131,7 @@ export function TargetPlot({
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="tabular text-[12.5px] font-medium" aria-live="polite">
-          {full ? "All balls plotted" : `Tap where ball ${points.length + 1} of ${balls} finished`}
+          {full ? "All balls plotted" : `Tap where ball ${points.length + 1} of ${balls} ${landing ? "first landed" : "finished"}`}
         </p>
         <div className="flex gap-1.5">
           <Button type="button" size="sm" variant="secondary" onClick={() => onChange(points.slice(0, -1))} disabled={disabled || points.length === 0}>
@@ -166,10 +170,10 @@ export function TargetPlot({
         </div>
       ) : null}
 
-      {pattern ? (
+      {pattern && !measurement ? (
         <div className="rounded-xl bg-surface-2 p-3 text-[12.5px] leading-[1.6]" aria-live="polite">
           <p className="font-medium">
-            {pattern.successes} of {pattern.count} inside {tolerance} {unit} · average {chip ? "proximity" : "miss"}{" "}
+            {pattern.successes} of {pattern.count} inside {tolerance} {unit} · average {landing ? "landing miss" : chip ? "proximity" : "miss"}{" "}
             {pattern.averageMiss.toFixed(1)} {unit}
           </p>
           <p className="text-fg-muted">

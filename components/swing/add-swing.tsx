@@ -17,7 +17,6 @@ export function AddSwing() {
   const [file, setFile] = useState<File | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [view, setView] = useState("face_on");
   const dialog = useRef<HTMLDialogElement>(null);
   const upload = useRef<HTMLInputElement>(null);
   const camera = useRef<HTMLInputElement>(null);
@@ -83,8 +82,11 @@ export function AddSwing() {
       <form onSubmit={save} className="space-y-4 p-5">
         <input type="hidden" name="shot_type" value="full swing" />
         <input type="hidden" name="swing_pattern" value="unknown" />
-        <Field label="Camera angle"><Select name="camera_angle" value={view} onChange={(event) => setView(event.target.value)} disabled={pending}><option value="face_on">Face on</option><option value="down_the_line">Down the line</option></Select></Field>
-        {view === "down_the_line" ? <p className="rounded-lg bg-info-soft p-3 text-xs leading-relaxed text-fg-muted">Film behind your hands at address, at hand height, parallel to the target line. Keep the camera fixed and level and leave room for your head, feet and club throughout the swing. Bright light and 60 fps or higher help track the downswing.</p> : null}
+        <p className="rounded-lg bg-info-soft p-3 text-xs leading-relaxed text-fg-muted">Keep the phone still and your whole body in view. Include setup, one swing and the follow-through. Choose the view that matches your recording.</p>
+        <Field label="Camera view"><Select name="camera_angle" defaultValue="face_on" disabled={pending}>
+          <option value="face_on">Face on · facing your chest</option>
+          <option value="down_the_line">Down the line · behind you</option>
+        </Select></Field>
         <Field label="Club"><Select name="club" defaultValue="7_iron" disabled={pending}>{CLUBS.map((club) => <option key={club} value={club}>{CLUB_LABELS[club]}</option>)}</Select></Field>
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="secondary" disabled={pending} onClick={() => upload.current?.click()}><Upload className="h-4 w-4" /> Upload video</Button>
@@ -93,9 +95,9 @@ export function AddSwing() {
         <input ref={upload} aria-label="Upload swing video" type="file" accept={VIDEO_ACCEPT} hidden onChange={(event) => chooseFile(event.target.files?.[0] ?? null)} />
         <input ref={camera} aria-label="Record swing video" type="file" accept="video/*" capture="environment" hidden onChange={(event) => chooseFile(event.target.files?.[0] ?? null)} />
         {file ? <p className="break-words text-sm">{file.name} · {(file.size / 1024 / 1024).toFixed(1)} MB</p> : null}
-        <p className="text-xs text-fg-muted">MP4, MOV, or WebM, up to 50 MB. {browserClient() ? "Saved privately to your account." : "Demo clips are saved on this device only."} After saving, choose Analyze movement to track your joints on the video. Use a fixed camera and keep your whole body visible.</p>
+        <p className="text-xs text-fg-muted">MP4, MOV, or WebM, up to 50 MB. {browserClient() ? "Saved privately to your account." : "Demo clips are saved on this device only."} Your swing is reviewed automatically after saving.</p>
         {error ? <p role="alert" className="rounded-lg bg-bad-soft p-3 text-sm text-bad">{error}</p> : null}
-        <Button type="submit" disabled={pending || !file}>{pending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}{pending ? "Uploading and saving…" : "Save swing"}</Button>
+        <Button type="submit" disabled={pending || !file}>{pending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}{pending ? "Uploading and saving…" : "Save and review"}</Button>
       </form>
     </dialog>
   </>;

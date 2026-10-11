@@ -1,14 +1,17 @@
 import type { Drill } from "../../types/practice";
 import { QUICK_DRILLS } from "../practice/goals";
+import { TEST_DRILLS } from "../practice/tests";
 
 /**
- * The drill library. Every drill carries a trackable metric and a success
- * threshold so a session produces a number, not just a tick.
+ * Reference data for the current tests and legacy sessions. The visible
+ * library is TEST_DRILLS; older IDs stay available for saved records.
  *
- * `success_threshold` and every recorded `score` are normalised 0-1 so the
- * progress engine can compare a contact ratio with a proximity average.
+ * Counted results are normalised 0-1. Carry and dispersion measurements use
+ * raw_value in yards and do not enter the percentage-based progress engine.
  */
 export const DRILLS: Drill[] = [
+  ...TEST_DRILLS,
+  // Retain prior drill IDs for saved sessions and internal warm-ups.
   ...QUICK_DRILLS,
   // ---------------------------------------------------------------- contact
   {

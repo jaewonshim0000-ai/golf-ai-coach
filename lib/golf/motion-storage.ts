@@ -13,6 +13,8 @@ export function compactMotionModel(model: PoseModel): PoseModel {
       worldData: JSON.stringify(model.frames.map((frame) => frame.map(([x, y, z]) => [
         Math.round(x * 1000), Math.round(y * 1000), Math.round(z * 1000),
       ]))),
+      // Image confidence and corrected 3D confidence have different meanings.
+      worldVisibility: JSON.stringify(model.frames.map((frame) => frame.map((point) => Math.floor(point[3] * 1000)))),
     } : {}),
   };
 }
@@ -39,6 +41,11 @@ export function expandMotionModel(model: PoseModel | null): PoseModel | null {
       if (!model.worldData || model.worldData.length > 110000) return null;
       const world: unknown = JSON.parse(model.worldData);
       if (!Array.isArray(world) || world.length !== model.t.length) return null;
+      if (model.worldVisibility && model.worldVisibility.length > 20000) return null;
+      const confidence: unknown = model.worldVisibility ? JSON.parse(model.worldVisibility) : undefined;
+      if (confidence !== undefined && (!Array.isArray(confidence) || confidence.length !== model.t.length ||
+        !confidence.every((row) => Array.isArray(row) && row.length === 33 && row.every((value) =>
+          Number.isInteger(value) && value >= 0 && value <= 1000)))) return null;
       frames = [];
       for (const [index, frame] of world.entries()) {
         if (!Array.isArray(frame) || frame.length !== 33) return null;
@@ -46,7 +53,8 @@ export function expandMotionModel(model: PoseModel | null): PoseModel | null {
         for (const [joint, point] of frame.entries()) {
           if (!Array.isArray(point) || point.length !== 3 || !point.every((value) =>
             typeof value === "number" && Number.isInteger(value) && Math.abs(value) <= 5000)) return null;
-          joints.push([point[0] / 1000, point[1] / 1000, point[2] / 1000, imageFrames[index]![joint]![3]]);
+          const visibility = Array.isArray(confidence) ? confidence[index][joint] / 1000 : imageFrames[index]![joint]![3];
+          joints.push([point[0] / 1000, point[1] / 1000, point[2] / 1000, Math.min(visibility, imageFrames[index]![joint]![3])]);
         }
         frames.push(joints);
       }

@@ -109,6 +109,7 @@ export default async function PracticeSessionPage({
         attempts={bundle.attempts}
         drills={state.drills}
         trends={state.practiceTrends}
+        history={state.drillAttempts}
       />
 
       {bundle.session.reflection ? (

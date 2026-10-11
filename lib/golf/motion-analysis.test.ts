@@ -4,6 +4,7 @@ import { analyseMotion, describeMotionReading, findAutomaticTiming, findMotionPh
 import { LM, packFrames, unpackFrames, type PoseFrame } from "./pose";
 import { poseModelSchema } from "../validation/schemas";
 import { scoreSwing } from "./swing-score";
+import { scoreReconstruction } from "./reconstruction-score";
 
 // Known positions in the image; the depth values deliberately have no meaning.
 function swing(): PoseFrame[] {
@@ -105,6 +106,49 @@ describe("projected swing movement", () => {
     assert.equal(findAutomaticTiming(hidden.slice(0, 9), 1), null);
     hidden[5]!.imageLandmarks![LM.leftShoulder]!.visibility = 0.1;
     assert.equal(findAutomaticTiming(hidden, 1), null);
+  });
+
+  it("recovers a complete swing after brief wrist loss during takeaway and keeps rhythm uncertainty", () => {
+    for (const view of ["face_on", "down_the_line"] as const) {
+      const frames = Array.from({ length: 65 }, (_, index) => {
+        const frame = structuredClone(swing()[0]!);
+        frame.t = index * 0.04;
+        const y = frame.t <= 0.2 ? 0.66 : frame.t <= 1.6 ? 0.66 - (frame.t - 0.2) / 1.4 * 0.41 :
+          frame.t <= 2 ? 0.25 + (frame.t - 1.6) / 0.4 * 0.41 : 0.66 - (frame.t - 2) * 0.75;
+        for (const joint of [15, 16]) frame.imageLandmarks![joint]!.y = y;
+        return frame;
+      });
+      for (const index of [20, 21, 22]) for (const joint of [15, 16]) frames[index]!.imageLandmarks![joint]!.visibility = 0.1;
+      const original = structuredClone(frames);
+      const report = analyseMotion(frames, 1, view);
+      assert.equal(report.phases?.top, 40);
+      assert.equal(report.phases?.impact, 50);
+      assert.ok(Math.abs(frames[report.phases!.address]!.t - 0.2) <= 0.121);
+      assert.equal(report.usable, true);
+      assert.ok(report.timing!.uncertainty >= 0.15);
+      assert.equal(report.tempo, null);
+      assert.deepEqual(analyseMotion(unpackFrames(packFrames(frames)), 1, view), report);
+      const model = { v: 1 as const, motionVersion: 1 as const, reconstructionVersion: 1 as const,
+        handedness: "right" as const, cameraAngle: view, aspect: 1, ballSide: "right" as const,
+        phases: report.phases!, timingStatus: "unresolved" as const, ...packFrames(frames) };
+      assert.equal(scoreReconstruction(model, report).total, 100);
+      assert.deepEqual(frames, original);
+      for (const index of [20, 21, 22]) frames[index]!.imageLandmarks![LM.leftShoulder]!.visibility = 0.1;
+      assert.equal(findAutomaticTiming(frames, 1, "face_on"), null);
+    }
+  });
+
+  it("judges body coverage within the swing instead of idle footage and the finish", () => {
+    const frames = swing();
+    for (const frame of [frames[0]!, ...frames.slice(9)]) for (const joint of [11, 12, 23, 24]) frame.imageLandmarks![joint]!.visibility = 0.1;
+    const report = analyseMotion(frames, 1, "face_on", "right", phases);
+    assert.equal(report.usable, true);
+    assert.equal(report.quality.coverage, 1);
+    assert.equal(report.quality.visible, 8);
+    assert.equal(report.quality.total, 8);
+    assert.equal(scoreSwing(report).total !== null, true);
+    for (const frame of frames.slice(3, 7)) frame.imageLandmarks![11]!.visibility = 0.1;
+    assert.equal(analyseMotion(frames, 1, "face_on", "right", phases).usable, false);
   });
 
   it("handles quantized 100ms sample gaps without treating rounding as missing body evidence", () => {
@@ -230,13 +274,20 @@ describe("projected swing movement", () => {
     assert.equal(analyseMotion(zoomed, 1, "down_the_line", "right", phases).quality.cameraStable, false);
   });
 
-  it("keeps stable-camera measurements when a shin briefly hides but the planted ankle stays visible", () => {
+  it("uses planted ankles rather than knee visibility or changing projected shin length", () => {
     const frames = swing().flatMap((frame) => [0, 0.013, 0.026].map((offset) => ({ ...structuredClone(frame), t: frame.t + offset })));
     const marked = { address: 3, top: 15, impact: 24 };
     for (const frame of frames.slice(9, 16)) for (const joint of [25, 26]) frame.imageLandmarks![joint]!.visibility = 0.1;
     assert.equal(analyseMotion(frames, 1, "face_on", "right", marked).quality.cameraStable, true);
     for (const frame of frames) for (const joint of [25, 26]) frame.imageLandmarks![joint]!.visibility = 0.1;
-    assert.equal(analyseMotion(frames, 1, "face_on", "right", marked).quality.cameraStable, false);
+    assert.equal(analyseMotion(frames, 1, "face_on", "right", marked).quality.cameraStable, true);
+    for (const frame of frames) for (const joint of [25, 26]) {
+      frame.imageLandmarks![joint]!.visibility = 0.95;
+      frame.imageLandmarks![joint]!.y += Math.sin(frame.t * Math.PI) * 0.2;
+    }
+    const report = analyseMotion(frames, 1, "face_on", "right", marked);
+    assert.equal(report.quality.cameraStable, true);
+    assert.equal(report.readings.find((reading) => reading.id === "hips_impact")?.value, 10);
   });
 
   it("renders between adjacent clear video samples without revealing hidden joints or spanning tracking gaps", () => {

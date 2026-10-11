@@ -1,24 +1,23 @@
 "use client";
-
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, Sparkles, Video } from "lucide-react";
-
 import { useRouter } from "next/navigation";
-
 import {
   savePoseModelAction,
   saveSwingClipAction,
   type PoseState,
 } from "@/app/actions";
 import { packFrames, unpackFrames, type PoseModel } from "@/lib/golf/pose";
-import { findAutomaticTiming, trustworthyFrames, type MotionView } from "@/lib/golf/motion-analysis";
+import { trustworthyFrames, type MotionView } from "@/lib/golf/motion-analysis";
+import { reviewFaceOn } from "@/lib/golf/face-on-review";
+import { analyseVideoModel } from "@/lib/golf/video-review";
 import { BodyOverlay } from "@/components/swing/body-overlay";
+import { SwingTiming } from "@/components/swing/swing-timing";
 import { readSwing } from "@/lib/pose-runner";
 import { clampClip, clipWindow, getClip } from "@/lib/video-store";
 import { cn } from "@/lib/utils";
 import { browserClient } from "@/lib/db/supabase";
-import { Button } from "@/components/ui/primitives";
-
+import { Button, Select } from "@/components/ui/primitives";
 /**
  * Connected clips use expiring signed URLs. Older device-local clips and
  * demo recordings load from IndexedDB. Both support saved trims.
@@ -48,6 +47,8 @@ export function SwingVideo({
 }) {
   const router = useRouter();
   const video = useRef<HTMLVideoElement>(null);
+  const analysisRun = useRef<AbortController | null>(null);
+  useEffect(() => () => analysisRun.current?.abort(), [id, videoUrl]);
   const remote = videoUrl?.startsWith("supabase://swing-videos/") ? videoUrl.slice("supabase://swing-videos/".length) : null;
   const clipId = videoUrl?.startsWith("local://clip/") ? videoUrl.slice("local://clip/".length) : id;
   const [src, setSrc] = useState<string | null>(videoUrl?.startsWith("https://") ? videoUrl : null);
@@ -55,17 +56,26 @@ export function SwingVideo({
   const [trim, setTrim] = useState<[number | null, number | null]>([clipStart, clipEnd]);
   const [duration, setDuration] = useState(0);
   const [draft, setDraft] = useState<[number, number] | null>(null);
+  const [trimming, setTrimming] = useState(false);
   const [analysis, setAnalysis] = useState<PoseState | null>(null);
   const [analysing, setAnalysing] = useState(false);
   const [progress, setProgress] = useState<string | null>(null);
   const [time, setTime] = useState(0);
   const [aspect, setAspect] = useState(3 / 4);
-  const [overlay, setOverlay] = useState(false);
+  const [overlay, setOverlay] = useState(true);
+  const [loop, setLoop] = useState(false);
+  const attempted = useRef<string | null>(null);
+  const analyseCurrent = useRef<() => Promise<void>>(async () => undefined);
   const [view, setView] = useState<MotionView>(model?.cameraAngle ?? cameraAngle);
-  const [ballSide, setBallSide] = useState<"left" | "right" | "">(model?.ballSide ?? "");
   const savedModel = model?.motionVersion === 1 && model.imageFrames ? model : null;
-  const tracked = useMemo(() => savedModel ? trustworthyFrames(unpackFrames(savedModel), savedModel.aspect ?? aspect, savedModel.cameraAngle ?? "other") : [], [model, aspect]);
-  const phases = useMemo(() => savedModel?.phasesConfirmed ? savedModel.phases : findAutomaticTiming(tracked, savedModel?.aspect ?? aspect, savedModel?.cameraAngle ?? "other")?.phases, [model, tracked, aspect]);
+  const tracked = useMemo(() => savedModel ? trustworthyFrames(unpackFrames(savedModel), savedModel.aspect ?? aspect, view) : [], [savedModel, aspect, view]);
+  const review = useMemo(() => savedModel ? reviewFaceOn(unpackFrames(savedModel), savedModel.aspect ?? aspect, view) : null, [savedModel, aspect, view]);
+  const report = useMemo(() => savedModel ? analyseVideoModel(savedModel) : null, [savedModel]);
+  const reviewWindow: [number, number] | null = savedModel && report?.phases
+    ? [savedModel.t[report.phases.address]!, Math.min(savedModel.t.at(-1)!, savedModel.t[report.phases.impact]! + 0.25)]
+    : review?.window ?? null;
+  const guide = savedModel?.phasesConfirmed && report?.phases ? tracked[report.phases.address]
+    : review?.guide ?? (report?.phases ? tracked[report.phases.address] : undefined);
   /*
     Reading frames off the canvas needs a cross-origin-enabled element, but a
     host that does not send the matching header will refuse to play at all
@@ -73,7 +83,6 @@ export function SwingVideo({
     attribute and reloads once, and the analyser says why it went away.
   */
   const [crossOrigin, setCrossOrigin] = useState(true);
-
   useEffect(() => {
     let url: string | null = null;
     let live = true;
@@ -103,12 +112,10 @@ export function SwingVideo({
       if (url) URL.revokeObjectURL(url);
     };
   }, [id, clipId, remote]);
-
   const [start, end] = draft ?? clipWindow(trim[0], trim[1], duration);
   const trimChanged = Boolean(savedModel?.clip && duration > 0 &&
     (Math.abs(savedModel.clip[0] - start) > 0.1 || Math.abs(savedModel.clip[1] - end) > 0.1));
-  const trackedModel = trimChanged ? null : savedModel;
-
+  const trackedModel = trimChanged || savedModel?.cameraAngle !== view ? null : savedModel;
   useEffect(() => {
     const element = video.current;
     if (!element || !src || !element.requestVideoFrameCallback) return;
@@ -125,13 +132,15 @@ export function SwingVideo({
     sample();
     return () => { stopped = true; element.cancelVideoFrameCallback(callback); };
   }, [src, id]);
-
   async function analyse() {
     const element = video.current;
-    if (!element || analysing) return;
+    if (!element || analysing || analysisRun.current) return;
+    const run = new AbortController();
+    analysisRun.current = run;
     setAnalysing(true);
     setAnalysis(null);
-    setProgress("Loading the 3D body model");
+    setLoop(false);
+    setProgress("Preparing automatic video review");
     // Frame callbacks depend on presenting the video. A button below a tall
     // player can scroll it offscreen, causing the browser to skip callbacks.
     element.scrollIntoView({ block: "center", behavior: "instant" });
@@ -141,22 +150,25 @@ export function SwingVideo({
       if (!element.videoWidth || !element.videoHeight) throw new Error("The video has not loaded yet.");
       const span: [number, number] = end > start ? [start, end] : [0, element.duration];
       const posed = await readSwing(element, span[0], span[1], (done, total) =>
-        setProgress("Tracking visible joints: " + Math.min(100, Math.round(done / total * 100)) + "%"), view,
+        setProgress("Tracking visible joints: " + Math.min(100, Math.round(done / total * 100)) + "%"), view, run.signal,
       );
-      if (posed.length < 8) throw new Error("Too few clear body frames. Trim to one complete swing, keep the whole body visible, and use a brighter clip.");
-      setProgress("Reconstructing your 3D swing and analysis");
+      run.signal.throwIfAborted();
+      if (posed.length < 8) throw new Error("Too few frames could be tracked. Keep your whole body visible and try a brighter recording.");
+      setProgress("Saving your video review");
+      const packed = packFrames(posed);
       const saved = await savePoseModelAction({
         swing_session_id: id,
-        ...packFrames(posed),
+        t: packed.t,
+        imageFrames: packed.imageFrames,
         aspect: element.videoWidth / element.videoHeight,
         cameraAngle: view,
-        ballSide: view === "down_the_line" && ballSide ? ballSide : undefined,
         clip: span,
-        reconstruct: true,
+        reconstruct: false,
       });
       setAnalysis(saved);
-      if (saved.ok) router.refresh();
+      if (saved.ok) { setOverlay(true); router.refresh(); }
     } catch (error) {
+      if (run.signal.aborted) return;
       setAnalysis({
         ok: false,
         message: error instanceof Error && error.name === "SecurityError"
@@ -164,18 +176,47 @@ export function SwingVideo({
           : error instanceof Error ? error.message : "Could not track this video. Try again.",
       });
     } finally {
-      element.currentTime = wasTime;
+      analysisRun.current = null;
+      if (!run.signal.aborted) element.currentTime = wasTime;
       setProgress(null);
       setAnalysing(false);
     }
   }
-
+  analyseCurrent.current = analyse;
+  useEffect(() => {
+    if (!analysable || !src || !Number.isFinite(duration) || duration <= 0 || !crossOrigin || trackedModel || analysing || trimming || draft) return;
+    const key = `${id}:${src}:${start}:${end}:${view}`;
+    if (attempted.current === key) return;
+    const timer = window.setTimeout(() => {
+      if (attempted.current === key) return;
+      attempted.current = key;
+      void analyseCurrent.current();
+    }, 200);
+    return () => window.clearTimeout(timer);
+  }, [analysable, id, src, duration, crossOrigin, trackedModel, analysing, trimming, view, draft, start, end]);
+  useEffect(() => {
+    const element = video.current;
+    if (element && trackedModel && reviewWindow) {
+      element.currentTime = reviewWindow[0];
+      element.playbackRate = 0.5;
+    }
+  }, [trackedModel, report, review]);
+  useEffect(() => {
+    const show = () => { setLoop(false); video.current?.scrollIntoView({ block: "center", behavior: "smooth" }); };
+    window.addEventListener("swing:review", show);
+    return () => window.removeEventListener("swing:review", show);
+  }, []);
   async function saveTrim(next: [number, number]) {
+    analysisRun.current?.abort();
+    setTrimming(true);
     const [lo, hi] = clampClip(next[0], next[1], duration);
     const previous = trim;
     setTrim([lo, hi]);
     setDraft(null);
-    const result = await saveSwingClipAction({ swing_session_id: id, start: lo, end: hi });
+    let result;
+    try { result = await saveSwingClipAction({ swing_session_id: id, start: lo, end: hi }); }
+    catch { result = { ok: false, message: "Could not save the clip. Please try again." }; }
+    setTrimming(false);
     if (result.ok) {
       setError(null);
       return;
@@ -185,7 +226,6 @@ export function SwingVideo({
     setTrim(previous);
     setError(result.message ?? "Could not save the trim. Please try again.");
   }
-
   if (!src) {
     return (
       <div
@@ -199,7 +239,6 @@ export function SwingVideo({
       </div>
     );
   }
-
   return (
     <div className="space-y-2.5">
       <div className={cn("relative overflow-hidden rounded-2xl bg-black", className)} style={{ aspectRatio: aspect }}>
@@ -223,10 +262,17 @@ export function SwingVideo({
         className="absolute inset-0 h-full w-full object-contain"
         onLoadedMetadata={(event) => {
           const element = event.currentTarget;
-          setDuration(element.duration);
+          if (Number.isFinite(element.duration)) setDuration(element.duration);
           setAspect(element.videoWidth / element.videoHeight || 3 / 4);
           // Park on the first frame of the clip so a card shows the swing, not black.
-          element.currentTime = trim[0] ?? 0.05;
+          element.currentTime = Number.isFinite(element.duration) ? trim[0] ?? 0.05 : 3600;
+        }}
+        onDurationChange={(event) => {
+          const element = event.currentTarget;
+          if (Number.isFinite(element.duration) && element.duration > 0) {
+            setDuration(element.duration);
+            if (element.currentTime >= element.duration - 0.05) element.currentTime = trim[0] ?? 0.05;
+          }
         }}
         onTimeUpdate={(event) => {
           const element = event.currentTarget;
@@ -235,9 +281,8 @@ export function SwingVideo({
             window.dispatchEvent(new CustomEvent("swing:frame", { detail: { id, time: element.currentTime, paused: element.paused } }));
           }
           if (analysing || end <= start) return;
-          if (element.currentTime > end || element.currentTime < start - 0.3) {
-            element.currentTime = start;
-          }
+          const bounds = loop && reviewWindow ? reviewWindow : [start, end];
+          if (element.currentTime > bounds[1]! || element.currentTime < bounds[0]! - 0.3) element.currentTime = bounds[0]!;
         }}
         onSeeked={(event) => {
           setTime(event.currentTarget.currentTime);
@@ -245,42 +290,55 @@ export function SwingVideo({
         }}
         onPause={(event) => window.dispatchEvent(new CustomEvent("swing:frame", { detail: { id, time: event.currentTarget.currentTime, paused: true } }))}
       />
-      {trackedModel && tracked.length > 0 && overlay && !analysing ? <BodyOverlay frames={tracked} time={time} guide={phases ? tracked[phases.address] : undefined} view={trackedModel.cameraAngle ?? "other"} aspect={aspect} /> : null}
+      {trackedModel && tracked.length > 0 && overlay && !analysing ? <BodyOverlay frames={tracked} time={time} guide={guide ?? undefined} view={view} aspect={aspect} /> : null}
       {analysing ? <div role="status" className="pointer-events-none absolute inset-x-3 bottom-3 rounded-lg bg-black/75 px-3 py-2 text-center text-[12px] text-white">{progress}</div> : null}
       </div>
       {trackedModel ? <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-fg-muted">
-        <label className="flex min-h-10 cursor-pointer items-center gap-2"><input type="checkbox" checked={overlay} onChange={(event) => setOverlay(event.target.checked)} className="accent-accent" /> Show body tracking</label>
-        <span>Orange shoulders · green hips · gold hand path</span>
+        <label className="flex min-h-10 cursor-pointer items-center gap-2"><input type="checkbox" checked={overlay} onChange={(event) => setOverlay(event.target.checked)} className="accent-accent" /> Show setup guides</label>
+        <span>Green hips / gold hand trail / faint setup outline</span>
       </div> : null}
+      {trackedModel && reviewWindow ? <Button type="button" size="sm" variant="secondary" onClick={() => {
+        const element = video.current;
+        if (!element) return;
+        setLoop(true); element.currentTime = reviewWindow[0]; element.playbackRate = 0.5;
+        void element.play().catch(() => setLoop(false));
+      }}>Replay with guides - half speed</Button> : null}
       {error ? <p role="alert" className="text-xs text-bad">{error}</p> : null}
-      {trimChanged ? <p role="status" className="text-[11px] text-fg-muted">The trim changed. Rebuild the swing to use this part of the clip.</p> : null}
-
+      {trimChanged ? <p role="status" className="text-[11px] text-fg-muted">The clip changed. Reviewing this part of the recording automatically.</p> : null}
       {analysable ? (
         <div className="rounded-xl border border-border bg-surface-2 p-3">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
-              <p className="dsp text-[10px] tracking-[0.17em] text-fg-subtle">Video → 3D → Analysis</p>
+              <p className="dsp text-[10px] tracking-[0.17em] text-fg-subtle">2D swing analysis</p>
               <p className="mt-1 text-[11px] leading-[1.5] text-fg-muted">
                 {!crossOrigin
                   ? "This video will play but cannot be read, because its storage does not allow it."
                   : (progress ??
-                    "Reconstructs your body in 3D, then scores and analyzes your swing. Trim to one complete swing and keep your whole body visible. The first run downloads the model (about 30 MB).")}
+                    "Tracks visible movement and adds guides to your recording. The first review downloads the tracking model; later reviews reuse it.")}
               </p>
             </div>
             <Button
               type="button"
               size="sm"
               onClick={() => void analyse()}
-              disabled={analysing || !crossOrigin || duration <= 0}
+              disabled={analysing || trimming || !crossOrigin || duration <= 0}
             >
               {analysing ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
               ) : (
                 <Sparkles className="h-3.5 w-3.5" />
               )}
-              {analysing ? "Reconstructing" : model?.reconstructionVersion === 1 ? "Rebuild swing" : "Build 3D swing"}
+              {analysing ? "Reviewing..." : trackedModel ? "Review again" : "Review video"}
             </Button>
           </div>
+          <label className="mt-3 block text-[11px] text-fg-muted">Camera view
+            <Select aria-label="Swing camera view" value={view} disabled={analysing || trimming} onChange={(event) => setView(event.target.value as MotionView)} className="mt-1">
+              <option value="face_on">Face on · facing your chest</option>
+              <option value="down_the_line">Down the line · behind you</option>
+              <option value="other">Other angle · limited measurements</option>
+            </Select>
+          </label>
+          {analysing && progress !== "Saving your video review" ? <Button type="button" size="sm" variant="secondary" className="mt-2" onClick={() => analysisRun.current?.abort()}>Cancel tracking</Button> : null}
           {analysis ? (
             <p
               role="status"
@@ -299,31 +357,14 @@ export function SwingVideo({
               ) : null}
             </p>
           ) : null}
-          <label className="mt-3 block text-[11px] text-fg-muted">
-            Camera view
-            <select aria-label="Camera view for movement analysis" value={view} disabled={analysing} onChange={(event) => setView(event.target.value as MotionView)} className="mt-1.5 w-full rounded-lg border border-border bg-surface px-3 py-2 text-[12px]">
-              <option value="face_on">Face on</option>
-              <option value="down_the_line">Down the line</option>
-              <option value="other">Other / unsure</option>
-            </select>
-          </label>
-          {view === "down_the_line" ? <div className="mt-3 space-y-3">
-            <label className="block text-[11px] text-fg-muted">In this video, the ball is on which side of your body?
-              <select aria-label="Ball side in the video" value={ballSide} disabled={analysing} onChange={(event) => setBallSide(event.target.value as "left" | "right" | "")} className="mt-1.5 w-full rounded-lg border border-border bg-surface px-3 py-2 text-[12px]">
-                <option value="">Detect automatically</option><option value="left">Screen left</option><option value="right">Screen right</option>
-              </select>
-            </label>
-            <p className="text-[11px] leading-relaxed text-fg-muted">Place the camera behind your hands at address, at hand height, looking parallel to the target line. Keep the phone level and fixed, with your feet, head and full swing in view. Use good light and 60 fps or higher when available.</p>
-            <p className="text-[10.5px] leading-relaxed text-fg-subtle">The ball side is inferred from your setup when clear. You can correct it here for mirrored recordings.</p>
-          </div> : view === "face_on" ? <p className="mt-3 text-[11px] leading-relaxed text-fg-muted">Place the camera directly opposite your hands, perpendicular to the target line. Keep it fixed and level with both feet, hips, shoulders and your whole swing visible.</p> : null}
-          {savedModel && (view !== savedModel.cameraAngle || (view === "down_the_line" && ballSide && ballSide !== (savedModel.ballSide ?? ""))) ? <p className="mt-2 text-[11px] text-fg-muted">Rebuild the swing to update the view, model and score.</p> : null}
         </div>
       ) : null}
-
+      {analysable && trackedModel ? <SwingTiming model={trackedModel} sessionId={id} unresolved={!report?.phases} /> : null}
       {trimmable ? (
-        <div className="rounded-xl border border-border bg-surface-2 p-3">
+        <details className="rounded-xl border border-border bg-surface-2 p-3">
+          <summary className="min-h-8 cursor-pointer text-[12px] font-medium text-fg-muted">Shorten recording (optional)</summary>
           <div className="flex items-center justify-between">
-            <p className="dsp text-[10px] tracking-[0.17em] text-fg-subtle">Edit length</p>
+            <p className="dsp text-[10px] tracking-[0.17em] text-fg-subtle">Video clip</p>
             <p className="tabular text-[11px] text-fg-muted">
               {start.toFixed(1)}s &ndash; {(end || duration).toFixed(1)}s
             </p>
@@ -345,14 +386,13 @@ export function SwingVideo({
             />
           </div>
           <p className="mt-2 text-[10.5px] leading-[1.5] text-fg-subtle">
-            Saved with the swing, so the same trim plays on every device.
+            Saved with the swing, so the same clip plays on every device.
           </p>
-        </div>
+        </details>
       ) : null}
     </div>
   );
 }
-
 function Handle({
   label,
   value,

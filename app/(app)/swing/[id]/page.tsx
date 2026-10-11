@@ -1,69 +1,71 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { ArrowLeft, Box } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { SwingVideo } from "@/components/swing/swing-video";
-import { SwingModel } from "@/components/swing/swing-model";
 import { SwingAnalysis } from "@/components/swing/swing-analysis";
-import { SwingStudio } from "@/components/swing/swing-studio";
-import { SwingDiagnostic } from "@/components/swing/diagnostic";
-import { MeasurementForm } from "@/components/swing/measurement-form";
 import { DeleteSwingButton } from "@/components/swing/delete-swing";
-import { ButtonLink, Card, CardContent, CardHeader, CardTitle, PageHero } from "@/components/ui/primitives";
-import { analyseMotion } from "@/lib/golf/motion-analysis";
-import { unpackFrames } from "@/lib/golf/pose";
-import { CLUB_LABELS, labelize } from "@/types/golf";
+import { ButtonLink, PageHero } from "@/components/ui/primitives";
+import { compareFaceOn, reviewFaceOn } from "@/lib/golf/face-on-review";
+import { unpackFrames, type PoseModel } from "@/lib/golf/pose";
+import { faceOnFingerprint } from "@/lib/ai/face-on-coach";
+import { analyseVideoModel } from "@/lib/golf/video-review";
+import { CLUB_LABELS } from "@/types/golf";
 import * as repo from "@/lib/db/repo";
 import { loadPlayerState } from "@/lib/player-state";
 import { formatDate } from "@/lib/utils";
 
-export const metadata: Metadata = { title: "Swing" };
+export const metadata: Metadata = { title: "Swing review" };
 export const dynamic = "force-dynamic";
 
+function matchesTrim(model: PoseModel, start: number | null, end: number | null) {
+  return !model.clip || (Math.abs(model.clip[0] - (start ?? 0)) <= 0.1 && (end === null || Math.abs(model.clip[1] - end) <= 0.1));
+}
 export default async function SwingPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const user = await repo.currentUser();
   if (!user) return null;
   const state = await loadPlayerState(user.id);
-  const session = state.swingSessions.find((candidate) => candidate.id === id);
+  const session = state.swingSessions.find((s) => s.id === id);
   if (!session) notFound();
-  const model = await repo.getSwingModel(user.id, session.id);
-  const trimChanged = Boolean(model?.clip &&
-    (Math.abs(model.clip[0] - (session.clip_start ?? 0)) > 0.1 || (session.clip_end !== null && Math.abs(model.clip[1] - session.clip_end) > 0.1)));
-  const reconstruction = !trimChanged && model?.reconstructionVersion === 1 && model.frames.length === model.t.length ? model : null;
-  const motion = reconstruction?.imageFrames && reconstruction.aspect ? analyseMotion(unpackFrames(reconstruction), reconstruction.aspect,
-    reconstruction.cameraAngle ?? "other", reconstruction.handedness, reconstruction.phasesConfirmed ? reconstruction.phases : undefined) : null;
-  const measurements = state.swingMeasurements.filter((row) => row.swing_session_id === id && row.source === "manual");
-  const findings = state.swingFindings.filter((row) => row.swing_session_id === id && row.source === "manual");
+  const model = await repo.getSwingModel(user.id, id);
+  const current = model?.imageFrames && model.aspect && matchesTrim(model, session.clip_start, session.clip_end) ? model : null;
+  const view = session.camera_angle === "face_on" || session.camera_angle === "down_the_line" ? session.camera_angle : "other";
+  const review = current ? reviewFaceOn(unpackFrames(current), current.aspect!, current.cameraAngle ?? view) : null;
+  const report = current ? analyseVideoModel(current) : null;
+  let comparison: string | null = null, previousHref: string | undefined;
+  if (review && review.status !== "record_again" && review.scope === "backswing") {
+    const candidates = state.swingSessions.filter((s) => s.id !== id && s.club === session.club && s.camera_angle === "face_on" && s.created_at < session.created_at)
+      .sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 5);
+    const previous = await Promise.allSettled(candidates.map((s) => repo.getSwingModel(user.id, s.id)));
+    for (let n = 0; n < previous.length; n++) {
+      const result = previous[n]!, candidate = candidates[n]!;
+      if (result.status !== "fulfilled") continue;
+      const earlier = result.value;
+      if (!earlier?.imageFrames || !earlier.aspect || !matchesTrim(earlier, candidate.clip_start, candidate.clip_end)) continue;
+      comparison = compareFaceOn(review, reviewFaceOn(unpackFrames(earlier), earlier.aspect, earlier.cameraAngle ?? "face_on"));
+      if (comparison) { previousHref = `/swing/${candidate.id}`; break; }
+    }
+  }
+  const notes = state.swingFindings.filter((f) => f.swing_session_id === id && f.source === "manual");
   return <div className="space-y-5">
-    <PageHero art="dusk" size="sm" className="mb-0" eyebrow={`${labelize(session.camera_angle)} · ${formatDate(session.created_at.slice(0, 10))}`}
-      title={CLUB_LABELS[session.club]}
-      action={reconstruction ? <ButtonLink href="#swing-analysis" variant="onHeroSolid" size="sm">View analysis</ButtonLink> : undefined}
-      topLeft={<ButtonLink href="/swing" variant="onHero" size="sm"><ArrowLeft className="h-3.5 w-3.5" /> Swings</ButtonLink>}
-    />
-    <SwingStudio ready={Boolean(reconstruction)} video={<div className="mx-auto max-w-lg"><SwingVideo id={id} videoUrl={session.video_url} clipStart={session.clip_start} clipEnd={session.clip_end}
-        trimmable analysable model={model}
-        cameraAngle={session.camera_angle === "face_on" || session.camera_angle === "down_the_line" ? session.camera_angle : "other"}
-      /></div>} reconstruction={reconstruction ? <SwingModel model={reconstruction} sessionId={id} /> : <Card>
-        <CardHeader><CardTitle>Your swing in 3D</CardTitle></CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex aspect-[16/10] flex-col items-center justify-center gap-3 rounded-xl bg-ink p-6 text-center text-ink-fg/70">
-            <Box className="h-10 w-10" aria-hidden />
-            <p className="text-[16px] font-semibold">Reconstruct your swing</p>
-            <p className="max-w-xs text-[12px] leading-relaxed">Build a rotatable 3D body replay from your video, then see your swing score and coaching analysis.</p>
-          </div>
-          <p className="text-[12px] leading-relaxed text-fg-muted">{trimChanged ? "The trim changed. " : ""}Choose <strong>{model?.reconstructionVersion === 1 ? "Rebuild swing" : "Build 3D swing"}</strong> under the video. Include setup through follow-through with your full body in view.</p>
-          <p className="text-[11px] leading-relaxed text-fg-subtle">The reconstruction uses an open-source body model on your device. Depth and hidden limbs are estimated from one camera.</p>
-        </CardContent>
-      </Card>} />
-    {reconstruction && motion ? <SwingAnalysis model={reconstruction} report={motion} /> : null}
-    <details className="rounded-2xl border border-border bg-surface p-4">
-      <summary className="cursor-pointer text-[13px] font-medium text-accent">Coach notes and manual measurements</summary>
-      <div className="mt-4 space-y-4">
-        {findings.map((finding) => <div key={finding.id}><p className="text-[13px] font-semibold">{finding.issue}</p><p className="mt-1 text-[12px] text-fg-muted">{finding.description}</p></div>)}
-        {measurements.length > 0 ? <SwingDiagnostic session={session} measurements={measurements} /> : null}
-        <MeasurementForm sessionId={id} />
-      </div>
-    </details>
+    <PageHero art="dusk" size="sm" className="mb-0" eyebrow={`Swing review · ${formatDate(session.created_at.slice(0, 10))}`}
+      title={CLUB_LABELS[session.club]} action={review ? <ButtonLink href="#swing-analysis" variant="onHeroSolid" size="sm">View analysis</ButtonLink> : undefined}
+      topLeft={<ButtonLink href="/swing" variant="onHero" size="sm"><ArrowLeft className="h-3.5 w-3.5" /> Swings</ButtonLink>} />
+    <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+      <div className="mx-auto w-full max-w-lg"><SwingVideo id={id} videoUrl={session.video_url} clipStart={session.clip_start} clipEnd={session.clip_end}
+        trimmable analysable model={model} cameraAngle={view} /></div>
+      {review && report && current ? <SwingAnalysis review={review} report={report} phaseTimes={report.phases ? {
+        address: current.t[report.phases.address]!, top: current.t[report.phases.top]!, impact: current.t[report.phases.impact]!,
+      } : null} comparison={comparison} previousHref={previousHref} sessionId={id}
+        coachingKey={faceOnFingerprint(review, session.club, null)} /> : <div className="rounded-2xl border border-border bg-surface p-5">
+        <h2 className="text-[18px] font-semibold">Analyze your swing video</h2>
+        <p className="mt-3 text-[13px] leading-relaxed text-fg-muted">Your recording is reviewed automatically for visible posture, body movement and swing timing. The guides stay on your original video so you can check each observation.</p>
+        <p className="mt-3 text-[12px] leading-relaxed text-fg-muted">Use a face-on or down-the-line view, with setup and follow-through included.</p>
+      </div>}
+    </div>
+    {notes.length ? <details className="rounded-2xl border border-border bg-surface p-4"><summary className="min-h-10 cursor-pointer text-[13px] font-medium text-accent">Saved coach notes</summary>
+      {notes.map((f) => <div key={f.id} className="mt-3"><p className="text-[13px] font-semibold">{f.issue}</p><p className="mt-1 text-[12px] text-fg-muted">{f.description}</p></div>)}
+    </details> : null}
     <div className="flex justify-end pt-2"><DeleteSwingButton swingSessionId={id} /></div>
   </div>;
 }

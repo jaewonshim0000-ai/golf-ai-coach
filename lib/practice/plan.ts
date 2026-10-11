@@ -2,6 +2,7 @@ import type { PracticeBlock, PracticeItem } from "../../types/practice";
 import { DRILLS, DRILLS_BY_ID } from "../seed/drills";
 import { GOAL_SHORT, PRACTICE_GOALS, earnedTolerance, type GoalId } from "./goals";
 import { blocksForDrill, goalsForDrill } from "./drill-priorities";
+import { practiceTest, testObjective } from "./tests";
 
 /**
  * A practice plan: warm up, fix it, test it, then prove it under pressure.
@@ -38,33 +39,33 @@ const LAYOUT: Record<PlanLength, [PracticeBlock, number][]> = {
 const LIBRARY: Record<GoalId, Partial<Record<PracticeBlock, string>>> = {
   driver_accuracy: {
     warm_up: "drill_warmup_ladder",
-    technical: "drill_tee_height_strike",
-    variable: "drill_driver_fairway_finder",
-    pressure: "drill_driver_pressure_ladder",
+    technical: "test_driver_distance",
+    variable: "test_driver_accuracy",
+    pressure: "test_driver_accuracy",
   },
   iron_accuracy: {
     warm_up: "drill_warmup_ladder",
-    technical: "drill_gate_face_control",
-    variable: "drill_random_approach_challenge",
-    pressure: "drill_one_ball_pressure",
+    technical: "test_line_100_150",
+    variable: "test_dispersion_100_150",
+    pressure: "test_line_150_200",
   },
   wedge_accuracy: {
     warm_up: "drill_warmup_ladder",
-    technical: "drill_strike_zone_wedge",
-    variable: "drill_wedge_random_yardage",
-    pressure: "drill_one_ball_pressure",
+    technical: "test_line_50_100",
+    variable: "test_dispersion_50_100",
+    pressure: "test_line_50_100",
   },
   chip_accuracy: {
     warm_up: "drill_putting_warmup",
-    technical: "drill_one_club_chipping",
-    variable: "drill_chip_circle",
-    pressure: "drill_up_and_down_game",
+    technical: "test_short_chip",
+    variable: "test_mixed_chip",
+    pressure: "test_up_and_down",
   },
   putting_conversion: {
     warm_up: "drill_putting_warmup",
-    technical: "drill_gate_putting",
-    variable: "drill_lag_ladder",
-    pressure: "drill_pressure_putting_ladder",
+    technical: "test_putt_gate",
+    variable: "test_lag_20_30",
+    pressure: "test_putt_spiral",
   },
 };
 
@@ -113,8 +114,9 @@ export function buildPlan(
     used.add(drill.id);
     // Keep the drill's own structure when there is time for it; shorten it
     // in proportion when there is not.
+    const test = practiceTest(drill.id);
     const scale = Math.min(1, duration / drill.recommended_duration);
-    const reps = Math.max(5, Math.round(drill.recommended_reps * scale));
+    const reps = test ? drill.recommended_reps : Math.max(5, Math.round(drill.recommended_reps * scale));
     return {
       drill_id: drill.id,
       block,
@@ -122,8 +124,8 @@ export function buildPlan(
       duration,
       target_reps: reps,
       target_value: drill.success_threshold,
-      tolerance: null,
-      objective: `${drill.metric_to_track}: ${Math.ceil(drill.success_threshold * reps)} of ${reps}.`,
+      tolerance: test?.defaultTolerance ?? null,
+      objective: test ? testObjective(test) : `${drill.metric_to_track}: ${Math.ceil(drill.success_threshold * reps)} of ${reps}.`,
     };
   });
   return {

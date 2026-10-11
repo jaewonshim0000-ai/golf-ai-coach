@@ -682,6 +682,8 @@ export type PoseModel = {
   imageData?: string;
   /** Compact millimetre coordinates for a stabilized inferred 3D replay. */
   worldData?: string;
+  /** Compact reconstruction confidence, separate from observed image visibility. */
+  worldVisibility?: string;
   reconstructionVersion?: 1;
   reconstructionEngine?: "mediapipe-ghum-heavy";
   /** Original video shape and view for projected movement analysis. */
@@ -713,7 +715,7 @@ export function packFrames(frames: PoseFrame[]): {
         mm(point.x),
         mm(point.y),
         mm(point.z),
-        Math.round((point.visibility ?? 1) * 100) / 100,
+        Math.floor((point.visibility ?? 1) * 1000) / 1000,
       ],
     );
   const imageFrames = frames.every((frame) => frame.imageLandmarks?.length === 33)

@@ -42,7 +42,7 @@ export default async function SwingLibraryPage() {
       {swings.length === 0 ? (
         <EmptyState
           title="No swings yet"
-          message="Upload a swing or record one, then open it and choose Analyze movement to review your joints on the video."
+          message="Record or upload one face-on swing. We automatically add video guides and a supported observation."
         />
       ) : (
         <div className="relative grid grid-cols-2 gap-2.5 md:grid-cols-4">
@@ -62,7 +62,7 @@ export default async function SwingLibraryPage() {
                   {formatDate(session.created_at.slice(0, 10))}
                 </p>
                 {diagnostic.measured === 0 ? (
-                  <Badge tone="neutral">{session.analysis_status === "processed" ? "Review analysis" : "Analyze movement"}</Badge>
+                  <Badge tone="neutral">{session.analysis_status === "processed" ? "Review analysis" : "Open swing review"}</Badge>
                 ) : (
                   <Badge tone={diagnostic.outOfRange.length > 0 ? "warn" : "good"}>
                     {diagnostic.outOfRange.length > 0

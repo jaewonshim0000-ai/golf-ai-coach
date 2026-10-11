@@ -177,7 +177,8 @@ export function film(camera: Camera, seed: number, focal = MAIN_LENS, errors = D
     }));
     detected.push({ t, landmarks, imageLandmarks });
   });
-  // The runner smooths what the detector returns before anything else sees it.
+  // This legacy fixture includes smoothing. It is not a simulation of the
+  // current runner, which preserves raw observed image coordinates.
   return { truth, detected: smoothFrames(detected) };
 }
 

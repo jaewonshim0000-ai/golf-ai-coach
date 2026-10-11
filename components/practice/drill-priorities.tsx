@@ -8,6 +8,7 @@ import { Badge, Button, ButtonLink, Card, CardContent, CardHeader, CardTitle, In
 import { GOAL_SHORT, type GoalId } from "@/lib/practice/goals";
 import { goalsForDrill, type RankedPracticeDrill } from "@/lib/practice/drill-priorities";
 import { cn } from "@/lib/utils";
+import { practiceTest, testObjective } from "@/lib/practice/tests";
 import { CLUB_LABELS, labelize } from "@/types/golf";
 
 const INITIAL: PracticePrioritiesState = { ok: false };
@@ -43,8 +44,14 @@ export function PracticeDrillPriorities({
       <Card>
         <CardHeader className="gap-2">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <CardTitle id="practice-drills-title">Choose your practice priorities</CardTitle>
-            <Badge tone="neutral">{drills.length} drills</Badge>
+            <div className="flex flex-wrap items-center gap-2">
+              <CardTitle id="practice-drills-title">Choose your practice priorities</CardTitle>
+              <Badge tone="neutral">{drills.length} drills</Badge>
+            </div>
+            <Button type="submit" form="practice-priorities-form" size="sm" disabled={pending || !dirty}>
+              {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+              {pending ? "Saving…" : "Save priorities"}
+            </Button>
           </div>
           <p className="text-[12px] leading-relaxed text-fg-muted">
             {hasRecommendations
@@ -70,13 +77,7 @@ export function PracticeDrillPriorities({
               <p className="flex items-center gap-1.5 text-[11px] text-fg-muted">
                 <Star className="h-3.5 w-3.5 text-accent" aria-hidden /> {selected.length} prioritized
               </p>
-              <div className="flex items-center gap-1.5">
-                {selected.length > 0 ? <Button type="button" variant="ghost" size="sm" disabled={pending} onClick={() => setSelected([])}>Clear</Button> : null}
-                <Button type="submit" size="sm" disabled={pending || !dirty}>
-                  {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                  {pending ? "Saving…" : "Save priorities"}
-                </Button>
-              </div>
+              {selected.length > 0 ? <Button type="button" variant="ghost" size="sm" disabled={pending} onClick={() => setSelected([])}>Clear</Button> : null}
             </div>
             <p role="status" className={cn("text-[11px] leading-relaxed", state.message && !state.ok ? "text-bad" : "text-fg-subtle")}>
               {pending ? "Saving your choices…" : state.message && !state.ok ? state.message : dirty ? "Unsaved changes. Save to use these drills in future plans." : state.message ?? "Saved drills are preferred in the matching work blocks of 30- and 60-minute plans."}
@@ -122,8 +123,9 @@ export function PracticeDrillPriorities({
                       <ol className="list-decimal space-y-1.5 pl-5 leading-relaxed text-fg-muted">
                         {drill.instructions.map((line, step) => <li key={step}>{line}</li>)}
                       </ol>
-                      <p className="mt-3 text-fg-muted">Track: {drill.metric_to_track}. Aim for {Math.ceil(drill.recommended_reps * drill.success_threshold)} of {drill.recommended_reps}.</p>
+                      <p className="mt-3 text-fg-muted">{practiceTest(drill.id) ? testObjective(practiceTest(drill.id)!) : `Track: ${drill.metric_to_track}. Aim for ${Math.ceil(drill.recommended_reps * drill.success_threshold)} of ${drill.recommended_reps}.`}</p>
                     </details>
+                    <ButtonLink href={`/practice/tests/${drill.id}`} size="sm" variant="secondary">Start test <ArrowUpRight className="h-3.5 w-3.5" /></ButtonLink>
                   </div>
                 </CardContent>
               </Card>
@@ -134,9 +136,6 @@ export function PracticeDrillPriorities({
       {filtered.length === 0 ? <p className="rounded-xl bg-surface-2 p-5 text-center text-[13px] text-fg-muted">No drills match. Try another search or choose all areas.</p> : null}
       <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
         <div className="flex flex-wrap gap-2">
-          <Button type="submit" form="practice-priorities-form" size="sm" disabled={pending || !dirty}>
-            {pending ? "Saving…" : "Save priorities"}
-          </Button>
           <ButtonLink href="/practice/start" size="sm" variant="secondary">Build a practice plan <ArrowUpRight className="h-3.5 w-3.5" /></ButtonLink>
         </div>
         <ButtonLink href="/practice/drills" size="sm" variant="secondary">Explore the full library</ButtonLink>

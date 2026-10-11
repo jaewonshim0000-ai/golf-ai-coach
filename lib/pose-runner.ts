@@ -3,89 +3,12 @@
 import { LM, type Landmark, type PoseFrame } from "./golf/pose";
 import { findAutomaticTiming, swingSamplingWindow, trustworthyFrames, visiblePoint, type MotionView } from "./golf/motion-analysis";
 
-/**
- * Running the pose detector over a swing, in the browser.
- *
- * Detection happens on the player's device, without sending video frames to
- * an inference service or requiring a model API key. The visible joints are
- * saved afterwards to the player's existing account storage.
- *
- * The model and the wasm come from the public CDNs MediaPipe
- * publishes them on, so there is no build step and no binary in the repo. They
- * are fetched once and then cached by the browser. Self-hosting is a change of
- * these two constants plus copying `node_modules/@mediapipe/tasks-vision/wasm`
- * into `public/`; worth doing if the app ever needs to work offline.
- */
+import { createSwingDetector } from "./pose-worker-client";
 
-const VERSION = "1.0.1";
-const WASM_BASE = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${VERSION}/wasm`;
-/*
-  Use the heavy detector for visible joints. Its inferred depth does not drive
-  the movement report and is omitted from new stored motion models.
-*/
-const MODEL =
-  "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_heavy/float16/1/pose_landmarker_heavy.task";
-
-/**
- * How many frames to sample across the swing.
- *
- * The downswing takes about a quarter of a second, so impact is a narrow
- * target. The first pass takes up to 64 samples, with room for a second pass
- * up to 128 total. Repeated source frames are discarded.
- */
+/** Reserve half the bounded inference budget for the fast part of the swing. */
 export const POSE_SAMPLES = 64;
-/** The first pass stops here, leaving room for the downswing pass. */
-const COARSE_SAMPLES_MAX = 64;
-/** What the server accepts in one model. */
 const MAX_POSE_SAMPLES = 128;
-/**
- * Samples a second of video time through the downswing. A 30 or 60 fps clip
- * has fewer real frames than this and the repeats are skipped; a slow-motion
- * clip has more, and this is where they pay off.
- */
 const DENSE_RATE = 120;
-
-type DetectedLandmark = Landmark & { presence?: number };
-
-type Landmarker = {
-  detect: (
-    video: HTMLVideoElement,
-  ) => { worldLandmarks: DetectedLandmark[][]; landmarks: DetectedLandmark[][] };
-  close: () => void;
-};
-
-let cached: Promise<Landmarker> | null = null;
-
-async function loadLandmarker(): Promise<Landmarker> {
-  if (!cached) {
-    cached = (async () => {
-      const { FilesetResolver, PoseLandmarker } = await import("@mediapipe/tasks-vision");
-      const fileset = await FilesetResolver.forVisionTasks(WASM_BASE);
-      const options = {
-        // Seeking and the dense second pass visit frames out of order. IMAGE
-        // mode detects each independently, without an invalid tracking history.
-        runningMode: "IMAGE" as const,
-        numPoses: 2,
-        minPoseDetectionConfidence: 0.65,
-        minPosePresenceConfidence: 0.65,
-      };
-      try {
-        return (await PoseLandmarker.createFromOptions(fileset, {
-          ...options, baseOptions: { modelAssetPath: MODEL, delegate: "GPU" },
-        })) as unknown as Landmarker;
-      } catch {
-        return (await PoseLandmarker.createFromOptions(fileset, {
-          ...options, baseOptions: { modelAssetPath: MODEL, delegate: "CPU" },
-        })) as unknown as Landmarker;
-      }
-    })().catch((error) => {
-      // A failed load must not poison every later attempt.
-      cached = null;
-      throw error;
-    });
-  }
-  return cached;
-}
 
 type FrameCallbackVideo = HTMLVideoElement & {
   requestVideoFrameCallback?: (callback: (now: number, meta: { mediaTime: number }) => void) => number;
@@ -98,20 +21,24 @@ type FrameCallbackVideo = HTMLVideoElement & {
  * which moment it is looking at. Browsers without frame callbacks fall back
  * to the requested time.
  */
-function seek(video: FrameCallbackVideo, time: number): Promise<number> {
-  return new Promise((resolve) => {
+export function seekSwingFrame(video: FrameCallbackVideo, time: number, signal?: AbortSignal): Promise<number> {
+  signal?.throwIfAborted();
+  return new Promise((resolve, reject) => {
     let settled = false;
     let callbackId: number | undefined;
     let fallback: number | undefined;
-    const finish = (at: number) => {
+    const finish = (at: number, error?: Error) => {
       if (settled) return;
       settled = true;
       window.clearTimeout(timer);
       window.clearTimeout(fallback);
       if (callbackId !== undefined) video.cancelVideoFrameCallback?.(callbackId);
       video.removeEventListener("seeked", onSeeked);
-      resolve(at);
+      signal?.removeEventListener("abort", abort);
+      if (error) reject(error); else resolve(at);
     };
+    const abort = () => finish(NaN, new DOMException("Analysis cancelled.", "AbortError"));
+    signal?.addEventListener("abort", abort, { once: true });
     const timer = window.setTimeout(() => finish(NaN), 2000);
     const onSeeked = () => {
       if (!video.requestVideoFrameCallback) return finish(video.currentTime);
@@ -205,27 +132,35 @@ export async function readSwing(
   to: number,
   onProgress?: PoseProgress,
   view: MotionView = "other",
+  signal?: AbortSignal,
 ): Promise<PoseFrame[]> {
-  const landmarker = await loadLandmarker();
   const span = to > from ? to - from : video.duration;
   const start = to > from ? from : 0;
   if (!Number.isFinite(span) || span <= 0) return [];
 
+  signal?.throwIfAborted();
+  const detector = createSwingDetector(signal);
   const wasTime = video.currentTime;
   const wasPaused = video.paused;
   video.pause();
 
   const frames: PoseFrame[] = [];
   const seenFrames = new Set<number>();
+  let inferences = 0;
   let previous: Landmark[] | undefined;
   /** Detect the body at one moment; false when that video frame was already read. */
   const readAt = async (time: number) => {
-    const t = await seek(video, time);
+    signal?.throwIfAborted();
+    if (inferences >= MAX_POSE_SAMPLES) return;
+    const t = await seekSwingFrame(video, time, signal);
+    signal?.throwIfAborted();
     if (!Number.isFinite(t)) return;
     const key = Math.round(t * 1000);
     if (seenFrames.has(key)) return;
     seenFrames.add(key);
-    const result = landmarker.detect(video);
+    inferences++;
+    const result = await detector.detect(video);
+    signal?.throwIfAborted();
     // Apply presence before choosing a person, not only after selection.
     const imagePoses = result.landmarks.map((pose) => pose.map((point) => ({
       ...point, visibility: Math.min(point.visibility ?? 0, point.presence ?? 1),
@@ -236,11 +171,13 @@ export async function readSwing(
     if (selected < 0) return;
     const landmarks = result.worldLandmarks?.[selected];
     const imageLandmarks = imagePoses[selected];
-    if (landmarks && landmarks.length >= 33) {
+    if (imageLandmarks?.length === 33) {
       previous = imageLandmarks;
       frames.push({
         t,
-        landmarks: landmarks.map((point) => ({ ...point })),
+        landmarks: (landmarks ?? []).map((point, joint) => ({ ...point,
+          visibility: Math.min(point.visibility ?? 0, point.presence ?? 1, imageLandmarks?.[joint]?.visibility ?? 0),
+        })),
         imageLandmarks: imageLandmarks?.map((point) => ({ ...point, visibility: Math.min(point.visibility ?? 0, point.presence ?? 1) })),
       });
     }
@@ -248,12 +185,12 @@ export async function readSwing(
 
   try {
     // First pass: the whole clip, evenly, to find the swing in it.
-    const coarse = Math.min(COARSE_SAMPLES_MAX, Math.max(POSE_SAMPLES, Math.ceil(span * 20)));
-    // The second pass has not been sized yet; count it as a quarter-second downswing.
-    const expected = coarse + 24;
+    const coarse = POSE_SAMPLES;
+    // A fixed upper bound keeps progress monotonic as refinement is replanned.
+    const expected = MAX_POSE_SAMPLES;
     for (let index = 0; index < coarse; index += 1) {
       await readAt(start + (span * (index + 0.5)) / coarse);
-      onProgress?.(index + 1, expected);
+      onProgress?.(inferences, expected);
     }
 
     const aspect = video.videoWidth / video.videoHeight;
@@ -261,24 +198,23 @@ export async function readSwing(
     // timing which was unavailable in the coarse pass. Leave real frames and
     // timestamps intact, including when a requested sample decodes a repeat.
     const attempted = new Set<number>();
-    let reads = 0;
-    for (let pass = 0; pass < 3 && frames.length < MAX_POSE_SAMPLES; pass++) {
-      const room = MAX_POSE_SAMPLES - frames.length;
+    for (let pass = 0; pass < 3 && inferences < MAX_POSE_SAMPLES; pass++) {
+      const room = MAX_POSE_SAMPLES - inferences;
       const times = refinementTimes(frames, start, start + span - 0.001, aspect, view, Math.min(room, pass === 0 ? 40 : room))
         .filter((time) => !attempted.has(Math.round(time * 1000000)));
       if (!times.length) break;
-      const total = coarse + reads + times.length;
       for (const time of times) {
-        if (frames.length >= MAX_POSE_SAMPLES) break;
+        if (inferences >= MAX_POSE_SAMPLES) break;
         attempted.add(Math.round(time * 1000000));
         await readAt(time);
-        reads++;
-        onProgress?.(coarse + reads, total);
+        onProgress?.(inferences, MAX_POSE_SAMPLES);
       }
     }
+    onProgress?.(MAX_POSE_SAMPLES, MAX_POSE_SAMPLES);
   } finally {
+    detector.close();
     video.currentTime = wasTime;
-    if (!wasPaused) void video.play().catch(() => undefined);
+    if (!wasPaused && !signal?.aborted) void video.play().catch(() => undefined);
   }
 
   // Keep observed x/y intact. Averaging fast-moving wrists moves contact and

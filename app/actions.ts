@@ -2,6 +2,7 @@
 import { dispersion, offsetFor, practiceGoal } from "@/lib/practice/goals";
 import { buildPlan } from "@/lib/practice/plan";
 import { rankPracticeDrills } from "@/lib/practice/drill-priorities";
+import { PRACTICE_TEST_IDS, practiceTest, scoreTest, testItem } from "@/lib/practice/tests";
 import { cookies } from "next/headers";
 import { serverClient } from "@/lib/db/supabase";
 import { privateVideoPath } from "@/lib/video-upload";
@@ -23,15 +24,15 @@ import {
   visionNote,
 } from "@/lib/ai/vision";
 import { METRICS_BY_ID } from "@/lib/golf/swing-metrics";
-import { inferBallSide, reconstructSwing } from "@/lib/golf/reconstruction";
+import { reviewFaceOn } from "@/lib/golf/face-on-review";
+import { analyseVideoModel, buildVideoModel } from "@/lib/golf/video-review";
 import {
-  packFrames,
   unpackFrames,
   type PackedLandmark,
   type PoseFrame,
   type SwingPhases,
 } from "@/lib/golf/pose";
-import { analyseMotion, type MotionView } from "@/lib/golf/motion-analysis";
+import type { MotionView } from "@/lib/golf/motion-analysis";
 import { holeShots, type HoleRow } from "@/lib/golf/hole-entry";
 import { DRILLS_BY_ID } from "@/lib/seed/drills";
 import { loadPlayerState } from "@/lib/player-state";
@@ -448,15 +449,45 @@ export async function createPracticeSessionAction(
   redirect(`/practice/sessions/${sessionId}`);
 }
 
+export async function createTestSessionAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const user = await requireUser();
+  const parsed = z.object({
+    drill_id: z.enum(PRACTICE_TEST_IDS),
+    tolerance: z.coerce.number().finite().positive().max(300).nullable(),
+    location: z.string().trim().max(90),
+    scheduled_for: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  }).safeParse({ drill_id: formData.get("drill_id"), tolerance: formData.get("tolerance") || null,
+    location: formData.get("location") ?? "", scheduled_for: formData.get("scheduled_for") });
+  if (!parsed.success) return fail(parsed.error);
+  const test = practiceTest(parsed.data.drill_id)!;
+  if (test.defaultTolerance !== undefined && parsed.data.tolerance === null) return { ok: false, message: "Choose your target band before starting." };
+  let sessionId: string;
+  try {
+    const item = testItem(test, test.defaultTolerance !== undefined ? parsed.data.tolerance : null);
+    const session = await repo.createPracticeSession({ user_id: user.id, title: test.name, location: parsed.data.location || null,
+      focus: test.group, planned_duration: item.duration, actual_duration: null, energy_level: null, status: "in_progress",
+      scheduled_for: parsed.data.scheduled_for, completed_at: null, reflection: null }, [item]);
+    sessionId = session.id;
+  } catch (error) { return asError(error); }
+  revalidatePath("/practice");
+  redirect(`/practice/sessions/${sessionId}`);
+}
+
 export async function recordAttemptAction(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
   const user = await requireUser();
   let points: unknown = null;
+  let samples: unknown = null;
   try {
     const raw = formData.get("shot_points");
     points = raw ? JSON.parse(String(raw)) : null;
+    const rawSamples = formData.get("shot_offsets");
+    samples = rawSamples ? JSON.parse(String(rawSamples)) : null;
   } catch {
     return { ok: false, message: "Please enter valid shot estimates." };
   }
@@ -467,6 +498,7 @@ export async function recordAttemptAction(
     attempts: formData.get("attempts"),
     successes: formData.get("successes"),
     shot_points: points,
+    shot_offsets: samples,
     notes: formData.get("notes") || null,
   });
   if (!parsed.success) return fail(parsed.error);
@@ -479,6 +511,14 @@ export async function recordAttemptAction(
     const item = practice?.items.find((item) => item.id === parsed.data.practice_item_id && item.drill_id === parsed.data.drill_id);
     if (!practice || !item || practice.session.status === "complete") {
       return { ok: false, message: "This practice is unavailable or already complete." };
+    }
+    const test = practiceTest(parsed.data.drill_id);
+    if (test) {
+      const result = scoreTest(test, item, parsed.data.shot_points, parsed.data.shot_offsets);
+      await repo.recordDrillAttempt({ user_id: user.id, session_id: parsed.data.session_id,
+        practice_item_id: item.id, drill_id: test.id, ...result, notes: parsed.data.notes, completed_at: new Date().toISOString() });
+      revalidatePath("/", "layout");
+      return { ok: true, message: "Result saved." };
     }
     const goal = practiceGoal(parsed.data.drill_id);
     if (goal && parsed.data.attempts !== item.target_reps) {
@@ -904,9 +944,9 @@ export type PoseState = ActionState & {
 export async function savePoseModelAction(input: {
   swing_session_id: string;
   t: number[];
-  frames: PackedLandmark[][];
+  frames?: PackedLandmark[][];
   imageFrames?: PackedLandmark[][];
-  /** The video's width over its height; needed to rebuild from the picture. */
+  /** Video aspect ratio for the projected observations. */
   aspect?: number;
   cameraAngle?: MotionView;
   ballSide?: "left" | "right";
@@ -915,8 +955,9 @@ export async function savePoseModelAction(input: {
   reconstruct?: boolean;
 }): Promise<PoseState> {
   const user = await requireUser();
-  const parsed = poseModelSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, message: "That swing model could not be read." };
+  // Keep the legacy tuple validation while accepting image-only uploads.
+  const parsed = poseModelSchema.safeParse({ ...input, frames: input.frames ?? input.imageFrames });
+  if (!parsed.success) return { ok: false, message: "Those video tracks could not be read." };
 
   const [sessions, profile] = await Promise.all([repo.getSwingSessions(user.id), repo.getProfile(user.id)]);
   const session = sessions.find((item) => item.id === parsed.data.swing_session_id);
@@ -968,52 +1009,19 @@ async function storeMotion(
   frames: PoseFrame[],
   options: { aspect: number; view: MotionView; phases?: SwingPhases; clip?: [number, number]; ballSide?: "left" | "right"; reconstruct?: boolean; reconstructionVersion?: 1 },
 ): Promise<PoseState> {
-  const analysis = analyseMotion(frames, options.aspect, options.view, handedness, options.phases);
-  const rebuilt = options.reconstruct ? reconstructSwing(frames, options.aspect, options.view) : null;
-  if (options.reconstruct && !rebuilt) return { ok: false, noSwing: true, message: "Could not reconstruct a clear 3D body. Include the full body and legs in a bright recording, then try again." };
-  if (analysis.quality.coverage < 0.65 || frames.length < 8 || (options.phases && !analysis.usable)) {
-    return { ok: false, noSwing: true, message: analysis.summary };
-  }
-  if (!analysis.usable) {
-    const previous = await repo.getSwingModel(userId, sessionId);
-    if (previous?.motionVersion === 1 && previous.imageFrames && previous.aspect) {
-      const previousReport = analyseMotion(unpackFrames(previous), previous.aspect, previous.cameraAngle ?? "other", previous.handedness, previous.phasesConfirmed ? previous.phases : undefined);
-      if (previousReport.usable) return { ok: false, noSwing: true, message: `${analysis.summary} Your previous analysis has been kept.` };
-    }
-  }
-
+  const updatedModel = buildVideoModel(frames, { ...options, handedness });
+  const report = analyseVideoModel(updatedModel);
+  const review = reviewFaceOn(frames, options.aspect, options.view);
   try {
-    await repo.saveSwingModel(userId, sessionId, {
-      v: 1,
-      handedness,
-      // Legacy storage requires indices even when timing cannot be resolved.
-      // The report and overlay use detected timing, never these placeholders.
-      phases: analysis.phases ?? { address: 0, top: Math.floor(frames.length / 2), impact: frames.length - 1 },
-      ...packFrames(rebuilt ?? frames),
-      aspect: options.aspect,
-      cameraAngle: options.view,
-      ballSide: options.ballSide ?? (options.view === "down_the_line" ? inferBallSide(frames, options.aspect) : undefined),
-      motionVersion: 1,
-      ...(rebuilt || options.reconstructionVersion ? { reconstructionVersion: 1, reconstructionEngine: "mediapipe-ghum-heavy" } : {}),
-      phasesConfirmed: Boolean(options.phases),
-      timingStatus: options.phases ? "confirmed" : analysis.phases ? "estimated" : "unresolved",
-      clip: options.clip,
-    });
-    // Retire the old depth-derived readings after a successful replacement.
+    await repo.saveSwingModel(userId, sessionId, updatedModel);
     await repo.deleteSwingMeasurementsBySource(userId, sessionId, "pose");
-  } catch (error) {
-    return asError(error);
-  }
-
+  } catch (error) { return asError(error); }
   revalidatePath(`/swing/${sessionId}`);
   revalidatePath("/swing");
-  revalidatePath("/practice");
-  return {
-    ok: true,
-    measurements: analysis.readings.length,
-    message: rebuilt ? `3D swing reconstructed from ${frames.length} video samples. ${analysis.phases ? "Your score and coaching analysis are ready." : "The replay is ready; a complete visible hand arc is needed for a score."}` :
-      !analysis.phases ? analysis.summary : "Swing analysis updated using the saved positions.",
-  };
+  return { ok: true, measurements: report.readings.length || review.metrics.length,
+    message: report.usable ? "Your 2D swing analysis is ready. Review the measured positions below."
+      : review.status !== "record_again" ? "Your visible movement review is ready. Exact swing timing is unclear."
+      : "Your video tracks are saved. Review the recording notes below or adjust swing timing." };
 }
 
 // -------------------------------------------------------------------- misc// -------------------------------------------------------------------- misc

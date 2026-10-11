@@ -11,6 +11,8 @@ import type { Drill, DrillAttempt, PracticeItem, PracticeSession } from "@/types
 import { PRACTICE_BLOCK_LABELS } from "@/types/practice";
 import { cn, percent } from "@/lib/utils";
 import { TargetPlot } from "@/components/practice/target-plot";
+import { TestTracker } from "@/components/practice/test-tracker";
+import { practiceTest } from "@/lib/practice/tests";
 import {
   Badge,
   Button,
@@ -40,12 +42,14 @@ export function SessionRunner({
   attempts,
   drills,
   trends,
+  history = attempts,
 }: {
   session: PracticeSession;
   items: PracticeItem[];
   attempts: DrillAttempt[];
   drills: Drill[];
   trends: PracticeMetricTrend[];
+  history?: DrillAttempt[];
 }) {
   const complete = session.status === "complete";
   const logged = (item: PracticeItem) => attempts.some((attempt) => attempt.practice_item_id === item.id);
@@ -80,6 +84,10 @@ export function SessionRunner({
   const tracker = (block: PracticeItem, readOnly: boolean) => {
     const drill = drills.find((candidate) => candidate.id === block.drill_id);
     if (!drill) return null;
+    const test = practiceTest(drill.id);
+    if (test) return <TestTracker key={block.id} test={test} item={block}
+      attempt={attempts.find((attempt) => attempt.practice_item_id === block.id) ?? null}
+      history={history.filter((attempt) => attempt.drill_id === drill.id)} readOnly={readOnly} onDirty={onDirty} />;
     return (
       <DrillTracker
         key={block.id}

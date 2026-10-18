@@ -3,7 +3,7 @@ export const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
 
 export function validateVideo(file: { size: number; type: string; name: string }): string | null {
   if (!file.size) return "This video is empty. Choose another file.";
-  if (file.size > MAX_VIDEO_BYTES) return "Choose a video smaller than 50 MB.";
+  if (file.size > MAX_VIDEO_BYTES) return "This video is over 50 MB. Slow-motion clips grow fast: trim it to just the swing in your Photos app, then try again.";
   if (!/\.(mp4|mov|webm)$/i.test(file.name) || !["video/mp4", "video/quicktime", "video/webm"].includes(file.type)) {
     return "Choose an MP4, MOV, or WebM video.";
   }

@@ -35,7 +35,7 @@ export function SwingAnalysis({ review, report, phaseTimes, setup, comparison, p
         </div> : phaseTimes ? <p className="rounded-xl bg-info-soft p-3 text-[12px] leading-relaxed text-fg-muted">Use “Check your setup” beside the video to confirm the tracking is on you and mark your club. The shaft angle{report.view === "down_the_line" ? " and plane line come" : report.view === "face_on" ? " and ball position come" : " comes"} from those marks.</p> : null}
         {report.tempo ? <div className="rounded-xl border border-border p-3">
           <h3 className="text-[13px] font-semibold">Video timing · about {report.tempo.ratio}:1</h3>
-          <p className="mt-1 text-[12px] leading-relaxed text-fg-muted">Backswing {report.tempo.backswing.toFixed(2)}s · downswing {report.tempo.downswing.toFixed(2)}s · timing uncertainty about ±{report.tempo.uncertainty.toFixed(2)}s. Slow-motion recordings change these durations; contact is estimated from the hand path.</p>
+          <p className="mt-1 text-[12px] leading-relaxed text-fg-muted">Backswing {report.tempo.backswing.toFixed(2)}s · downswing {report.tempo.downswing.toFixed(2)}s · timing uncertainty about ±{report.tempo.uncertainty.toFixed(2)}s. Real swing time, using the playback speed set under the video; contact is estimated from the hand path.</p>
         </div> : phaseTimes ? <p className="text-[12px] leading-relaxed text-fg-muted">Timing is too uncertain for a rhythm measurement in this recording.</p> : null}
         {report.warnings.length ? <details className="rounded-xl bg-info-soft p-3 text-[12px] leading-relaxed text-fg-muted">
           <summary className="min-h-8 cursor-pointer font-medium">Recording notes ({report.warnings.length})</summary>

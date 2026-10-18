@@ -60,9 +60,10 @@ export function expandMotionModel(model: PoseModel | null): PoseModel | null {
         frames.push(joints);
       }
     }
-    const { imageData: _stored, worldData: _inferred, setup, ...rest } = model;
+    const { imageData: _stored, worldData: _inferred, setup, slowMotion, ...rest } = model;
     // A malformed setup check is dropped, not trusted; the tracks stay usable.
-    return { ...rest, frames, imageFrames, ...(setup && setupMarksSchema.safeParse(setup).success ? { setup } : {}) };
+    return { ...rest, frames, imageFrames, ...(setup && setupMarksSchema.safeParse(setup).success ? { setup } : {}),
+      ...(Number.isInteger(slowMotion) && slowMotion! > 1 && slowMotion! <= 32 ? { slowMotion } : {}) };
   } catch {
     return null;
   }

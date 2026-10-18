@@ -18,9 +18,11 @@ const LABELS = { grip: "your hands on the grip", clubhead: "the clubhead behind 
  * taps the club, which the pose model cannot see. A second still copy of the
  * video keeps the main player free for replay.
  */
-export function SwingSetup({ src, crossOrigin, frames, time, view, aspect, saved, sessionId }: {
+export function SwingSetup({ src, crossOrigin, frames, time, view, aspect, saved, sessionId, slowMotion = 1 }: {
   src: string; crossOrigin: boolean; frames: PoseFrame[]; time: number; view: MotionView; aspect: number;
   saved?: SetupMarks; sessionId: string;
+  /** `time` is real swing seconds; the still video seeks to time × slowMotion. */
+  slowMotion?: number;
 }) {
   const router = useRouter();
   const still = useRef<HTMLVideoElement>(null);
@@ -30,7 +32,7 @@ export function SwingSetup({ src, crossOrigin, frames, time, view, aspect, saved
   const [pending, startTransition] = useTransition();
   const at = saved?.t ?? time;
   useEffect(() => { setDraft(saved ?? {}); setStep(saved ? "mark" : "confirm"); }, [saved]);
-  useEffect(() => { if (still.current && still.current.readyState >= 1) still.current.currentTime = at; }, [at]);
+  useEffect(() => { if (still.current && still.current.readyState >= 1) still.current.currentTime = at * slowMotion; }, [at, slowMotion]);
   const next = !draft.grip ? "grip" : !draft.clubhead ? "clubhead" : view === "face_on" && !draft.ball ? "ball" : null;
   const tap = (event: MouseEvent<HTMLDivElement>) => {
     if (step !== "mark" || !next || pending) return;
@@ -59,7 +61,7 @@ export function SwingSetup({ src, crossOrigin, frames, time, view, aspect, saved
     </p>
     <div className="relative mx-auto w-full max-w-sm overflow-hidden rounded-xl bg-black" style={{ aspectRatio: aspect }}>
       <video ref={still} src={src} crossOrigin={crossOrigin ? "anonymous" : undefined} muted playsInline preload="metadata" aria-label="Setup frame"
-        className="absolute inset-0 h-full w-full object-contain" onLoadedMetadata={(event) => { event.currentTarget.currentTime = at; }} />
+        className="absolute inset-0 h-full w-full object-contain" onLoadedMetadata={(event) => { event.currentTarget.currentTime = at * slowMotion; }} />
       <BodyOverlay frames={frames} time={at} view={view} aspect={aspect} plane={view === "down_the_line" && grip && clubhead ? { grip, clubhead } : undefined} />
       <svg viewBox={`0 0 ${aspect} 1`} className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden>
         {grip && clubhead ? <line x1={grip[0] * aspect} y1={grip[1]} x2={clubhead[0] * aspect} y2={clubhead[1]} stroke="#7cc4ff" strokeWidth="0.006" strokeLinecap="round" /> : null}

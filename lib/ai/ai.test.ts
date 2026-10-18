@@ -194,6 +194,7 @@ function askState(): PlayerState {
     drills: [],
     practiceDrillPriorities: [],
     rounds: [round],
+    allRounds: [round],
     shots: [],
     shotsByRound: new Map(),
     summary: {
@@ -236,7 +237,7 @@ function askState(): PlayerState {
 
 describe("ask agent", () => {
   it("indexes every screen even with no data at all", () => {
-    const empty = { ...askState(), rounds: [], segments: [] };
+    const empty = { ...askState(), rounds: [], allRounds: [], segments: [] };
     const index = buildAskIndex(empty);
     assert.ok(index.every((entry) => entry.kind === "screen"));
     assert.ok(index.some((entry) => entry.href === "/practice"));

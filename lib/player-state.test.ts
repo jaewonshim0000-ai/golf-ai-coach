@@ -4,7 +4,7 @@ import { describe, it, beforeEach } from "node:test";
 process.env.ENABLE_DEMO_MODE = "true";
 
 import { resetDemoStore, store } from "./db/demo-store";
-import { DEMO_USER_ID } from "./db/repo";
+import { DEMO_USER_ID, updateRound } from "./db/repo";
 import { loadPlayerState } from "./player-state";
 
 /**
@@ -71,5 +71,26 @@ describe("a brand new account", () => {
   it("keeps the drill library, which is reference data rather than player data", async () => {
     const state = await loadPlayerState(DEMO_USER_ID);
     assert.ok(state.drills.length > 0);
+  });
+});
+
+describe("a round left out of the analysis", () => {
+  beforeEach(() => resetDemoStore());
+
+  it("stays listed with its shots but feeds no number", async () => {
+    const before = await loadPlayerState(DEMO_USER_ID);
+    const storm = before.rounds.find((round) => (before.shotsByRound.get(round.id) ?? []).length > 0)!;
+    await updateRound(DEMO_USER_ID, storm.id, { excluded_from_analysis: true });
+
+    const after = await loadPlayerState(DEMO_USER_ID);
+    assert.equal(after.allRounds.length, before.allRounds.length);
+    assert.equal(after.rounds.length, before.rounds.length - 1);
+    assert.ok(after.shotsByRound.get(storm.id)?.length, "its own card still needs its shots");
+    assert.ok(!after.shots.some((shot) => shot.round_id === storm.id));
+    assert.equal(after.summary.rounds, before.summary.rounds - 1);
+    assert.equal(after.summary.shots, before.summary.shots - after.shotsByRound.get(storm.id)!.length);
+
+    await updateRound(DEMO_USER_ID, storm.id, { excluded_from_analysis: false });
+    assert.deepEqual((await loadPlayerState(DEMO_USER_ID)).summary, before.summary);
   });
 });

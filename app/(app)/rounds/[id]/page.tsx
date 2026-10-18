@@ -4,6 +4,7 @@ import { ArrowLeft, Pencil } from "lucide-react";
 
 import { SourceBadge } from "@/components/dashboard/sections";
 import { DeleteRoundButton } from "@/components/rounds/delete-round";
+import { RoundAnalysisToggle } from "@/components/rounds/round-analysis-toggle";
 import { DivergingBars } from "@/components/charts";
 import { ScorecardSummary } from "@/components/rounds/scorecard-summary";
 import { classicStats, holeLines } from "@/lib/analytics/classic";
@@ -83,6 +84,7 @@ export default async function RoundDetailPage({
             {round.conditions.length ? (
               <HeroPill>{round.conditions.map(labelize).join(", ")}</HeroPill>
             ) : null}
+            {round.excluded_from_analysis ? <HeroPill>Left out of analysis</HeroPill> : null}
           </>
         }
         topLeft={
@@ -98,7 +100,9 @@ export default async function RoundDetailPage({
         }
       />
 
-      <div className="flex justify-end">
+      {/* The hero rides 24px over whatever comes first; buttons must clear it to be tappable. */}
+      <div className="flex flex-wrap items-center justify-end gap-2 pt-8">
+        <RoundAnalysisToggle roundId={round.id} excluded={Boolean(round.excluded_from_analysis)} />
         <DeleteRoundButton roundId={round.id} />
       </div>
 

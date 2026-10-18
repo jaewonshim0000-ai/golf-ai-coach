@@ -30,8 +30,13 @@ export type PlayerState = {
   profile: PlayerProfile | null;
   drills: Drill[];
   practiceDrillPriorities: string[];
+  /** The rounds counted in the analysis. Every number on every screen comes from these. */
   rounds: Round[];
+  /** Every round, including the ones the player left out, for listing them. */
+  allRounds: Round[];
+  /** Shots from counted rounds only. */
   shots: ScoredShot[];
+  /** Shots for every round, so a left-out round still shows its own card. */
   shotsByRound: Map<string, ScoredShot[]>;
   summary: SGSummary;
   segments: Segment[];
@@ -56,7 +61,7 @@ export type PlayerState = {
 export async function loadPlayerState(userId: string): Promise<PlayerState> {
   const [
     profile,
-    rounds,
+    allRounds,
     rawShots,
     practiceSessions,
     drillAttempts,
@@ -82,10 +87,15 @@ export async function loadPlayerState(userId: string): Promise<PlayerState> {
   // Keep them in storage, but use only the player's or coach's recorded findings.
   const swingFindings = storedSwingFindings.filter((finding) => finding.source === "manual");
   const drills = repo.getDrills();
-  const shots = scoreShots(rawShots);
+  const allShots = scoreShots(rawShots);
+  // A round left out (weather, a scramble, a bad day) stays listed, but
+  // nothing below is built from it.
+  const rounds = allRounds.filter((round) => !round.excluded_from_analysis);
+  const counted = new Set(rounds.map((round) => round.id));
+  const shots = allShots.filter((shot) => counted.has(shot.round_id));
 
   const shotsByRound = new Map<string, ScoredShot[]>();
-  for (const shot of shots) {
+  for (const shot of allShots) {
     const list = shotsByRound.get(shot.round_id) ?? [];
     list.push(shot);
     shotsByRound.set(shot.round_id, list);
@@ -138,6 +148,7 @@ export async function loadPlayerState(userId: string): Promise<PlayerState> {
     drills,
     practiceDrillPriorities,
     rounds,
+    allRounds,
     shots,
     shotsByRound,
     summary: summarizeStrokesGained(shots),

@@ -5,6 +5,7 @@ import { Flag } from "lucide-react";
 import { Suspense } from "react";
 
 import { CountBars, DivergingBars, TrendLine } from "@/components/charts";
+import { RoundAnalysisToggle } from "@/components/rounds/round-analysis-toggle";
 import { BaselinePicker } from "@/components/stats/baseline-picker";
 import { StatsFilters } from "@/components/stats/filters";
 import {
@@ -85,8 +86,9 @@ export default async function RoundsPage({ searchParams }: { searchParams: Promi
     repo.getCourses(user.id),
   ]);
 
-  // The classic numbers, from every round whichever way it was logged.
-  const perRound = state.rounds.map((round) => ({
+  // Every round gets its card; the classic numbers come from counted rounds,
+  // whichever way they were logged.
+  const perRound = state.allRounds.map((round) => ({
     round,
     lines: holeLines(
       round,
@@ -94,9 +96,11 @@ export default async function RoundsPage({ searchParams }: { searchParams: Promi
       state.shotsByRound.get(round.id) ?? [],
     ),
   }));
-  const classic = classicStats(perRound.flatMap(({ lines }) => lines));
-  const trends = classicTrends(perRound);
+  const counted = perRound.filter(({ round }) => !round.excluded_from_analysis);
+  const classic = classicStats(counted.flatMap(({ lines }) => lines));
+  const trends = classicTrends(counted);
   const linesFor = new Map(perRound.map(({ round, lines }) => [round.id, lines]));
+  const leftOut = state.allRounds.length - state.rounds.length;
 
   const baseline = search.baseline
     ? getBaseline(search.baseline)
@@ -134,7 +138,7 @@ export default async function RoundsPage({ searchParams }: { searchParams: Promi
         }
       />
 
-      {state.rounds.length === 0 ? (
+      {state.allRounds.length === 0 ? (
         <EmptyState
           title="No rounds yet"
           message="Play your first round to start discovering where you're gaining and losing shots."
@@ -148,11 +152,18 @@ export default async function RoundsPage({ searchParams }: { searchParams: Promi
         <>
           {/* The hero overlaps whatever comes first; a heading has to clear it. */}
           <div className="pt-12">
-            <SectionHeading title="Last rounds" />
+            <SectionHeading
+              title="Last rounds"
+              description={
+                leftOut
+                  ? `${leftOut} round${leftOut === 1 ? "" : "s"} left out of the analysis. Every number below uses the rest.`
+                  : "Leave out a round played in bad weather or odd conditions, and every number skips it."
+              }
+            />
           </div>
 
           <div className="grid gap-2.5 md:grid-cols-2">
-            {state.rounds.map((round) => {
+            {state.allRounds.map((round) => {
               const stats = rebaseRound(
                 summarizeRound(round, state.shotsByRound.get(round.id) ?? []),
                 baseline,
@@ -167,7 +178,7 @@ export default async function RoundsPage({ searchParams }: { searchParams: Promi
                   : null;
               return (
                 <MiniCard key={round.id} className="transition-colors hover:border-border-strong">
-                  <Link href={`/rounds/${round.id}`} className="block p-3.5">
+                  <Link href={`/rounds/${round.id}`} className={cn("block p-3.5", round.excluded_from_analysis && "opacity-60")}>
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="truncate text-[13.5px] font-semibold">
@@ -218,6 +229,14 @@ export default async function RoundsPage({ searchParams }: { searchParams: Promi
                       </span>
                     </div>
                   </Link>
+                  <div className="flex items-center justify-between gap-2 border-t border-border px-3.5 py-1.5">
+                    {round.excluded_from_analysis ? (
+                      <Badge tone="neutral">Left out of analysis</Badge>
+                    ) : (
+                      <span className="text-[11px] text-fg-subtle">Counted in analysis</span>
+                    )}
+                    <RoundAnalysisToggle roundId={round.id} excluded={Boolean(round.excluded_from_analysis)} />
+                  </div>
                 </MiniCard>
               );
             })}
@@ -234,7 +253,7 @@ export default async function RoundsPage({ searchParams }: { searchParams: Promi
 
           <SectionHeading
             title="Your numbers"
-            description={`Across ${classic.holes} holes, from scorecards and shot tracking alike.`}
+            description={`Across ${classic.holes} holes, from scorecards and shot tracking alike${leftOut ? `, without the ${leftOut} round${leftOut === 1 ? "" : "s"} you left out` : ""}.`}
           />
           <Card>
             <CardContent className="grid grid-cols-3 gap-x-3 gap-y-4 p-5 lg:grid-cols-5">

@@ -222,15 +222,15 @@ export function buildAskIndex(state: PlayerState): AskEntry[] {
     });
   }
 
-  for (const round of state.rounds) {
+  for (const round of state.allRounds) {
     const stats = summarizeRound(round, state.shotsByRound.get(round.id) ?? []);
     entries.push({
       id: `round:${round.id}`,
       kind: "round",
       title: round.course_name,
-      detail: `${formatDate(round.played_on)} · ${stats.score ?? "—"} (${toParLabel(stats.to_par)}) · ${signed(stats.sg_total, 1)} strokes gained`,
+      detail: `${formatDate(round.played_on)} · ${stats.score ?? "—"} (${toParLabel(stats.to_par)}) · ${signed(stats.sg_total, 1)} strokes gained${round.excluded_from_analysis ? " · left out of analysis" : ""}`,
       href: `/rounds/${round.id}`,
-      keywords: ["round", "score", "scorecard", "played", ...round.conditions],
+      keywords: ["round", "score", "scorecard", "played", ...round.conditions, ...(round.excluded_from_analysis ? ["excluded", "left out"] : [])],
     });
   }
 

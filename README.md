@@ -28,6 +28,7 @@ Public app: [golf-ai-coach-alpha.vercel.app](https://golf-ai-coach-alpha.vercel.
    - `supabase/migrations/0009_plans_plots_scorecards.sql` (new and existing projects; apply once).
    - `supabase/migrations/0010_round_type.sql` (new and existing projects; apply once).
    - `supabase/migrations/0011_practice_tests.sql` (new and existing projects; apply once).
+   - `supabase/migrations/0012_round_exclusion.sql` (new and existing projects; apply once, before deploying round exclusion).
    - `supabase/seed/seed.sql` (reference drills and swing bands only; safe to re-run).
 3. Copy `.env.example` to `.env.local` and set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` from the project's connection settings. Use the public anon key, never a service-role key. Keep `ENABLE_DEMO_MODE=false`.
 4. In Supabase Authentication URL Configuration, set the Site URL to `https://golf-ai-coach-alpha.vercel.app` and allow `https://golf-ai-coach-alpha.vercel.app/auth/callback`. Also allow the callback at the local port you use, such as `http://localhost:3001/auth/callback`. Email/password sign-in must be enabled. See [redirect URL configuration](https://supabase.com/docs/guides/auth/redirect-urls).
@@ -80,6 +81,8 @@ New rounds support two logging modes. **Track every shot** records lie, distance
 - trends per round for fairways, greens, putts and scrambling
 
 A scorecard hole's green in regulation is worked out from score minus putts. Scorecard rounds do not get strokes gained, since that needs shots, and are never charged a handicap baseline gap.
+
+**Leave out of analysis** on a round card in Play, or on the round itself, keeps a round played in a storm, a scramble or other odd conditions on the list but removes it from every number: strokes gained, Your numbers, trends, weaknesses, practice priorities and coaching. **Count in analysis** puts it back. Play says how many rounds are left out. Existing projects must apply `0012_round_exclusion.sql` first; until then rounds still load and count, but the toggle cannot save.
 
 ## Swing videos
 

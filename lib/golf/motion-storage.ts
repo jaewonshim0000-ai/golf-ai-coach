@@ -1,4 +1,5 @@
 import type { PackedLandmark, PoseModel } from "./pose";
+import { setupMarksSchema } from "../validation/schemas";
 
 /** Store numeric arrays as JSON text to stay inside the existing JSONB size
  * limit. New reconstructions retain inferred 3D at millimetre precision. */
@@ -59,8 +60,9 @@ export function expandMotionModel(model: PoseModel | null): PoseModel | null {
         frames.push(joints);
       }
     }
-    const { imageData: _stored, worldData: _inferred, ...rest } = model;
-    return { ...rest, frames, imageFrames };
+    const { imageData: _stored, worldData: _inferred, setup, ...rest } = model;
+    // A malformed setup check is dropped, not trusted; the tracks stay usable.
+    return { ...rest, frames, imageFrames, ...(setup && setupMarksSchema.safeParse(setup).success ? { setup } : {}) };
   } catch {
     return null;
   }

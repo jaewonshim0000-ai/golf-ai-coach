@@ -13,6 +13,7 @@ import { reviewFaceOn } from "@/lib/golf/face-on-review";
 import { analyseVideoModel } from "@/lib/golf/video-review";
 import { BodyOverlay } from "@/components/swing/body-overlay";
 import { SwingTiming } from "@/components/swing/swing-timing";
+import { SwingSetup } from "@/components/swing/swing-setup";
 import { readSwing } from "@/lib/pose-runner";
 import { clampClip, clipWindow, getClip } from "@/lib/video-store";
 import { cn } from "@/lib/utils";
@@ -290,12 +291,13 @@ export function SwingVideo({
         }}
         onPause={(event) => window.dispatchEvent(new CustomEvent("swing:frame", { detail: { id, time: event.currentTarget.currentTime, paused: true } }))}
       />
-      {trackedModel && tracked.length > 0 && overlay && !analysing ? <BodyOverlay frames={tracked} time={time} guide={guide ?? undefined} view={view} aspect={aspect} /> : null}
+      {trackedModel && tracked.length > 0 && overlay && !analysing ? <BodyOverlay frames={tracked} time={time} guide={guide ?? undefined} view={view} aspect={aspect}
+        plane={view === "down_the_line" ? trackedModel.setup : undefined} /> : null}
       {analysing ? <div role="status" className="pointer-events-none absolute inset-x-3 bottom-3 rounded-lg bg-black/75 px-3 py-2 text-center text-[12px] text-white">{progress}</div> : null}
       </div>
       {trackedModel ? <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-fg-muted">
         <label className="flex min-h-10 cursor-pointer items-center gap-2"><input type="checkbox" checked={overlay} onChange={(event) => setOverlay(event.target.checked)} className="accent-accent" /> Show setup guides</label>
-        <span>Green hips / gold hand trail / faint setup outline</span>
+        <span>Green hips / gold hand trail / faint setup outline{view === "down_the_line" && trackedModel.setup ? " / blue plane line" : ""}</span>
       </div> : null}
       {trackedModel && reviewWindow ? <Button type="button" size="sm" variant="secondary" onClick={() => {
         const element = video.current;
@@ -359,6 +361,8 @@ export function SwingVideo({
           ) : null}
         </div>
       ) : null}
+      {analysable && trackedModel && report?.phases ? <SwingSetup src={src} crossOrigin={crossOrigin} frames={tracked} time={trackedModel.t[report.phases.address]!}
+        view={view} aspect={trackedModel.aspect ?? aspect} saved={trackedModel.setup} sessionId={id} /> : null}
       {analysable && trackedModel ? <SwingTiming model={trackedModel} sessionId={id} unresolved={!report?.phases} /> : null}
       {trimmable ? (
         <details className="rounded-xl border border-border bg-surface-2 p-3">

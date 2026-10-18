@@ -669,6 +669,17 @@ export function smoothFrames(frames: PoseFrame[]): PoseFrame[] {
  */
 export type PackedLandmark = [number, number, number, number];
 
+/** Club points the player tapped on the paused setup frame, as fractions of
+ * the image width and height. Saving them confirms the tracked body is theirs. */
+export type SetupMarks = {
+  /** Video time of the marked frame, in seconds. */
+  t: number;
+  grip: [number, number];
+  clubhead: [number, number];
+  /** Face on only, and optional. */
+  ball?: [number, number];
+};
+
 export type PoseModel = {
   v: 1;
   handedness: "right" | "left";
@@ -695,6 +706,8 @@ export type PoseModel = {
   phasesConfirmed?: boolean;
   timingStatus?: "unresolved" | "estimated" | "confirmed";
   clip?: [number, number];
+  /** Belongs to these tracks: a new review or a trim change starts without it. */
+  setup?: SetupMarks;
   /**
    * The frames were rebuilt from the picture (`liftFrames`): they move with
    * the body and are in camera axes, so movement can be measured on them.

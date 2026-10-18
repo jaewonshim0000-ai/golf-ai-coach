@@ -1,16 +1,21 @@
 "use client";
 
-import type { PoseFrame } from "@/lib/golf/pose";
+import type { PoseFrame, SetupMarks } from "@/lib/golf/pose";
+import { planeLine } from "@/lib/golf/setup-marks";
 import { overlayFrameAtTime, motionGeometry, visibleHands, visiblePoint, type MotionView } from "@/lib/golf/motion-analysis";
 
 const BONES: [number, number][] = [
   [11, 12], [11, 13], [13, 15], [12, 14], [14, 16], [11, 23], [12, 24], [23, 24],
   [23, 25], [25, 27], [24, 26], [26, 28], [27, 29], [29, 31], [28, 30], [30, 32],
 ];
-export function BodyOverlay({ frames, time, guide, view = "other", aspect = 1 }: { frames: PoseFrame[]; time: number; guide?: PoseFrame; view?: MotionView; aspect?: number }) {
+/** `plane` is the player's marked club at setup, drawn as a fixed plane line. */
+export function BodyOverlay({ frames, time, guide, view = "other", aspect = 1, plane }: {
+  frames: PoseFrame[]; time: number; guide?: PoseFrame; view?: MotionView; aspect?: number; plane?: Pick<SetupMarks, "grip" | "clubhead">;
+}) {
   const frame = overlayFrameAtTime(frames, time);
   const points = frame?.imageLandmarks ?? [];
-  if (!points.length && !guide?.imageLandmarks) return null;
+  if (!points.length && !guide?.imageLandmarks && !plane) return null;
+  const line = plane ? planeLine(plane) : null;
   // Separate segments stop a lost hand from drawing a line across a gap.
   const trails: { from: { x: number; y: number }; to: { x: number; y: number }; opacity: number }[] = [];
   frames.forEach((current, index) => {
@@ -36,6 +41,7 @@ export function BodyOverlay({ frames, time, guide, view = "other", aspect = 1 }:
     </> : null}
     {guideHead ? <line x1={guideHead.x} x2={guideHead.x} y1={guideHead.y - 0.08} y2={guideHead.y + 0.08} stroke="#e6b85c" strokeWidth="0.002" strokeDasharray="0.01 0.012" opacity="0.4" /> : null}
     {view === "down_the_line" && guideHip && guideShoulder ? <line x1={guideHip.x} y1={guideHip.y} x2={guideShoulder.x} y2={guideShoulder.y} stroke="#ff7a59" strokeWidth="0.003" strokeDasharray="0.012 0.01" opacity="0.6" /> : null}
+    {line ? <line {...line} stroke="#7cc4ff" strokeWidth="0.003" strokeDasharray="0.014 0.008" opacity="0.8" /> : null}
     {trails.map((trail, index) => <line key={index} x1={trail.from.x} y1={trail.from.y} x2={trail.to.x} y2={trail.to.y} stroke="#e6b85c" strokeWidth="0.004" opacity={trail.opacity} />)}
     {BONES.map(([from, to]) => {
       const a = points[from], b = points[to];

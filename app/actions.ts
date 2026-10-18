@@ -30,6 +30,7 @@ import {
   unpackFrames,
   type PackedLandmark,
   type PoseFrame,
+  type SetupMarks,
   type SwingPhases,
 } from "@/lib/golf/pose";
 import type { MotionView } from "@/lib/golf/motion-analysis";
@@ -45,6 +46,7 @@ import {
   measurementSchema,
   poseModelSchema,
   retimeSchema,
+  swingSetupSchema,
   practiceSessionSchema,
   practicePrioritiesSchema,
   profileSchema,
@@ -999,7 +1001,35 @@ export async function retimeSwingAction(input: {
     ballSide: model.ballSide,
     phases: parsed.data.phases,
     reconstructionVersion: model.reconstructionVersion,
+    setup: model.setup,
   });
+}
+
+/**
+ * Keep the player's setup check on the tracks it was made against. A new
+ * review or a trim change replaces those tracks, so the marks go with them.
+ */
+export async function saveSwingSetupAction(input: {
+  swing_session_id: string;
+  setup: SetupMarks | null;
+}): Promise<ActionState> {
+  const user = await requireUser();
+  const parsed = swingSetupSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, message: "Mark the grip and the clubhead at two different points on the picture." };
+  const { swing_session_id: sessionId, setup } = parsed.data;
+  const model = await repo.getSwingModel(user.id, sessionId);
+  if (!model?.imageFrames) return { ok: false, message: "Review the video before checking your setup." };
+  if (setup && !model.t.some((time) => Math.abs(time - setup.t) <= 0.06)) {
+    return { ok: false, message: "That frame is not part of the reviewed clip. Review the video again." };
+  }
+  const { setup: _previous, ...rest } = model;
+  // Ball position is a face-on reading only.
+  const kept: SetupMarks | null = setup && { t: setup.t, grip: setup.grip, clubhead: setup.clubhead,
+    ...(setup.ball && model.cameraAngle === "face_on" ? { ball: setup.ball } : {}) };
+  try { await repo.saveSwingModel(user.id, sessionId, kept ? { ...rest, setup: kept } : rest); }
+  catch (error) { return asError(error); }
+  revalidatePath(`/swing/${sessionId}`);
+  return { ok: true, message: setup ? "Setup saved. The club readings use these marks." : "Setup marks removed." };
 }
 
 async function storeMotion(
@@ -1007,9 +1037,11 @@ async function storeMotion(
   sessionId: string,
   handedness: "right" | "left",
   frames: PoseFrame[],
-  options: { aspect: number; view: MotionView; phases?: SwingPhases; clip?: [number, number]; ballSide?: "left" | "right"; reconstruct?: boolean; reconstructionVersion?: 1 },
+  options: { aspect: number; view: MotionView; phases?: SwingPhases; clip?: [number, number]; ballSide?: "left" | "right"; reconstruct?: boolean; reconstructionVersion?: 1; setup?: SetupMarks },
 ): Promise<PoseState> {
   const updatedModel = buildVideoModel(frames, { ...options, handedness });
+  // Marks were made on the setup frame; moving setup elsewhere drops them.
+  if (options.setup && Math.abs(frames[updatedModel.phases.address]!.t - options.setup.t) < 0.001) updatedModel.setup = options.setup;
   const report = analyseVideoModel(updatedModel);
   const review = reviewFaceOn(frames, options.aspect, options.view);
   try {

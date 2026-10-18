@@ -269,3 +269,20 @@ export const retimeSchema = z
     }),
   })
   .refine((input) => input.phases.address < input.phases.top && input.phases.top < input.phases.impact);
+
+// Taps on the setup frame, as fractions of the picture.
+const imagePoint = z.tuple([z.number().finite().min(0).max(1), z.number().finite().min(0).max(1)]);
+export const setupMarksSchema = z
+  .object({
+    t: z.number().finite().min(0).max(3600),
+    grip: imagePoint,
+    clubhead: imagePoint,
+    ball: imagePoint.optional(),
+  })
+  // Two taps on the same spot have no shaft angle.
+  .refine((marks) => Math.hypot(marks.grip[0] - marks.clubhead[0], marks.grip[1] - marks.clubhead[1]) >= 0.02, "Mark the grip and clubhead apart.");
+
+export const swingSetupSchema = z.object({
+  swing_session_id: z.string().min(1).max(80),
+  setup: setupMarksSchema.nullable(),
+});

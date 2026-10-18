@@ -9,6 +9,7 @@ import { compareFaceOn, reviewFaceOn } from "@/lib/golf/face-on-review";
 import { unpackFrames, type PoseModel } from "@/lib/golf/pose";
 import { faceOnFingerprint } from "@/lib/ai/face-on-coach";
 import { analyseVideoModel } from "@/lib/golf/video-review";
+import { setupReadings } from "@/lib/golf/setup-marks";
 import { CLUB_LABELS } from "@/types/golf";
 import * as repo from "@/lib/db/repo";
 import { loadPlayerState } from "@/lib/player-state";
@@ -56,7 +57,7 @@ export default async function SwingPage({ params }: { params: Promise<{ id: stri
         trimmable analysable model={model} cameraAngle={view} /></div>
       {review && report && current ? <SwingAnalysis review={review} report={report} phaseTimes={report.phases ? {
         address: current.t[report.phases.address]!, top: current.t[report.phases.top]!, impact: current.t[report.phases.impact]!,
-      } : null} comparison={comparison} previousHref={previousHref} sessionId={id}
+      } : null} setup={setupReadings(current)} comparison={comparison} previousHref={previousHref} sessionId={id}
         coachingKey={faceOnFingerprint(review, session.club, null)} /> : <div className="rounded-2xl border border-border bg-surface p-5">
         <h2 className="text-[18px] font-semibold">Analyze your swing video</h2>
         <p className="mt-3 text-[13px] leading-relaxed text-fg-muted">Your recording is reviewed automatically for visible posture, body movement and swing timing. The guides stay on your original video so you can check each observation.</p>

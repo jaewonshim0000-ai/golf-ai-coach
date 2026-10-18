@@ -2,12 +2,13 @@
 
 import { z } from "zod";
 import * as repo from "@/lib/db/repo";
-import { reviewFaceOn } from "@/lib/golf/face-on-review";
-import { unpackFrames } from "@/lib/golf/pose";
-import { cachedFaceOnPractice, coachFaceOn, faceOnFingerprint, type FaceOnPractice } from "@/lib/ai/face-on-coach";
+import { swingFeedback } from "@/lib/golf/faults";
+import { analyseVideoModel } from "@/lib/golf/video-review";
+import { cachedFaultCoaching, coachFaults, faultFingerprint, type FaultCoaching } from "@/lib/ai/fault-coach";
 import { getProvider } from "@/lib/ai/provider";
 
-export async function getSwingCoachingAction(sessionId: string): Promise<{ ok: boolean; practice?: FaceOnPractice }> {
+/** Re-ranks from the stored swing, so the client cannot supply the evidence Claude explains. */
+export async function getFaultCoachingAction(sessionId: string): Promise<{ ok: boolean; coaching?: FaultCoaching }> {
   const user = await repo.currentUser();
   if (!user || !z.string().min(1).max(80).safeParse(sessionId).success) return { ok: false };
   try {
@@ -16,10 +17,11 @@ export async function getSwingCoachingAction(sessionId: string): Promise<{ ok: b
     if (!session || !model?.imageFrames || !model.aspect) return { ok: false };
     if (model.clip && (Math.abs(model.clip[0] - (session.clip_start ?? 0)) > 0.1 ||
         (session.clip_end !== null && Math.abs(model.clip[1] - session.clip_end) > 0.1))) return { ok: false };
-    const review = reviewFaceOn(unpackFrames(model), model.aspect, model.cameraAngle ?? (session.camera_angle === "down_the_line" ? "down_the_line" : session.camera_angle === "face_on" ? "face_on" : "other"));
-    if (review.status === "record_again") return { ok: false };
-    const key = faceOnFingerprint(review, session.club, getProvider().model);
-    const practice = await cachedFaceOnPractice(`${user.id}:${sessionId}`, key, () => coachFaceOn(review, session.club));
-    return { ok: true, practice };
+    const { feedback } = swingFeedback(model, analyseVideoModel(model), session.club);
+    if (!feedback.primary) return { ok: false };
+    const flight = model.ballFlight ?? null;
+    const key = faultFingerprint(feedback, flight, session.club, getProvider().model);
+    const coaching = await cachedFaultCoaching(`${user.id}:${sessionId}`, key, () => coachFaults(feedback, flight, session.club));
+    return { ok: true, coaching };
   } catch { return { ok: false }; }
 }

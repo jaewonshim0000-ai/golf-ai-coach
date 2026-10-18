@@ -30,6 +30,7 @@ import {
   unpackFrames,
   type PackedLandmark,
   type PoseFrame,
+  type BallFlight,
   type SetupMarks,
   type SwingPhases,
 } from "@/lib/golf/pose";
@@ -47,6 +48,7 @@ import {
   poseModelSchema,
   retimeSchema,
   swingSetupSchema,
+  swingBallFlightSchema,
   practiceSessionSchema,
   practicePrioritiesSchema,
   profileSchema,
@@ -966,7 +968,10 @@ export async function savePoseModelAction(input: {
   if (!session) return { ok: false, message: "That swing session does not exist." };
 
   const detected = unpackFrames(parsed.data);
+  // The shot did what it did; a new review of the same video keeps the answer.
+  const previous = await repo.getSwingModel(user.id, session.id).catch(() => null);
   return storeMotion(user.id, session.id, profile?.dominant_hand ?? "right", detected, {
+    ballFlight: previous?.ballFlight,
     aspect: parsed.data.aspect ?? 0,
     view: parsed.data.cameraAngle ?? (session.camera_angle === "face_on" || session.camera_angle === "down_the_line" ? session.camera_angle : "other"),
     clip: parsed.data.clip,
@@ -1002,6 +1007,7 @@ export async function retimeSwingAction(input: {
     phases: parsed.data.phases,
     reconstructionVersion: model.reconstructionVersion,
     setup: model.setup,
+    ballFlight: model.ballFlight,
   });
 }
 
@@ -1032,14 +1038,33 @@ export async function saveSwingSetupAction(input: {
   return { ok: true, message: setup ? "Setup saved. The club readings use these marks." : "Setup marks removed." };
 }
 
+/** The player's answer to "What did this shot do?", kept on the swing's own model. */
+export async function saveBallFlightAction(input: {
+  swing_session_id: string;
+  ballFlight: BallFlight | null;
+}): Promise<ActionState> {
+  const user = await requireUser();
+  const parsed = swingBallFlightSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, message: "Choose a start direction, a curve and the contact." };
+  const { swing_session_id: sessionId, ballFlight } = parsed.data;
+  const model = await repo.getSwingModel(user.id, sessionId);
+  if (!model?.imageFrames) return { ok: false, message: "Review the video before describing the shot." };
+  const { ballFlight: _previous, ...rest } = model;
+  try { await repo.saveSwingModel(user.id, sessionId, ballFlight ? { ...rest, ballFlight } : rest); }
+  catch (error) { return asError(error); }
+  revalidatePath(`/swing/${sessionId}`);
+  return { ok: true, message: ballFlight ? "Shot saved. The feedback below uses it." : "Shot answer removed." };
+}
+
 async function storeMotion(
   userId: string,
   sessionId: string,
   handedness: "right" | "left",
   frames: PoseFrame[],
-  options: { aspect: number; view: MotionView; phases?: SwingPhases; clip?: [number, number]; ballSide?: "left" | "right"; reconstruct?: boolean; reconstructionVersion?: 1; setup?: SetupMarks },
+  options: { aspect: number; view: MotionView; phases?: SwingPhases; clip?: [number, number]; ballSide?: "left" | "right"; reconstruct?: boolean; reconstructionVersion?: 1; setup?: SetupMarks; ballFlight?: BallFlight },
 ): Promise<PoseState> {
   const updatedModel = buildVideoModel(frames, { ...options, handedness });
+  if (options.ballFlight) updatedModel.ballFlight = options.ballFlight;
   // Marks were made on the setup frame; moving setup elsewhere drops them.
   if (options.setup && Math.abs(frames[updatedModel.phases.address]!.t - options.setup.t) < 0.001) updatedModel.setup = options.setup;
   const report = analyseVideoModel(updatedModel);

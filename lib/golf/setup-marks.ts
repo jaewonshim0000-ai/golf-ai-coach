@@ -15,17 +15,26 @@ export function planeLine(marks: Pick<SetupMarks, "grip" | "clubhead">) {
   return { x1: x, y1: y, x2: x + (marks.grip[0] - x) * 4, y2: y + (marks.grip[1] - y) * 4 };
 }
 
+/** Ankles on the marked setup frame, in picture-width units. Face on, the
+ * lead foot's side of the picture is the target side: `toLead` is its sign. */
+export function setupStance(model: PoseModel) {
+  const marks = model.setup, aspect = model.aspect ?? 0;
+  if (!marks || !(aspect > 0)) return null;
+  const frame = frameAtTime(unpackFrames(model), marks.t);
+  const left = frame?.imageLandmarks?.[LM.leftAnkle], right = frame?.imageLandmarks?.[LM.rightAnkle];
+  if (!visiblePoint(left) || !visiblePoint(right)) return null;
+  const feet = { left: left.x * aspect, right: right.x * aspect };
+  return { ...feet, toLead: Math.sign(model.handedness === "right" ? feet.left - feet.right : feet.right - feet.left) };
+}
+
 /** Club readings from the player's marks. Picture geometry only: camera
  * height and position change every value, and none is a technique standard. */
 export function setupReadings(model: PoseModel): MotionReading[] {
   const marks = model.setup, aspect = model.aspect ?? 0;
   if (!marks || !(aspect > 0)) return [];
   const view = model.cameraAngle ?? "other";
-  const frame = frameAtTime(unpackFrames(model), marks.t);
-  const left = frame?.imageLandmarks?.[LM.leftAnkle], right = frame?.imageLandmarks?.[LM.rightAnkle];
-  const feet = visiblePoint(left) && visiblePoint(right) ? { left: left.x * aspect, right: right.x * aspect } : null;
-  // Face on, the lead foot's side of the picture is the target side.
-  const toLead = feet ? Math.sign(model.handedness === "right" ? feet.left - feet.right : feet.right - feet.left) : 0;
+  const feet = setupStance(model);
+  const toLead = feet?.toLead ?? 0;
   const angle = rounded(shaftAngle(marks, aspect));
   const reading = (id: string, label: string, value: number, unit: MotionReading["unit"], note: string): MotionReading =>
     ({ id, label, phase: "address", value, unit, note, time: marks.t });

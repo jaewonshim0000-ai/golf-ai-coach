@@ -680,6 +680,14 @@ export type SetupMarks = {
   ball?: [number, number];
 };
 
+/** What the player says the shot did. Start is left or right as they saw it;
+ * curve is named for their hand, so a right-hander's draw curves left. */
+export type BallFlight = {
+  start: "left" | "straight" | "right";
+  curve: "draw_hook" | "straight" | "fade_slice";
+  contact: "good" | "fat" | "thin" | "toe" | "heel" | "unsure";
+};
+
 export type PoseModel = {
   v: 1;
   handedness: "right" | "left";
@@ -708,6 +716,8 @@ export type PoseModel = {
   clip?: [number, number];
   /** Belongs to these tracks: a new review or a trim change starts without it. */
   setup?: SetupMarks;
+  /** Belongs to the shot, not the tracks: a new review keeps it. */
+  ballFlight?: BallFlight;
   /**
    * The frames were rebuilt from the picture (`liftFrames`): they move with
    * the body and are in camera axes, so movement can be measured on them.

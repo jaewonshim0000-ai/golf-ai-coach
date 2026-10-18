@@ -286,3 +286,16 @@ export const swingSetupSchema = z.object({
   swing_session_id: z.string().min(1).max(80),
   setup: setupMarksSchema.nullable(),
 });
+
+export const ballFlightSchema = z
+  .object({
+    start: z.enum(["left", "straight", "right"]),
+    curve: z.enum(["draw_hook", "straight", "fade_slice"]),
+    contact: z.enum(["good", "fat", "thin", "toe", "heel", "unsure"]),
+  })
+  .strict();
+
+export const swingBallFlightSchema = z.object({
+  swing_session_id: z.string().min(1).max(80),
+  ballFlight: ballFlightSchema.nullable(),
+});

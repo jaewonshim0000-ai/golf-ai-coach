@@ -1144,3 +1144,79 @@ export const DRILLS_BY_ID = new Map(DRILLS.map((d) => [d.id, d]));
 export function getDrill(id: string): Drill | undefined {
   return DRILLS_BY_ID.get(id);
 }
+
+/** A drill as the swing feedback card shows it: a name and range steps. */
+export type SwingDrill = { id: string; name: string; steps: string[] };
+
+/**
+ * Drills for the swing-fault feedback (lib/golf/faults.ts). Library drills
+ * are reused with their own steps; the rest target one body movement or the
+ * grip, which the practice library does not cover.
+ */
+export const SWING_DRILLS = new Map<string, SwingDrill>([
+  ...["drill_towel_gate_contact", "drill_half_swing_contact", "drill_9_ball_contact", "drill_gate_face_control",
+    "drill_split_hand_face", "drill_headcover_path"].map((id): SwingDrill => {
+    const drill = DRILLS_BY_ID.get(id)!;
+    return { id, name: drill.name, steps: drill.instructions };
+  }),
+  { id: "swing_trail_hip_stick", name: "Trail-hip stick", steps: [
+    "Push an alignment stick into the ground just outside your trail hip, or set up with that hip an inch from a wall.",
+    "Make ten slow backswings, turning the trail hip back behind you without bumping the stick.",
+    "Hit five half shots, then five full shots, keeping the same turn.",
+  ] },
+  { id: "swing_lead_hip_stick", name: "Lead-hip stick", steps: [
+    "Push an alignment stick into the ground just outside your lead hip at setup.",
+    "Make ten slow swings to impact, turning the lead hip back and around instead of bumping the stick.",
+    "Hit five half shots without touching the stick, then five full shots.",
+  ] },
+  { id: "swing_lead_side_finish", name: "Hold a lead-side finish", steps: [
+    "Hit five half shots and finish with your weight on your lead foot, trail heel up and belt buckle facing the target.",
+    "Hold each finish for three seconds. If you fall back, your hips stayed behind.",
+    "Hit five full shots holding the same finish.",
+  ] },
+  { id: "swing_head_behind_ball", name: "Eyes on the back of the ball", steps: [
+    "Face a mirror or your phone camera and make five slow swings, keeping your head from moving toward the target until the club passes the ball.",
+    "Hit five half shots looking at the back of the ball until it is gone.",
+    "Hit five full shots with the same look.",
+  ] },
+  { id: "swing_ball_position_sticks", name: "Ball-position sticks", steps: [
+    "Lay one alignment stick along your toes and a second at right angles, pointing at the ball.",
+    "Short irons sit about the middle of your stance, mid irons a ball ahead, and driver inside the lead heel.",
+    "Hit five balls, checking the second stick before each one.",
+  ] },
+  { id: "swing_hands_ahead_setup", name: "Hands-ahead setup", steps: [
+    "Set the clubhead behind the ball, then move your hands forward until they sit over the inside of your lead thigh.",
+    "From face on, check the shaft leans a little toward the target.",
+    "Hit five half shots keeping that lean through impact.",
+  ] },
+  { id: "swing_chair_behind", name: "Seat behind you", steps: [
+    "Set a chair, golf bag or wall so it just touches your backside at setup.",
+    "Make ten slow swings: trail side on it at the top, lead side on it through impact.",
+    "Move it away and hit five half shots with the same feeling.",
+  ] },
+  { id: "swing_chest_down", name: "Chest-down rehearsal", steps: [
+    "Hold a club across your chest in your setup posture.",
+    "Turn back and through five times, keeping your chest pointing at the ground until your arms would be past the ball.",
+    "Hit five half shots keeping your posture until the ball is gone, then let yourself rise into the finish.",
+  ] },
+  { id: "swing_ground_push", name: "Ground-push rehearsal", steps: [
+    "From the top of a slow practice swing, feel both feet push into the ground as you start down.",
+    "Let that push keep your hips at their setup height through impact, then rise into the finish.",
+    "Hit five half shots, brushing the grass just after the ball.",
+  ] },
+  { id: "swing_arm_hang", name: "Arm-hang distance check", steps: [
+    "Take your posture without a club and let your arms hang straight down from your shoulders.",
+    "Grip the club where your hands hang; with an iron, the butt sits about a hand's width from your thighs.",
+    "Hit five balls, checking your distance before each one.",
+  ] },
+  { id: "swing_grip_stronger", name: "Grip check for a slice or push", steps: [
+    "Take your grip and look down: you should see two to three knuckles on your lead hand.",
+    "If you see one or none, turn both hands slightly away from the target on the handle.",
+    "Hit five half shots and watch where they start and how they curve.",
+  ] },
+  { id: "swing_grip_weaker", name: "Grip check for a hook or pull", steps: [
+    "Take your grip and look down: you should see two to three knuckles on your lead hand.",
+    "If you see four, turn both hands slightly toward the target on the handle.",
+    "Hit five half shots and watch where they start and how they curve.",
+  ] },
+].map((drill) => [drill.id, drill]));

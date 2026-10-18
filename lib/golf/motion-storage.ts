@@ -1,5 +1,5 @@
 import type { PackedLandmark, PoseModel } from "./pose";
-import { setupMarksSchema } from "../validation/schemas";
+import { ballFlightSchema, setupMarksSchema } from "../validation/schemas";
 
 /** Store numeric arrays as JSON text to stay inside the existing JSONB size
  * limit. New reconstructions retain inferred 3D at millimetre precision. */
@@ -60,9 +60,10 @@ export function expandMotionModel(model: PoseModel | null): PoseModel | null {
         frames.push(joints);
       }
     }
-    const { imageData: _stored, worldData: _inferred, setup, ...rest } = model;
-    // A malformed setup check is dropped, not trusted; the tracks stay usable.
-    return { ...rest, frames, imageFrames, ...(setup && setupMarksSchema.safeParse(setup).success ? { setup } : {}) };
+    const { imageData: _stored, worldData: _inferred, setup, ballFlight, ...rest } = model;
+    // A malformed setup check or shot answer is dropped, not trusted; the tracks stay usable.
+    return { ...rest, frames, imageFrames, ...(setup && setupMarksSchema.safeParse(setup).success ? { setup } : {}),
+      ...(ballFlight && ballFlightSchema.safeParse(ballFlight).success ? { ballFlight } : {}) };
   } catch {
     return null;
   }

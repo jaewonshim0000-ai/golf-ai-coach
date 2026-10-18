@@ -1,15 +1,20 @@
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@/components/ui/primitives";
 import type { FaceOnReview } from "@/lib/golf/face-on-review";
 import type { MotionReading, MotionReport } from "@/lib/golf/motion-analysis";
-import type { SwingPhases } from "@/lib/golf/pose";
+import type { BallFlight, SwingPhases } from "@/lib/golf/pose";
+import type { SwingFeedback } from "@/lib/golf/faults";
 import { SwingSeekButton } from "./seek-button";
-import { SwingCoach } from "./swing-coach";
+import { BallFlightQuestion } from "./ball-flight";
+import { FaultFeedback } from "./fault-feedback";
 
-export function SwingAnalysis({ review, report, phaseTimes, setup, comparison, previousHref, sessionId, coachingKey }: {
+export function SwingAnalysis({ review, report, phaseTimes, setup, comparison, previousHref, sessionId, coachingKey, flight, handedness, feedback, progress }: {
   review: FaceOnReview; report: MotionReport; phaseTimes: Record<keyof SwingPhases, number> | null;
   /** Club readings from the player's setup marks; empty until they check their setup. */
   setup: MotionReading[];
   comparison?: string | null; previousHref?: string; sessionId: string; coachingKey: string;
+  flight: BallFlight | null; handedness: "right" | "left"; feedback: SwingFeedback;
+  /** The earlier swing's main fault, measured again on this one. */
+  progress?: { text: string; href: string } | null;
 }) {
   const supported = report.usable || review.status !== "record_again";
   return <section id="swing-analysis" className="scroll-mt-6 space-y-4" aria-label="Swing video analysis">
@@ -55,10 +60,21 @@ export function SwingAnalysis({ review, report, phaseTimes, setup, comparison, p
           <p className="mt-2 text-[12px] leading-relaxed text-fg-muted">{comparison}</p>
           {previousHref ? <a href={previousHref} className="mt-2 inline-block min-h-10 text-[12px] font-medium text-accent">Open earlier recording</a> : null}
         </div> : null}
-        {supported ? <>
-          <SwingCoach key={coachingKey} sessionId={sessionId} practice={review.practice} />
-        </> : null}
-        <p className="text-[11px] leading-relaxed text-fg-subtle">Measurements describe visible positions in this camera view. Clubface angle, ball flight and foot pressure require additional evidence.</p>
+        <BallFlightQuestion sessionId={sessionId} saved={flight} handedness={handedness} />
+        <FaultFeedback key={coachingKey} sessionId={sessionId} feedback={feedback} reported={Boolean(flight)} />
+        {progress ? <div className="rounded-xl border border-border p-3">
+          <p className="text-[13px] font-semibold">Since your last swing with this club</p>
+          <p className="mt-2 text-[12px] leading-relaxed text-fg-muted">{progress.text}</p>
+          <a href={progress.href} className="mt-2 inline-block min-h-10 text-[12px] font-medium text-accent">Open earlier recording</a>
+        </div> : null}
+        {!feedback.primary && supported ? <div className="space-y-2 border-t border-border pt-4">
+          <h3 className="text-[15px] font-semibold">Try this · {review.practice.title}</h3>
+          <ol className="list-decimal space-y-2 pl-5 text-[13px] leading-relaxed text-fg-muted">
+            {review.practice.steps.map((step) => <li key={step}>{step}</li>)}
+          </ol>
+          <p className="text-[12px] leading-relaxed text-fg-muted">{review.practice.check}</p>
+        </div> : null}
+        <p className="text-[11px] leading-relaxed text-fg-subtle">Measurements describe visible positions in this camera view. The clubface, the club's low point and foot pressure are not visible; ball flight comes from your answer.</p>
       </CardContent>
     </Card>
   </section>;

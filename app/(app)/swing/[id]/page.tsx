@@ -7,9 +7,10 @@ import { DeleteSwingButton } from "@/components/swing/delete-swing";
 import { ButtonLink, PageHero } from "@/components/ui/primitives";
 import { compareFaceOn, reviewFaceOn } from "@/lib/golf/face-on-review";
 import { unpackFrames, type PoseModel } from "@/lib/golf/pose";
-import { faceOnFingerprint } from "@/lib/ai/face-on-coach";
+import { faultFingerprint } from "@/lib/ai/fault-coach";
 import { analyseVideoModel } from "@/lib/golf/video-review";
 import { setupReadings } from "@/lib/golf/setup-marks";
+import { faultProgress, swingFeedback } from "@/lib/golf/faults";
 import { CLUB_LABELS } from "@/types/golf";
 import * as repo from "@/lib/db/repo";
 import { loadPlayerState } from "@/lib/player-state";
@@ -33,18 +34,30 @@ export default async function SwingPage({ params }: { params: Promise<{ id: stri
   const view = session.camera_angle === "face_on" || session.camera_angle === "down_the_line" ? session.camera_angle : "other";
   const review = current ? reviewFaceOn(unpackFrames(current), current.aspect!, current.cameraAngle ?? view) : null;
   const report = current ? analyseVideoModel(current) : null;
-  let comparison: string | null = null, previousHref: string | undefined;
-  if (review && review.status !== "record_again" && review.scope === "backswing") {
-    const candidates = state.swingSessions.filter((s) => s.id !== id && s.club === session.club && s.camera_angle === "face_on" && s.created_at < session.created_at)
+  const shot = current && report ? swingFeedback(current, report, session.club) : null;
+  let comparison: string | null = null, previousHref: string | undefined, progress: { text: string; href: string } | null = null;
+  const faceOnBackswing = review && review.status !== "record_again" && review.scope === "backswing";
+  if (current && shot) {
+    // Earlier swings with the same club and view: the face-on movement comparison,
+    // and whether the earlier swing's main fault moved on this one.
+    const candidates = state.swingSessions.filter((s) => s.id !== id && s.club === session.club && s.camera_angle === session.camera_angle && s.created_at < session.created_at)
       .sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 5);
     const previous = await Promise.allSettled(candidates.map((s) => repo.getSwingModel(user.id, s.id)));
-    for (let n = 0; n < previous.length; n++) {
+    for (let n = 0; n < previous.length && !((comparison || !faceOnBackswing) && progress); n++) {
       const result = previous[n]!, candidate = candidates[n]!;
       if (result.status !== "fulfilled") continue;
       const earlier = result.value;
-      if (!earlier?.imageFrames || !earlier.aspect || !matchesTrim(earlier, candidate.clip_start, candidate.clip_end)) continue;
-      comparison = compareFaceOn(review, reviewFaceOn(unpackFrames(earlier), earlier.aspect, earlier.cameraAngle ?? "face_on"));
-      if (comparison) { previousHref = `/swing/${candidate.id}`; break; }
+      if (!earlier?.imageFrames || !earlier.aspect || !matchesTrim(earlier, candidate.clip_start, candidate.clip_end) ||
+        (earlier.cameraAngle ?? view) !== (current.cameraAngle ?? view)) continue;
+      if (faceOnBackswing && !comparison) {
+        comparison = compareFaceOn(review, reviewFaceOn(unpackFrames(earlier), earlier.aspect, earlier.cameraAngle ?? "face_on"));
+        if (comparison) previousHref = `/swing/${candidate.id}`;
+      }
+      if (progress) continue;
+      const card = swingFeedback(earlier, analyseVideoModel(earlier), session.club).feedback.primary;
+      const text = card?.measure ? faultProgress({ card, flight: earlier.ballFlight ?? null, date: formatDate(candidate.created_at.slice(0, 10)) },
+        { readings: shot.readings, flight: current.ballFlight ?? null, club: session.club }, current.handedness) : null;
+      if (text) progress = { text, href: `/swing/${candidate.id}` };
     }
   }
   const notes = state.swingFindings.filter((f) => f.swing_session_id === id && f.source === "manual");
@@ -58,7 +71,8 @@ export default async function SwingPage({ params }: { params: Promise<{ id: stri
       {review && report && current ? <SwingAnalysis review={review} report={report} phaseTimes={report.phases ? {
         address: current.t[report.phases.address]!, top: current.t[report.phases.top]!, impact: current.t[report.phases.impact]!,
       } : null} setup={setupReadings(current)} comparison={comparison} previousHref={previousHref} sessionId={id}
-        coachingKey={faceOnFingerprint(review, session.club, null)} /> : <div className="rounded-2xl border border-border bg-surface p-5">
+        flight={current.ballFlight ?? null} handedness={current.handedness} feedback={shot!.feedback} progress={progress}
+        coachingKey={faultFingerprint(shot!.feedback, current.ballFlight ?? null, session.club, null)} /> : <div className="rounded-2xl border border-border bg-surface p-5">
         <h2 className="text-[18px] font-semibold">Analyze your swing video</h2>
         <p className="mt-3 text-[13px] leading-relaxed text-fg-muted">Your recording is reviewed automatically for visible posture, body movement and swing timing. The guides stay on your original video so you can check each observation.</p>
         <p className="mt-3 text-[12px] leading-relaxed text-fg-muted">Use a face-on or down-the-line view, with setup and follow-through included.</p>

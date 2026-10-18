@@ -378,6 +378,26 @@ export async function deleteRoundAction(
   redirect("/rounds");
 }
 
+/** Keep a round on the card but leave it out of every number built from rounds. */
+export async function setRoundExcludedAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const user = await requireUser();
+  const roundId = String(formData.get("round_id") ?? "");
+  const excluded = formData.get("excluded");
+  if (!roundId || (excluded !== "true" && excluded !== "false")) {
+    return { ok: false, message: "Choose a round to include or leave out." };
+  }
+  try {
+    await repo.updateRound(user.id, roundId, { excluded_from_analysis: excluded === "true" });
+  } catch (error) {
+    return asError(error);
+  }
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
 // ----------------------------------------------------------------- practice
 
 export type PracticePrioritiesState = ActionState & { drillIds?: string[] };

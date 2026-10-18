@@ -44,6 +44,8 @@ export type Round = {
   conditions: Condition[];
   notes: string | null;
   status: "in_progress" | "complete";
+  /** Kept and listed, but left out of every analysis. Missing on rounds saved before it existed. */
+  excluded_from_analysis?: boolean;
   created_at: string;
 };
 

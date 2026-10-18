@@ -52,6 +52,35 @@ function unwrap<T>(result: { data: T | null; error: { message: string } | null }
   return (result.data ?? []) as T;
 }
 
+type Query = ReturnType<ReturnType<SupabaseClient["from"]>["select"]>;
+
+/** Supabase's default "Max rows". A project set lower still reads everything, in smaller steps. */
+const PAGE = 1000;
+
+/**
+ * Every row a query matches. Supabase silently stops a response at its row
+ * limit, so a whole-history read pages until it has the count it was promised.
+ * `shape` adds the filters and order; `id` breaks ties so no row changes page.
+ */
+export async function selectAll<T>(
+  sb: SupabaseClient,
+  table: string,
+  columns: string,
+  what: string,
+  shape: (query: Query) => Query,
+): Promise<T[]> {
+  const rows: T[] = [];
+  for (;;) {
+    // ponytail: offset paging; a row saved mid-read can shift one row between pages.
+    const result = await shape(sb.from(table).select(columns, { count: "exact" }))
+      .order("id")
+      .range(rows.length, rows.length + PAGE - 1);
+    const page = unwrap(result, what) as T[];
+    rows.push(...page);
+    if (page.length === 0 || rows.length >= (result.count ?? Infinity)) return rows;
+  }
+}
+
 // ------------------------------------------------------------------- auth
 
 export type SessionUser = { id: string; email: string; name: string | null };
@@ -110,9 +139,8 @@ export async function upsertProfile(profile: PlayerProfile): Promise<PlayerProfi
 export async function getHandicapHistory(userId: string): Promise<HandicapEntry[]> {
   const sb = await client();
   if (!sb) return store().handicapHistory;
-  return unwrap(
-    await sb.from("handicap_entries").select("*").eq("user_id", userId).order("recorded_on"),
-    "getHandicapHistory",
+  return selectAll<HandicapEntry>(sb, "handicap_entries", "*", "getHandicapHistory", (q) =>
+    q.eq("user_id", userId).order("recorded_on"),
   );
 }
 
@@ -163,9 +191,8 @@ export async function savePracticeDrillPriorities(userId: string, drillIds: stri
 export async function getCourses(userId: string): Promise<Course[]> {
   const sb = await client();
   if (!sb) return store().courses;
-  return unwrap(
-    await sb.from("courses").select("*").or(`user_id.is.null,user_id.eq.${userId}`).order("name"),
-    "getCourses",
+  return selectAll<Course>(sb, "courses", "*", "getCourses", (q) =>
+    q.or(`user_id.is.null,user_id.eq.${userId}`).order("name"),
   );
 }
 
@@ -188,9 +215,8 @@ export async function getRounds(userId: string): Promise<Round[]> {
   if (!sb) {
     return [...store().rounds].sort((a, b) => b.played_on.localeCompare(a.played_on));
   }
-  return unwrap(
-    await sb.from("rounds").select("*").eq("user_id", userId).order("played_on", { ascending: false }),
-    "getRounds",
+  return selectAll<Round>(sb, "rounds", "*", "getRounds", (q) =>
+    q.eq("user_id", userId).order("played_on", { ascending: false }),
   );
 }
 
@@ -257,9 +283,9 @@ export async function getShots(userId: string, roundId?: string): Promise<Shot[]
       (a, b) => a.hole_number - b.hole_number || a.shot_number - b.shot_number,
     );
   }
-  let query = sb.from("shots").select("*").eq("user_id", userId);
-  if (roundId) query = query.eq("round_id", roundId);
-  return unwrap(await query.order("hole_number").order("shot_number"), "getShots");
+  return selectAll<Shot>(sb, "shots", "*", "getShots", (q) =>
+    (roundId ? q.eq("round_id", roundId) : q).eq("user_id", userId).order("hole_number").order("shot_number"),
+  );
 }
 
 /**
@@ -301,13 +327,8 @@ export async function getPracticeSessions(userId: string): Promise<PracticeSessi
       b.scheduled_for.localeCompare(a.scheduled_for),
     );
   }
-  return unwrap(
-    await sb
-      .from("practice_sessions")
-      .select("*")
-      .eq("user_id", userId)
-      .order("scheduled_for", { ascending: false }),
-    "getPracticeSessions",
+  return selectAll<PracticeSession>(sb, "practice_sessions", "*", "getPracticeSessions", (q) =>
+    q.eq("user_id", userId).order("scheduled_for", { ascending: false }),
   );
 }
 
@@ -415,9 +436,8 @@ export async function getDrillAttempts(userId: string): Promise<DrillAttempt[]> 
   if (!sb) {
     return [...store().drillAttempts].sort((a, b) => a.completed_at.localeCompare(b.completed_at));
   }
-  return unwrap(
-    await sb.from("drill_attempts").select("*").eq("user_id", userId).order("completed_at"),
-    "getDrillAttempts",
+  return selectAll<DrillAttempt>(sb, "drill_attempts", "*", "getDrillAttempts", (q) =>
+    q.eq("user_id", userId).order("completed_at"),
   );
 }
 
@@ -447,17 +467,14 @@ export async function getSwingSessions(userId: string): Promise<SwingSession[]> 
   if (!sb) {
     return [...store().swingSessions].sort((a, b) => b.created_at.localeCompare(a.created_at));
   }
-  return unwrap(
-    await sb
-      .from("swing_sessions")
-      // Everything but the 3D model, which is ~40 KB a swing and only the
-      // swing's own page draws it.
-      .select(
-        "id,user_id,video_url,camera_angle,club,shot_type,swing_pattern,notes,analysis_status,clip_start,clip_end,created_at",
-      )
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false }),
+  return selectAll<SwingSession>(
+    sb,
+    "swing_sessions",
+    // Everything but the 3D model, which is ~40 KB a swing and only the
+    // swing's own page draws it.
+    "id,user_id,video_url,camera_angle,club,shot_type,swing_pattern,notes,analysis_status,clip_start,clip_end,created_at",
     "getSwingSessions",
+    (q) => q.eq("user_id", userId).order("created_at", { ascending: false }),
   );
 }
 
@@ -466,13 +483,8 @@ export async function getSwingFindings(userId: string): Promise<SwingFinding[]> 
   if (!sb) {
     return [...store().swingFindings].sort((a, b) => b.created_at.localeCompare(a.created_at));
   }
-  return unwrap(
-    await sb
-      .from("swing_findings")
-      .select("*")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false }),
-    "getSwingFindings",
+  return selectAll<SwingFinding>(sb, "swing_findings", "*", "getSwingFindings", (q) =>
+    q.eq("user_id", userId).order("created_at", { ascending: false }),
   );
 }
 
@@ -647,15 +659,8 @@ export async function getSwingMeasurements(userId: string): Promise<SwingMeasure
   if (!sb) return [...store().swingMeasurements];
   const sessions = await getSwingSessions(userId);
   if (sessions.length === 0) return [];
-  return unwrap(
-    await sb
-      .from("swing_measurements")
-      .select("*")
-      .in(
-        "swing_session_id",
-        sessions.map((session) => session.id),
-      ),
-    "getSwingMeasurements",
+  return selectAll<SwingMeasurement>(sb, "swing_measurements", "*", "getSwingMeasurements", (q) =>
+    q.in("swing_session_id", sessions.map((session) => session.id)),
   );
 }
 

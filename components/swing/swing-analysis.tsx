@@ -4,7 +4,6 @@ import type { MotionReport } from "@/lib/golf/motion-analysis";
 import type { SwingPhases } from "@/lib/golf/pose";
 import { SwingSeekButton } from "./seek-button";
 import { SwingCoach } from "./swing-coach";
-import { SwingMotionReport } from "./motion-report";
 
 export function SwingAnalysis({ review, report, phaseTimes, comparison, previousHref, sessionId, coachingKey }: {
   review: FaceOnReview; report: MotionReport; phaseTimes: Record<keyof SwingPhases, number> | null;
@@ -54,6 +53,5 @@ export function SwingAnalysis({ review, report, phaseTimes, comparison, previous
         <p className="text-[11px] leading-relaxed text-fg-subtle">Measurements describe visible positions in this camera view. Clubface angle, ball flight and foot pressure require additional evidence.</p>
       </CardContent>
     </Card>
-    {report.usable ? <SwingMotionReport report={report} view={report.view} /> : null}
   </section>;
 }

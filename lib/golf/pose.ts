@@ -681,6 +681,8 @@ export type SetupMarks = {
 };
 
 export type PoseModel = {
+  /** Attribution for a private comparison reference; never a synthetic pro template. */
+  reference?: import("./swing-reference").SwingReferenceMetadata;
   v: 1;
   handedness: "right" | "left";
   phases: SwingPhases;

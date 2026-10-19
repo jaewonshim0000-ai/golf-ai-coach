@@ -1049,11 +1049,14 @@ async function storeMotion(
   const report = analyseVideoModel(updatedModel);
   const review = reviewFaceOn(frames, options.aspect, options.view);
   try {
+    const previous = await repo.getSwingModel(userId, sessionId);
+    if (previous?.reference) updatedModel.reference = previous.reference;
     await repo.saveSwingModel(userId, sessionId, updatedModel);
     await repo.deleteSwingMeasurementsBySource(userId, sessionId, "pose");
   } catch (error) { return asError(error); }
   revalidatePath(`/swing/${sessionId}`);
   revalidatePath("/swing");
+  revalidatePath("/swing/references");
   return { ok: true, measurements: report.readings.length || review.metrics.length,
     message: report.usable ? "Your 2D swing analysis is ready. Review the measured positions below."
       : review.status !== "record_again" ? "Your visible movement review is ready. Exact swing timing is unclear."

@@ -117,6 +117,18 @@ Shortening a recording is optional and collapsed. A saved clip change automatica
 
 ## Your account
 
+### Swing comparison references
+
+Open **Swing → Reference library → Add reference** to upload a professional, coach, or personal clip you have permission to use. The existing private upload and pose-tracking flow analyzes it; save the golfer's name, reference type, handedness and optional source credit after tracking. A saved recording can also become a reference. References belong to the signed-in account and are stored as validated metadata in the existing `pose_model` JSON. No migration, additional paid service, or new model download is required. Reanalysis and timing edits preserve reference attribution; removing a reference keeps its underlying video and tracks.
+
+Opening a user swing automatically selects a ready reference with the same club and camera view, preferring professional/coach references and similar observed torso-to-leg proportions. The reference picker can override that choice. Stale trims, self-comparison and unavailable references are excluded. Uncertain timing or incompatible camera geometry produces a specific completion message while the original swing analysis remains available. Reference labels are supplied by the uploader; the app does not independently verify professional status.
+
+**Compare with a reference** shows two videos with a shared slider, position buttons and synchronized playback. Piecewise time mapping aligns setup, top and estimated contact, with a bounded observed follow-through window; real swing times are converted to each clip's own slow-motion video time. Face-on replay orientation can be mirrored to align lead/trail sides without changing anatomical measurements. Private signed video URLs refresh during long sessions, and device-local demo clips retain their existing device-only behavior.
+
+The comparison reads actual detected positions in both recordings. Movement is expressed relative to each golfer's setup and stance/body scale; the system does not compare raw pixels or emit a similarity/quality percentage. Conservative, unvalidated tolerances screen head movement, backswing height, projected posture, supported hip space and timing. A comparison correction requires both a supported concern in the user's recording and a meaningful excess over the reference. Uncertain height intervals use the user's smallest supported excursion and the reference's largest, preventing a guessed top from becoming a correction. Missing reference evidence cannot erase a supported user observation. AI may select only a maintained procedure for the chosen issue, with full reference evidence in the cache fingerprint.
+
+This is a working reference-comparison system using the existing pose model, not a new model trained on professional footage. It ships without third-party pro videos, GolfDB weights or invented pro coordinates. Upload permitted reference clips to populate the private library. Camera perspective and anatomy still affect comparisons; real-world accuracy and coaching outcomes require evaluation with coach-reviewed recordings.
+
 **Forgot your password?** on the sign-in page emails a reset link; it needs password recovery enabled in Supabase Authentication. The request step says the same thing whether or not the address is registered.
 
 **Delete account** on the profile screen removes the auth user, which cascades through every table, after deleting that account's folder from the video bucket. It is a typed confirmation and cannot be undone. `0005_delete_account.sql` adds the function; it reads `auth.uid()` from the caller's own token rather than taking an id, so it can only ever delete the caller.

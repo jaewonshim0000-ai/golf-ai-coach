@@ -5,6 +5,8 @@ import { buildVideoModel, analyseVideoModel } from "../golf/video-review";
 import { getSwingFocus, swingFocusProcedure } from "../golf/swing-focus";
 import { cachedSwingFocus, coachSwingFocus, swingFocusFingerprint } from "./swing-focus";
 import { RulesProvider, type AIProvider, type GenerateRequest } from "./provider";
+import { compareSwingToReference } from "../golf/swing-comparison";
+import type { SwingReference } from "../golf/swing-reference";
 
 function model() {
   const frames = faceOnSwing();
@@ -71,4 +73,17 @@ it("invalidates coaching for changed recording evidence and isolates cached requ
   await assert.rejects(cachedSwingFocus("failure", key, () => Promise.reject(new Error("Unavailable"))));
   await cachedSwingFocus("failure", key, compute);
   assert.equal(calls, 3);
+});
+
+it("keeps comparison evidence and reference changes inside the coaching boundary", async () => {
+  const recording = model(), clean = buildVideoModel(faceOnSwing(), { aspect: 1, view: "face_on", handedness: "right" });
+  const ref: SwingReference = { model: clean, metadata: { name: "Test coach", kind: "coach", source: "Test", permission: true, handedness: "right" },
+    session: { id: "test-reference", user_id: "test", club: "7_iron", camera_angle: "face_on", video_url: null, shot_type: "full swing", swing_pattern: "unknown", notes: null, analysis_status: "processed", clip_start: null, clip_end: null, created_at: "2026-10-18" } };
+  const comparison = compareSwingToReference(recording, "7_iron", ref);
+  const plan = await coachSwingFocus(recording, "7_iron", provider({ procedure: "half_shots" }), comparison);
+  assert.equal(plan.issue, comparison.focus!.issue);
+  assert.equal(plan.id, "head");
+  const key = swingFocusFingerprint(recording, "7_iron", "test", { id: ref.session.id, model: clean });
+  assert.notEqual(key, swingFocusFingerprint(recording, "7_iron", "test", { id: "different", model: clean }));
+  assert.notEqual(key, swingFocusFingerprint(recording, "7_iron", "test", { id: ref.session.id, model: { ...clean, phasesConfirmed: true } }));
 });

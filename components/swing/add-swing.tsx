@@ -17,7 +17,7 @@ import { canRecordInApp, SwingCamera } from "@/components/swing/swing-camera";
 /** The playback speed a player's uploads usually have, remembered on this device. */
 const SPEED_KEY = "golf:upload-slow-motion";
 
-export function AddSwing() {
+export function AddSwing({ reference = false }: { reference?: boolean }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
@@ -85,7 +85,10 @@ export function AddSwing() {
       setOpen(false);
       setFile(null);
       setRecorded(null);
-      router.push(playback > 1 ? `/swing/${result.id}?speed=${playback}` : `/swing/${result.id}`);
+      const query = new URLSearchParams();
+      if (playback > 1) query.set("speed", String(playback));
+      if (reference) query.set("reference", "new");
+      router.push(`/swing/${result.id}${query.size ? `?${query}` : ""}`);
       router.refresh();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not save your video. Please try again.");
@@ -95,11 +98,11 @@ export function AddSwing() {
   }
 
   return <>
-    <Button type="button" size="sm" onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> Add video</Button>
+    <Button type="button" size="sm" onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> {reference ? "Add reference" : "Add video"}</Button>
     <dialog ref={dialog} aria-labelledby="new-swing-title" onClose={() => setOpen(false)} onCancel={(event) => { if (pending) event.preventDefault(); }}
       className="m-0 mt-auto max-h-[86svh] w-full max-w-none overflow-y-auto rounded-t-[22px] border border-border bg-surface p-0 text-fg shadow-[var(--shadow-card)] backdrop:bg-[rgb(9_14_10_/_0.5)] sm:m-auto sm:max-w-[460px] sm:rounded-[22px]">
       <div className="flex items-center justify-between border-b border-border px-5 py-4">
-        <h2 id="new-swing-title" className="font-semibold">New swing</h2>
+        <h2 id="new-swing-title" className="font-semibold">{reference ? "Add a reference recording" : "New swing"}</h2>
         <Button type="button" variant="ghost" size="icon" disabled={pending} onClick={() => setOpen(false)} aria-label="Close"><X className="h-4 w-4" /></Button>
       </div>
       <form onSubmit={save} className="space-y-4 p-5">

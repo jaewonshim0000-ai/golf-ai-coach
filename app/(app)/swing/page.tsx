@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 
 import { AddSwing } from "@/components/swing/add-swing";
 import { SwingVideo } from "@/components/swing/swing-video";
-import { Badge, EmptyState, HeroPill, PageHero } from "@/components/ui/primitives";
+import { Badge, ButtonLink, EmptyState, HeroPill, PageHero } from "@/components/ui/primitives";
 import { CLUB_LABELS, labelize } from "@/types/golf";
 import { diagnoseSwing } from "@/lib/golf/swing-metrics";
 import * as repo from "@/lib/db/repo";
@@ -26,6 +26,7 @@ export default async function SwingLibraryPage() {
   return (
     <div className="space-y-5">
       <PageHero
+        className="mb-0"
         art="dusk"
         size="sm"
         eyebrow="Your swing"
@@ -39,6 +40,7 @@ export default async function SwingLibraryPage() {
         }
       />
 
+      <div className="flex justify-end"><ButtonLink href="/swing/references" variant="secondary" size="sm">Reference library</ButtonLink></div>
       {swings.length === 0 ? (
         <EmptyState
           title="No swings yet"

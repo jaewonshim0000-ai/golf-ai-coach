@@ -18,6 +18,7 @@ import { serverClient, supabaseConfigured } from "./supabase";
 import { privateVideoPath } from "../video-upload";
 import type { PoseModel } from "../golf/pose";
 import { compactMotionModel, expandMotionModel } from "../golf/motion-storage";
+import { readSwingReference, swingReferenceSchema, type SwingReference, type SwingReferenceMetadata } from "../golf/swing-reference";
 import { DEMO_USER_ID, newId, store } from "./demo-store";
 
 /**
@@ -616,6 +617,36 @@ export async function getSwingModel(userId: string, sessionId: string): Promise<
     .maybeSingle();
   if (error) throw new Error(`getSwingModel: ${error.message}`);
   return expandMotionModel((data as { pose_model: PoseModel | null } | null)?.pose_model ?? null);
+}
+
+/** References are private swing rows, protected by the same ownership and storage policies. */
+export async function getSwingReferences(userId: string): Promise<SwingReference[]> {
+  const sb = await client();
+  const rows: (SwingSession & { pose_model: PoseModel | null })[] = sb
+    ? await selectAll(sb, "swing_sessions", "*", "getSwingReferences", (query) =>
+      query.eq("user_id", userId).not("pose_model->reference", "is", null))
+    : store().swingSessions.filter((session) => session.user_id === userId)
+      .map((session) => ({ ...session, pose_model: store().swingModels[session.id] ?? null }));
+  return rows.flatMap(({ pose_model, ...session }) => {
+    const reference = readSwingReference(session, expandMotionModel(pose_model));
+    return reference ? [reference] : [];
+  });
+}
+
+export async function saveSwingReference(userId: string, sessionId: string, metadata: SwingReferenceMetadata | null): Promise<void> {
+  const sessions = await getSwingSessions(userId);
+  if (!sessions.some((session) => session.id === sessionId && session.user_id === userId)) throw new Error("That recording is not in your account.");
+  const model = await getSwingModel(userId, sessionId);
+  if (!model) throw new Error("Review the video before adding it as a reference.");
+  if (metadata) {
+    const parsed = swingReferenceSchema.parse(metadata);
+    const references = await getSwingReferences(userId);
+    if (!model.reference && references.length >= 24) throw new Error("Your reference library is full. Remove a reference before adding another.");
+    await saveSwingModel(userId, sessionId, { ...model, reference: parsed });
+  } else {
+    const { reference: _reference, ...rest } = model;
+    await saveSwingModel(userId, sessionId, rest);
+  }
 }
 
 export async function saveSwingModel(

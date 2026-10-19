@@ -9,7 +9,7 @@ export function analyseVideoModel(model: PoseModel) {
 /** Save the observed 2D tracks even when timing or displacement is unclear.
  * A quality limitation belongs to its reading, not to the entire recording. */
 export function buildVideoModel(frames: PoseFrame[], options: {
-  aspect: number; view: MotionView; handedness: "right" | "left"; clip?: [number, number]; phases?: SwingPhases;
+  aspect: number; view: MotionView; handedness: "right" | "left"; clip?: [number, number]; phases?: SwingPhases; slowMotion?: number;
 }): PoseModel {
   const report = analyseMotion(frames, options.aspect, options.view, options.handedness, options.phases);
   return {
@@ -18,6 +18,7 @@ export function buildVideoModel(frames: PoseFrame[], options: {
     // presented as observations; analyseVideoModel recomputes automatic timing.
     phases: report.phases ?? { address: 0, top: Math.floor(frames.length / 2), impact: frames.length - 1 },
     aspect: options.aspect, cameraAngle: options.view, motionVersion: 1, clip: options.clip,
+    ...(options.slowMotion && options.slowMotion > 1 ? { slowMotion: options.slowMotion } : {}),
     phasesConfirmed: Boolean(options.phases),
     timingStatus: options.phases ? "confirmed" : report.phases ? "estimated" : "unresolved",
   };

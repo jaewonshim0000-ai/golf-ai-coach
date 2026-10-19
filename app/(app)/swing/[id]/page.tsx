@@ -6,7 +6,7 @@ import { SwingAnalysis } from "@/components/swing/swing-analysis";
 import { DeleteSwingButton } from "@/components/swing/delete-swing";
 import { ButtonLink, PageHero } from "@/components/ui/primitives";
 import { compareFaceOn, reviewFaceOn } from "@/lib/golf/face-on-review";
-import { unpackFrames, type PoseModel } from "@/lib/golf/pose";
+import { parseSlowMotion, unpackFrames, type PoseModel } from "@/lib/golf/pose";
 import { faceOnFingerprint } from "@/lib/ai/face-on-coach";
 import { analyseVideoModel } from "@/lib/golf/video-review";
 import { setupReadings } from "@/lib/golf/setup-marks";
@@ -21,8 +21,12 @@ export const dynamic = "force-dynamic";
 function matchesTrim(model: PoseModel, start: number | null, end: number | null) {
   return !model.clip || (Math.abs(model.clip[0] - (start ?? 0)) <= 0.1 && (end === null || Math.abs(model.clip[1] - end) <= 0.1));
 }
-export default async function SwingPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+export default async function SwingPage({ params, searchParams }: {
+  params: Promise<{ id: string }>;
+  /** `speed`: the playback slowdown picked when the clip was added. */
+  searchParams: Promise<{ speed?: string }>;
+}) {
+  const [{ id }, search] = await Promise.all([params, searchParams]);
   const user = await repo.currentUser();
   if (!user) return null;
   const state = await loadPlayerState(user.id);
@@ -54,7 +58,7 @@ export default async function SwingPage({ params }: { params: Promise<{ id: stri
       topLeft={<ButtonLink href="/swing" variant="onHero" size="sm"><ArrowLeft className="h-3.5 w-3.5" /> Swings</ButtonLink>} />
     <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
       <div className="mx-auto w-full max-w-lg"><SwingVideo id={id} videoUrl={session.video_url} clipStart={session.clip_start} clipEnd={session.clip_end}
-        trimmable analysable model={model} cameraAngle={view} /></div>
+        trimmable analysable model={model} cameraAngle={view} initialSlowMotion={parseSlowMotion(search.speed)} /></div>
       {review && report && current ? <SwingAnalysis review={review} report={report} phaseTimes={report.phases ? {
         address: current.t[report.phases.address]!, top: current.t[report.phases.top]!, impact: current.t[report.phases.impact]!,
       } : null} setup={setupReadings(current)} comparison={comparison} previousHref={previousHref} sessionId={id}

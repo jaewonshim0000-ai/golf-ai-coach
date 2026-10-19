@@ -125,6 +125,10 @@ export function refinementTimes(frames: PoseFrame[], from: number, to: number, a
  * Walk the clip and return one skeleton per sample. Frames where no body was
  * found are dropped rather than filled in, so a clip that only shows a player
  * for part of its length still yields the part it does show.
+ *
+ * `from`, `to` and every seek are video seconds. Returned frames are labelled
+ * in real swing seconds (video time / `slowMotion`), because every timing rule
+ * downstream, from hand gaps to tempo, is written for a swing at real speed.
  */
 export async function readSwing(
   video: HTMLVideoElement,
@@ -133,6 +137,7 @@ export async function readSwing(
   onProgress?: PoseProgress,
   view: MotionView = "other",
   signal?: AbortSignal,
+  slowMotion = 1,
 ): Promise<PoseFrame[]> {
   const span = to > from ? to - from : video.duration;
   const start = to > from ? from : 0;
@@ -165,8 +170,9 @@ export async function readSwing(
     const imagePoses = result.landmarks.map((pose) => pose.map((point) => ({
       ...point, visibility: Math.min(point.visibility ?? 0, point.presence ?? 1),
     })));
+    const real = t / slowMotion;
     const nearest = frames.reduce<PoseFrame | null>((best, frame) =>
-      !best || Math.abs(frame.t - t) < Math.abs(best.t - t) ? frame : best, null);
+      !best || Math.abs(frame.t - real) < Math.abs(best.t - real) ? frame : best, null);
     const selected = selectTrackedPose(imagePoses, nearest?.imageLandmarks ?? previous, view);
     if (selected < 0) return;
     const landmarks = result.worldLandmarks?.[selected];
@@ -174,7 +180,7 @@ export async function readSwing(
     if (imageLandmarks?.length === 33) {
       previous = imageLandmarks;
       frames.push({
-        t,
+        t: real,
         landmarks: (landmarks ?? []).map((point, joint) => ({ ...point,
           visibility: Math.min(point.visibility ?? 0, point.presence ?? 1, imageLandmarks?.[joint]?.visibility ?? 0),
         })),
@@ -200,13 +206,14 @@ export async function readSwing(
     const attempted = new Set<number>();
     for (let pass = 0; pass < 3 && inferences < MAX_POSE_SAMPLES; pass++) {
       const room = MAX_POSE_SAMPLES - inferences;
-      const times = refinementTimes(frames, start, start + span - 0.001, aspect, view, Math.min(room, pass === 0 ? 40 : room))
+      // Planned in real swing time, so the dense downswing rate means the same at any playback speed.
+      const times = refinementTimes(frames, start / slowMotion, (start + span - 0.001) / slowMotion, aspect, view, Math.min(room, pass === 0 ? 40 : room))
         .filter((time) => !attempted.has(Math.round(time * 1000000)));
       if (!times.length) break;
       for (const time of times) {
         if (inferences >= MAX_POSE_SAMPLES) break;
         attempted.add(Math.round(time * 1000000));
-        await readAt(time);
+        await readAt(time * slowMotion);
         onProgress?.(inferences, MAX_POSE_SAMPLES);
       }
     }

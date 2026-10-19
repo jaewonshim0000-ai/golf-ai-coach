@@ -954,6 +954,8 @@ export async function savePoseModelAction(input: {
   ballSide?: "left" | "right";
   clip?: [number, number];
   phases?: SwingPhases;
+  /** Times in `t` are already real swing seconds; this is the clip's playback slowdown. */
+  slowMotion?: number;
   reconstruct?: boolean;
 }): Promise<PoseState> {
   const user = await requireUser();
@@ -972,6 +974,7 @@ export async function savePoseModelAction(input: {
     clip: parsed.data.clip,
     ballSide: parsed.data.ballSide,
     phases: parsed.data.phases,
+    slowMotion: parsed.data.slowMotion,
     reconstruct: parsed.data.reconstruct,
   });
 }
@@ -1000,6 +1003,7 @@ export async function retimeSwingAction(input: {
     clip: model.clip,
     ballSide: model.ballSide,
     phases: parsed.data.phases,
+    slowMotion: model.slowMotion,
     reconstructionVersion: model.reconstructionVersion,
     setup: model.setup,
   });
@@ -1037,7 +1041,7 @@ async function storeMotion(
   sessionId: string,
   handedness: "right" | "left",
   frames: PoseFrame[],
-  options: { aspect: number; view: MotionView; phases?: SwingPhases; clip?: [number, number]; ballSide?: "left" | "right"; reconstruct?: boolean; reconstructionVersion?: 1; setup?: SetupMarks },
+  options: { aspect: number; view: MotionView; phases?: SwingPhases; clip?: [number, number]; ballSide?: "left" | "right"; slowMotion?: number; reconstruct?: boolean; reconstructionVersion?: 1; setup?: SetupMarks },
 ): Promise<PoseState> {
   const updatedModel = buildVideoModel(frames, { ...options, handedness });
   // Marks were made on the setup frame; moving setup elsewhere drops them.

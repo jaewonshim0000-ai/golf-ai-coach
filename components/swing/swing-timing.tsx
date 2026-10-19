@@ -6,6 +6,7 @@ import { retimeSwingAction } from "@/app/actions";
 import { samplePosition } from "@/lib/golf/reconstruction";
 import type { PoseModel, SwingPhases } from "@/lib/golf/pose";
 import { Button } from "@/components/ui/primitives";
+import { seekSwing, swingPlayer } from "@/components/swing/seek-button";
 
 const PHASES = ["address", "top", "impact"] as const;
 type Draft = Record<keyof SwingPhases, number | null>;
@@ -44,13 +45,12 @@ export function SwingTiming({ model, sessionId, unresolved }: { model: PoseModel
   }, [model.t, sessionId]);
 
   const seek = (index: number) => {
-    const video = document.querySelector<HTMLVideoElement>("video[data-swing-player]");
-    if (video) { video.pause(); video.currentTime = model.t[index]!; }
+    seekSwing(model.t[index]!);
     setPosition(index);
   };
   const mark = (phase: keyof SwingPhases) => {
-    const video = document.querySelector<HTMLVideoElement>("video[data-swing-player]");
-    const time = video?.currentTime ?? model.t[Math.round(position)]!;
+    const player = swingPlayer();
+    const time = player ? player.video.currentTime / player.slowMotion : model.t[Math.round(position)]!;
     const index = Math.round(samplePosition(model.t, time));
     if (Math.abs(model.t[index]! - time) > 0.06) {
       setMessage("This position falls in a tracking gap. Choose a nearby tracked frame or rebuild the swing to read more frames.");

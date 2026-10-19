@@ -1,9 +1,15 @@
 import type { MotionReport } from "./motion-analysis";
-import { scoreSwing } from "./swing-score";
+import { swingScoreChecks } from "./swing-score";
 
 export type SwingFocusId = "head" | "height" | "posture" | "hip_depth" | "tempo";
 export type SwingProcedure = "rehearsal" | "half_shots";
-export type SwingFocus = { id: SwingFocusId | null; issue: string; steps: string[] };
+export type SwingFocus = {
+  status: "issue" | "clear" | "needs_input";
+  id: SwingFocusId | null;
+  issue: string;
+  steps: string[];
+  action?: "timing";
+};
 
 const procedures: Record<SwingFocusId, Record<SwingProcedure, string[]>> = {
   head: {
@@ -72,10 +78,20 @@ export function swingFocusProcedure(id: SwingFocusId, procedure: SwingProcedure)
   return [...procedures[id][procedure]];
 }
 
-/** Rank supported checks internally; show just one issue and its procedure. */
+function needsTiming(issue: string): SwingFocus {
+  return { status: "needs_input", id: null, issue, action: "timing", steps: [
+    "Open Adjust swing timing for this video.",
+    "Pause at setup, the top of the backswing and contact, and mark each position.",
+    "Save the timing to update the analysis using this recording.",
+  ] };
+}
+
+/** A full-swing score has stricter requirements than an individual visible
+ * position. Missing checks or a gap elsewhere must not erase usable evidence. */
 export function getSwingFocus(report: MotionReport, ballSide?: "left" | "right"): SwingFocus {
-  const score = scoreSwing(report, ballSide);
-  const main = score.priorities[0];
+  const { components } = swingScoreChecks(report, ballSide);
+  const main = components.filter((item) => (item.scoreRange?.[1] ?? item.score) < 85)
+    .sort((a, b) => (100 - (b.scoreRange?.[1] ?? b.score)) * b.weight - (100 - (a.scoreRange?.[1] ?? a.score)) * a.weight)[0];
   if (main && Object.hasOwn(procedures, main.id)) {
     const id = main.id as SwingFocusId;
     const lift = report.readings.find((row) => row.id === "lift_top");
@@ -88,20 +104,41 @@ export function getSwingFocus(report: MotionReport, ballSide?: "left" | "right")
         ? "Your backswing is rushed compared with your downswing."
         : "Your downswing is rushed compared with your backswing.",
     };
-    return { id, issue: issues[id], steps: swingFocusProcedure(id, "rehearsal") };
+    return { status: "issue", id, issue: issues[id], steps: swingFocusProcedure(id, "rehearsal") };
   }
 
-  const unclear = !score.components.length || score.reviews.length > 0 || score.missing.length > 0;
-  return {
-    id: null,
-    issue: unclear ? "This recording does not show a clear main problem." : "No clear problem found in the visible movement.",
-    steps: unclear ? [
-      "Place the phone on a fixed support, facing your chest or directly behind you.",
-      "Record one swing with your head, hands and feet visible, from a brief still setup through the finish. Use a constant video speed.",
-      "Upload the new recording to identify one issue to work on.",
-    ] : [
+  if (components.some((item) => item.scoreRange && item.scoreRange[0] < 85 && item.scoreRange[1] >= 85)) {
+    return needsTiming("Your hip position near the top needs checking before choosing a correction.");
+  }
+  if (components.length) {
+    return { status: "clear", id: null, issue: "The visible checks do not show a clear swing fault.", steps: [
       "Keep your current swing and make five comfortable shots, checking for contact near the center of the clubface.",
       "Record another swing from the same phone position to check whether a consistent issue appears.",
-    ],
-  };
+    ] };
+  }
+  if (report.view === "other") {
+    return { status: "needs_input", id: null, issue: "Choose the camera view to finish analyzing this swing.", steps: [
+      "Under the video, set Camera view to Face on if the camera faces your chest, or Down the line if it is behind you.",
+      "Select Review again to analyze this recording with the matching checks.",
+    ] };
+  }
+  if (report.quality.coverage < 0.65) {
+    return { status: "needs_input", id: null, issue: "Your body could not be tracked clearly through this swing.", steps: [
+      "Play this video and check that the guides follow you, with your shoulders, hips and hands visible.",
+      "Shorten the recording to one swing and select Review again.",
+      "If those body parts are hidden in the video, use a brighter recording with your whole body in view.",
+    ] };
+  }
+  if (!report.phases) return needsTiming("The setup, top and contact positions could not be identified automatically.");
+  if (report.usable && !report.quality.cameraStable) {
+    return { status: "needs_input", id: null, issue: "Camera or foot movement prevented a reliable head and hip check.", steps: [
+      "Check whether the phone moves or both feet leave the frame during this swing.",
+      "Use a fixed phone support and keep your feet visible for the next recording.",
+    ] };
+  }
+  return { status: "needs_input", id: null, issue: "The key body positions could not be read in this video.", steps: [
+    "Use Check your setup beside the video to confirm the tracked outline follows you.",
+    "Check the setup, top and contact frames in Adjust swing timing, then save to update this analysis.",
+    "If a key body part is hidden at those positions, use a recording where it stays visible.",
+  ], action: "timing" };
 }

@@ -30,6 +30,7 @@ it("selects targeted procedures without letting AI change the problem or invent 
     assert.deepEqual(data.procedures.half_shots, swingFocusProcedure("head", "half_shots"));
   }));
   assert.equal(plan.source, "ai");
+  assert.equal(plan.status, "issue");
   assert.equal(plan.id, "head");
   assert.equal(plan.issue, getSwingFocus(analyseVideoModel(recording)).issue);
   assert.deepEqual(plan.steps, swingFocusProcedure("head", "half_shots"));
@@ -49,6 +50,7 @@ it("keeps a useful immediate procedure without AI and skips AI when no issue is 
   const clear = buildVideoModel(faceOnSwing(), { aspect: 1, view: "face_on", handedness: "right" });
   const noIssue = await coachSwingFocus(clear, "driver", provider({}, () => assert.fail("No supported issue must not call AI")));
   assert.equal(noIssue.id, null);
+  assert.equal(noIssue.status, "clear");
   const unusable = { ...clear, imageFrames: [] };
   assert.equal((await coachSwingFocus(unusable, "driver", provider({}, () => assert.fail("Unusable footage must not call AI")))).id, null);
 });

@@ -328,12 +328,12 @@ export function SwingVideo({
         <div className="rounded-xl border border-border bg-surface-2 p-3">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
-              <p className="dsp text-[10px] tracking-[0.17em] text-fg-subtle">2D swing analysis</p>
+              <p className="dsp text-[10px] tracking-[0.17em] text-fg-subtle">Swing analysis</p>
               <p className="mt-1 text-[11px] leading-[1.5] text-fg-muted">
                 {!crossOrigin
                   ? "This video will play but cannot be read, because its storage does not allow it."
                   : (progress ??
-                    "Tracks visible movement and adds guides to your recording. The first review downloads the tracking model; later reviews reuse it.")}
+                    "Find the biggest problem in your swing and get steps to fix it.")}
               </p>
             </div>
             <Button

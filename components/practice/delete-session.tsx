@@ -22,6 +22,7 @@ export function DeletePracticeSessionButton({ sessionId }: { sessionId: string }
   return (
     <form action={formAction} className="flex flex-wrap items-center justify-end gap-2">
       <input type="hidden" name="session_id" value={sessionId} />
+      <input type="hidden" name="confirm" value="delete" />
       <span className="text-xs text-fg-muted">Delete this session and its recorded result?</span>
       <Button type="submit" variant="danger" size="sm" disabled={pending}>
         {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}

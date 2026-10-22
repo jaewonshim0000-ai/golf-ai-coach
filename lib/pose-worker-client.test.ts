@@ -91,11 +91,36 @@ it("counts failed detections against the inference budget and restores the playh
   const progress: number[] = [];
   const frames = await readSwing(video as unknown as HTMLVideoElement, 0, 8, (done) => progress.push(done), "face_on");
   assert.deepEqual(frames, []);
-  assert.ok(FakeWorker.instances[0]!.calls <= 128);
-  assert.ok(FakeWorker.instances[0]!.calls >= 64);
+  const calls = FakeWorker.instances.reduce((sum, worker) => sum + worker.calls, 0);
+  assert.ok(calls <= 128 && calls >= 80);
+  assert.equal(FakeWorker.instances.length, 2);
+  assert.ok(FakeWorker.instances.every((worker) => worker.terminated));
   assert.equal(video.currentTime, 0.75);
   assert.equal(FakeWorker.instances[0]!.terminated, true);
   assert.ok(progress.every((value, index) => !index || value >= progress[index - 1]!));
+});
+
+it("rejects overlapping frame requests rather than growing a queue", async () => {
+  environment(); FakeWorker.respond = false;
+  const detector = createSwingDetector();
+  const video = new FakeVideo() as unknown as HTMLVideoElement;
+  const first = detector.detect(video);
+  const cancelled = assert.rejects(first, { name: "AbortError" });
+  await assert.rejects(detector.detect(video), /already being tracked/);
+  detector.close();
+  await cancelled;
+});
+
+it("bounds transferred bitmap size and preserves aspect ratio for a 4K recording", async () => {
+  environment();
+  const prepare = mock.fn(async (_source: unknown, _options?: ImageBitmapOptions) => ({ close() {} }));
+  global("createImageBitmap", prepare);
+  const video = new FakeVideo(); video.videoWidth = 3840; video.videoHeight = 2160;
+  const detector = createSwingDetector();
+  await detector.detect(video as unknown as HTMLVideoElement);
+  const options = prepare.mock.calls[0]!.arguments[1] as ImageBitmapOptions;
+  assert.equal(options.resizeWidth, 960); assert.equal(options.resizeHeight, 540);
+  detector.close();
 });
 
 it("uses the decoded timestamp and removes a cancelled seek callback", async () => {

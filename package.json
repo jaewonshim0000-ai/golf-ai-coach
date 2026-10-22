@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test \"lib/**/*.test.ts\"",
     "benchmark:swing": "tsx scripts/benchmark-swing.ts",
+    "evaluate:swing": "tsx scripts/evaluate-swing.ts",
     "seed:sql": "tsx scripts/generate-seed-sql.ts"
   },
   "dependencies": {

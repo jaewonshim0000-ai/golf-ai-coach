@@ -98,11 +98,17 @@ export function trustworthyFrames(frames: PoseFrame[], aspect: number, view: Mot
 /** A planted ankle is a reference for image displacement. Knee flexion and
  * rotation change projected shin length even with a fixed camera, so shin
  * length must not decide whether the recording can be reviewed. */
-export function hasStableFoot(frames: PoseFrame[], reference: PoseFrame, aspect: number, body: number): boolean {
+export function hasStableFoot(frames: PoseFrame[], reference: PoseFrame, aspect: number, body: number, required: PoseFrame[] = []): boolean {
   if (!(body > 0) || frames.length < 3) return false;
   return [LM.leftAnkle, LM.rightAnkle].some((joint) => {
     const base = at(reference, joint, aspect);
     if (!base) return false;
+    // The global percentile tolerates isolated detector errors. It must not
+    // excuse a moved or hidden anchor at the position actually being measured.
+    if (required.some((frame) => {
+      const foot = at(frame, joint, aspect);
+      return !foot || distance(foot, base) / body >= 0.045;
+    })) return false;
     const moves = frames.flatMap((frame) => {
       const foot = at(frame, joint, aspect);
       return foot ? [distance(foot, base) / body] : [];
@@ -170,7 +176,9 @@ function findHandArc(frames: PoseFrame[], aspect: number, view: MotionView, maxi
     }
     previousHand = index;
     if (address < 0 || (!locked && top < 0 && value >= baseline - 0.015)) {
-      baseline = value;
+      // Keep the setup level anchored. Replacing it after every tiny rise
+      // makes a slow or densely sampled backswing look permanently still.
+      baseline = Math.max(baseline, value);
       address = index;
     }
     if (index <= address) continue;
@@ -181,7 +189,7 @@ function findHandArc(frames: PoseFrame[], aspect: number, view: MotionView, maxi
       if (value < highest) { highest = value; top = index; }
       if (baseline - highest < 0.2) {
         // A waggle is not a backswing; let its return establish a fresh address.
-        if (value >= baseline - 0.015) { baseline = value; address = index; top = -1; highest = Infinity; }
+        if (value >= baseline - 0.015) { baseline = Math.max(baseline, value); address = index; top = -1; highest = Infinity; }
         continue;
       }
       if (index > top && value > highest + 0.08) locked = true;
@@ -212,7 +220,17 @@ export type MotionTiming = {
   uncertainty: number;
   /** A bounded interval, never a fabricated hand coordinate. */
   topWindow?: [number, number];
+  /** Observed samples bracketing the hand-path bottom, not detected ball impact. */
+  impactWindow?: [number, number];
 };
+
+function impactBracket(frames: PoseFrame[], impact: number, aspect: number): [number, number] | undefined {
+  let before = impact - 1;
+  while (before >= 0 && !hands(frames[before]!, aspect)) before--;
+  const after = frames.findIndex((frame, index) => index > impact && hands(frame, aspect));
+  return before >= 0 && after >= 0 && frames[impact]!.t - frames[before]!.t <= 0.101 &&
+    frames[after]!.t - frames[impact]!.t <= 0.101 ? [before, after] : undefined;
+}
 
 /**
  * A short occlusion can still bracket the backswing transition: an observed
@@ -229,7 +247,8 @@ export function findAutomaticTiming(frames: PoseFrame[], aspect = 1, view: Motio
     const gaps = times.slice(1).map((time, index) => time - times[index]!);
     // Carry accepted hand gaps into timing uncertainty; nearby body samples
     // alone cannot make an occluded hand path precise enough for rhythm.
-    return { phases: direct, timing: { source: "hands", uncertainty: Math.max(0, ...gaps.filter((gap) => gap > 0.101)) } };
+    return { phases: direct, timing: { source: "hands", uncertainty: Math.max(0, ...gaps.filter((gap) => gap > 0.101)),
+      impactWindow: impactBracket(frames, direct.impact, aspect) } };
   }
   const body = median(frames.flatMap((frame) => {
     const s = shoulders(frame, aspect), f = feet(frame, aspect);
@@ -279,7 +298,8 @@ export function findAutomaticTiming(frames: PoseFrame[], aspect = 1, view: Motio
     const top = hidden.reduce((best, frame, n) => Math.abs(frame.t - middle) < Math.abs(frames[best]!.t - middle) ? before.index + 1 + n : best, before.index + 1);
     if (address < top && top < bottom.index) return {
       phases: { address, top, impact: bottom.index },
-      timing: { source: "occluded_transition", uncertainty: gap / 2, topWindow: [before.index, after.index] },
+      timing: { source: "occluded_transition", uncertainty: gap / 2, topWindow: [before.index, after.index],
+        impactWindow: impactBracket(frames, bottom.index, aspect) },
     };
   }
   return null;
@@ -299,7 +319,7 @@ export type MotionReport = {
   readings: MotionReading[];
   observations: { title: string; detail: string }[];
   warnings: string[];
-  tempo: { backswing: number; downswing: number; ratio: number; uncertainty: number } | null;
+  tempo: { backswing: number; downswing: number; ratio: number; uncertainty: number; ratioRange?: [number, number] } | null;
   summary: string;
 };
 
@@ -323,15 +343,16 @@ export function describeMotionReading(reading: MotionReading, report: MotionRepo
   const baseline = report.readings.find((row) => row.id === `${kind}_address`);
   if (reading.range) {
     const [low, high] = reading.range;
+    const interval = reading.phase === "impact" ? "estimated contact interval" : "estimated transition";
     const span = `${Math.min(Math.abs(low), Math.abs(high))} to ${Math.max(Math.abs(low), Math.abs(high))}`;
-    if (kind === "torso") return `Torso inclination ranges from ${low}° to ${high}° across the estimated transition${baseline ? `, compared with ${baseline.value}° at address` : ""}. Body rotation also affects this camera view.`;
-    if (kind === "shoulders") return `Shoulder-line tilt ranges from ${low}° to ${high}° across the transition${baseline ? `; setup was ${baseline.value}°` : ""}. Positive means the lead shoulder is higher, negative means lower.`;
-    if (kind === "lift" && low * high >= 0) return `The ${hipLabel} sits ${span}% of visible body height ${high <= 0 ? "lower" : "higher"} than at address across the transition.`;
-    if (kind === "lift") return "Hip height crosses its address level during the transition. Negative is lower than setup; positive is higher.";
+    if (kind === "torso") return `Torso inclination ranges from ${low}° to ${high}° across the ${interval}${baseline ? `, compared with ${baseline.value}° at address` : ""}. Body rotation also affects this camera view.`;
+    if (kind === "shoulders") return `Shoulder-line tilt ranges from ${low}° to ${high}° across the ${interval}${baseline ? `; setup was ${baseline.value}°` : ""}. Positive means the lead shoulder is higher, negative means lower.`;
+    if (kind === "lift" && low * high >= 0) return `The ${hipLabel} sits ${span}% of visible body height ${high <= 0 ? "lower" : "higher"} than at address across the ${interval}.`;
+    if (kind === "lift") return `Hip height crosses its address level during the ${interval}. Negative is lower than setup; positive is higher.`;
     if (kind === "hips" || kind === "head") {
       const part = kind === "hips" ? hipLabel : "head";
-      if (low < 0 && high > 0) return `The ${part} crosses its address position during the estimated transition. ${reading.unit === "% stance" ? "Negative is toward the trail foot; positive is toward the lead foot." : "Negative is screen left; positive is screen right."}`;
-      return reading.unit === "% stance" ? `The ${part} moves ${span}% of stance width toward the ${high <= 0 ? "trail" : "lead"} foot from address across the transition.` : `The ${part} moves ${span}% of visible body height to screen ${high <= 0 ? "left" : "right"} from address across the transition.`;
+      if (low < 0 && high > 0) return `The ${part} crosses its address position during the ${interval}. ${reading.unit === "% stance" ? "Negative is toward the trail foot; positive is toward the lead foot." : "Negative is screen left; positive is screen right."}`;
+      return reading.unit === "% stance" ? `The ${part} moves ${span}% of stance width toward the ${high <= 0 ? "trail" : "lead"} foot from address across the ${interval}.` : `The ${part} moves ${span}% of visible body height to screen ${high <= 0 ? "left" : "right"} from address across the ${interval}.`;
     }
   }
   if (kind === "torso") {
@@ -394,15 +415,25 @@ export function analyseMotion(
   const stance = leftFoot && rightFoot ? Math.abs(leftFoot.x - rightFoot.x) : 0;
   const direction = leftFoot && rightFoot ? Math.sign((handedness === "right" ? leftFoot.x - rightFoot.x : rightFoot.x - leftFoot.x)) : 0;
   const referenceHip = hips(address, aspect), referenceHead = head(address);
+  let unstablePosition = false;
   function record(id: string, label: string, phase: keyof SwingPhases, value: number | null, unit: MotionReading["unit"], note: string) {
     if (value !== null && Number.isFinite(value)) report.readings.push({ id, label, phase, value: rounded(value), unit, note, time: frames[phases![phase]]!.t });
   }
   function observed(id: string, label: string, phase: keyof SwingPhases, measure: (frame: PoseFrame) => number | null, unit: MotionReading["unit"], note: string) {
     const value = measure(frames[phases![phase]]!);
+    const bounds = phase === "top" ? report.timing?.topWindow : phase === "impact" ? report.timing?.impactWindow : undefined;
+    const samples = bounds ? frames.slice(bounds[0], bounds[1] + 1) : [frames[phases![phase]]!];
+    if (unit !== "° in picture" && !hasStableFoot(window, address, aspect, body!, samples)) {
+      unstablePosition = true;
+      return;
+    }
+    // Every sampled position in an automatic contact/transition bracket must
+    // support the reading. Dropping hidden endpoints would narrow its range.
+    const measured = bounds ? samples.map(measure) : null;
+    const values = measured?.filter((v): v is number => v !== null && Number.isFinite(v));
+    if (measured && values?.length !== measured.length) return;
     record(id, label, phase, value, unit, note);
-    if (value === null || !report.timing?.topWindow || phase !== "top") return;
-    const [lo, hi] = report.timing.topWindow;
-    const values = frames.slice(lo, hi + 1).flatMap((frame) => { const v = measure(frame); return v === null ? [] : [v]; });
+    if (value === null || !values) return;
     const reading = report.readings.at(-1);
     if (reading && values.length) reading.range = [rounded(Math.min(...values)), rounded(Math.max(...values))];
   }
@@ -437,6 +468,7 @@ export function analyseMotion(
         "% body height", "Head position relative to address. Positive is screen right, negative is screen left.");
     }
   }
+  if (unstablePosition) report.warnings.push("A planted foot could not be confirmed at a measured position. Displacement at that position is withheld even when the rest of the recording is stable.");
   const t = (phase: keyof SwingPhases) => frames[phases[phase]]!.t;
   const nearby = (index: number) => Math.max(frames[index]!.t - (frames[index - 1]?.t ?? frames[index]!.t),
     (frames[index + 1]?.t ?? frames[index]!.t) - frames[index]!.t);
@@ -445,7 +477,20 @@ export function analyseMotion(
   const backswing = t("top") - t("address"), downswing = t("impact") - t("top");
   if (downswing >= uncertainty * 2 && uncertainty <= 0.12 && report.quality.largestGap <= 0.12 &&
       (Boolean(override) || [phases.address, phases.top, phases.impact].every((index) => hands(frames[index]!, aspect)))) {
-    report.tempo = { backswing, downswing, ratio: rounded(backswing / downswing), uncertainty };
+    // Propagate each event's sample interval jointly: moving the top changes
+    // both durations in opposite directions. These are sampling bounds, not
+    // calibrated accuracy bounds or proof of ball contact.
+    const bounds = (phase: keyof SwingPhases): [number, number] => {
+      const index = phases[phase], time = frames[index]!.t;
+      const bracket = phase === "top" ? report.timing?.topWindow : phase === "impact" ? report.timing?.impactWindow : undefined;
+      return bracket ? [frames[bracket[0]]!.t, frames[bracket[1]]!.t] :
+        [(time + (frames[index - 1]?.t ?? time)) / 2, (time + (frames[index + 1]?.t ?? time)) / 2];
+    };
+    const [a0, a1] = bounds("address"), [t0, t1] = bounds("top"), [i0, i1] = bounds("impact");
+    if (t0 > a1 && i0 > t1) report.tempo = { backswing, downswing, ratio: rounded(backswing / downswing), uncertainty,
+      ratioRange: [(t0 - a1) / (i1 - t0), (t1 - a0) / (i0 - t1)] };
+  }
+  if (report.tempo) {
     report.observations.push({ title: "Swing rhythm", detail: `Backswing-to-downswing timing is approximately ${report.tempo.ratio}:1. Recorded times are ${backswing.toFixed(2)}s and ${downswing.toFixed(2)}s; slow-motion recording changes these durations. Contact timing is estimated from the hand path.` });
   }
   const hip = report.readings.find((reading) => reading.id === "hips_impact");

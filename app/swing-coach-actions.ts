@@ -2,12 +2,11 @@
 
 import { z } from "zod";
 import * as repo from "@/lib/db/repo";
-import { reviewFaceOn } from "@/lib/golf/face-on-review";
-import { unpackFrames } from "@/lib/golf/pose";
-import { cachedFaceOnPractice, coachFaceOn, faceOnFingerprint, type FaceOnPractice } from "@/lib/ai/face-on-coach";
+import { cachedSwingFocus, coachSwingFocus, swingFocusFingerprint } from "@/lib/ai/swing-focus";
+import type { SwingFocus } from "@/lib/golf/swing-focus";
 import { getProvider } from "@/lib/ai/provider";
 
-export async function getSwingCoachingAction(sessionId: string): Promise<{ ok: boolean; practice?: FaceOnPractice }> {
+export async function getSwingCoachingAction(sessionId: string): Promise<{ ok: boolean; focus?: SwingFocus }> {
   const user = await repo.currentUser();
   if (!user || !z.string().min(1).max(80).safeParse(sessionId).success) return { ok: false };
   try {
@@ -16,10 +15,10 @@ export async function getSwingCoachingAction(sessionId: string): Promise<{ ok: b
     if (!session || !model?.imageFrames || !model.aspect) return { ok: false };
     if (model.clip && (Math.abs(model.clip[0] - (session.clip_start ?? 0)) > 0.1 ||
         (session.clip_end !== null && Math.abs(model.clip[1] - session.clip_end) > 0.1))) return { ok: false };
-    const review = reviewFaceOn(unpackFrames(model), model.aspect, model.cameraAngle ?? (session.camera_angle === "down_the_line" ? "down_the_line" : session.camera_angle === "face_on" ? "face_on" : "other"));
-    if (review.status === "record_again") return { ok: false };
-    const key = faceOnFingerprint(review, session.club, getProvider().model);
-    const practice = await cachedFaceOnPractice(`${user.id}:${sessionId}`, key, () => coachFaceOn(review, session.club));
-    return { ok: true, practice };
+    const view = session.camera_angle === "face_on" || session.camera_angle === "down_the_line" ? session.camera_angle : "other";
+    const current = { ...model, cameraAngle: model.cameraAngle ?? view };
+    const key = swingFocusFingerprint(current, session.club, getProvider().model);
+    const focus = await cachedSwingFocus(`${user.id}:${sessionId}`, key, () => coachSwingFocus(current, session.club));
+    return { ok: true, focus };
   } catch { return { ok: false }; }
 }

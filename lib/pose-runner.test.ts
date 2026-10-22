@@ -20,6 +20,12 @@ describe("choosing a tracked golfer", () => {
     profile[23]!.visibility = 0.1;
     assert.equal(selectTrackedPose([profile], undefined, "down_the_line"), -1);
   });
+
+  it("prefers the central golfer and abstains when identity is ambiguous", () => {
+    assert.equal(selectTrackedPose([pose(0.8, 0.7), pose(0.5)]), 1);
+    assert.equal(selectTrackedPose([pose(0.49), pose(0.51)], pose(0.5)), -1);
+    assert.equal(selectTrackedPose([pose(0.5, 0.8)], pose(0.5, 0.4)), -1);
+  });
 });
 
 describe("adaptive swing sampling", () => {

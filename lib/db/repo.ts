@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { HandicapEntry, PlayerProfile, User } from "../../types/player";
@@ -318,7 +319,7 @@ export async function getPracticeSession(
   const sb = await client();
   if (!sb) {
     const s = store();
-    const session = s.practiceSessions.find((x) => x.id === sessionId);
+    const session = s.practiceSessions.find((x) => x.id === sessionId && x.user_id === userId);
     if (!session) return null;
     return {
       session,
@@ -397,6 +398,7 @@ export async function deletePracticeSession(userId: string, sessionId: string): 
   const sb = await client();
   if (!sb) {
     const s = store();
+    if (!s.practiceSessions.some((session) => session.id === sessionId && session.user_id === userId)) return;
     s.practiceSessions = s.practiceSessions.filter((session) => session.id !== sessionId);
     s.practiceItems = s.practiceItems.filter((item) => item.session_id !== sessionId);
     s.drillAttempts = s.drillAttempts.filter((attempt) => attempt.session_id !== sessionId);
@@ -595,7 +597,11 @@ export async function saveSwingClip(
 
 export async function getSwingModel(userId: string, sessionId: string): Promise<PoseModel | null> {
   const sb = await client();
-  if (!sb) return expandMotionModel(store().swingModels[sessionId] ?? null);
+  if (!sb) {
+    const state = store();
+    if (!state.swingSessions.some((session) => session.id === sessionId && session.user_id === userId)) return null;
+    return expandMotionModel(state.swingModels[sessionId] ?? null);
+  }
   const { data, error } = await sb
     .from("swing_sessions")
     .select("pose_model")
@@ -606,23 +612,42 @@ export async function getSwingModel(userId: string, sessionId: string): Promise<
   return expandMotionModel((data as { pose_model: PoseModel | null } | null)?.pose_model ?? null);
 }
 
+export type SwingWriteGuard = {
+  revision: string | null; videoUrl: string | null; clipStart: number | null; clipEnd: number | null;
+};
+
 export async function saveSwingModel(
   userId: string,
   sessionId: string,
   model: PoseModel,
+  guard?: SwingWriteGuard,
 ): Promise<void> {
   const sb = await client();
-  const stored = compactMotionModel(model);
+  const stored = compactMotionModel({ ...model, revision: randomUUID() });
   if (!sb) {
-    store().swingModels[sessionId] = stored;
+    const state = store();
+    const session = state.swingSessions.find((row) => row.id === sessionId && row.user_id === userId);
+    if (!session) throw new Error("That swing recording is unavailable.");
+    if (guard && ((state.swingModels[sessionId]?.revision ?? null) !== guard.revision || session.video_url !== guard.videoUrl ||
+        session.clip_start !== guard.clipStart || session.clip_end !== guard.clipEnd))
+      throw new Error("This recording changed during analysis. Reload to use the latest version.");
+    state.swingModels[sessionId] = stored;
     return;
   }
-  const { error } = await sb
+  let query = sb
     .from("swing_sessions")
     .update({ pose_model: stored, analysis_status: "processed" })
     .eq("id", sessionId)
     .eq("user_id", userId);
+  if (guard) {
+    query = guard.revision === null ? query.is("pose_model->>revision", null) : query.eq("pose_model->>revision", guard.revision);
+    query = guard.videoUrl === null ? query.is("video_url", null) : query.eq("video_url", guard.videoUrl);
+    query = guard.clipStart === null ? query.is("clip_start", null) : query.eq("clip_start", guard.clipStart);
+    query = guard.clipEnd === null ? query.is("clip_end", null) : query.eq("clip_end", guard.clipEnd);
+  }
+  const { data, error } = await query.select("id").maybeSingle();
   if (error) throw new Error(`saveSwingModel: ${error.message}`);
+  if (!data) throw new Error("This recording changed during analysis. Reload to use the latest version.");
 }
 
 export async function deleteSwingFinding(userId: string, findingId: string): Promise<void> {

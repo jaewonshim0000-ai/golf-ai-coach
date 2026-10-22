@@ -12,6 +12,7 @@ import { PRACTICE_BLOCK_LABELS } from "@/types/practice";
 import { cn, percent } from "@/lib/utils";
 import { TargetPlot } from "@/components/practice/target-plot";
 import { TestTracker } from "@/components/practice/test-tracker";
+import { Disclosure } from "@/components/ui/disclosure";
 import { practiceTest } from "@/lib/practice/tests";
 import {
   Badge,
@@ -104,7 +105,8 @@ export function SessionRunner({
   if (complete) {
     const skipped = items.filter((block) => !logged(block));
     return (
-      <div className="space-y-4">
+      <Disclosure title="Saved drill results" count={items.filter(logged).length} description="Open to review recorded balls and scores.">
+        <div className="space-y-4">
         {items.filter(logged).map((block) => tracker(block, true))}
         {skipped.length > 0 ? (
           <p className="text-[12px] text-fg-subtle">
@@ -112,6 +114,7 @@ export function SessionRunner({
           </p>
         ) : null}
       </div>
+      </Disclosure>
     );
   }
   if (!item) return null;

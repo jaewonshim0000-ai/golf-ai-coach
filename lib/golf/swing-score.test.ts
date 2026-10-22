@@ -109,4 +109,48 @@ describe("visible swing coaching score", () => {
     motion.readings.find((row) => row.id === "head_impact")!.unit = "% body height";
     assert.equal(scoreSwing(motion).total, null); // never substitute the wrong scale
   });
+
+  it("requires a contact correction to hold across the observed head, posture and hip intervals", () => {
+    const faceOn = report();
+    const head = faceOn.readings.find((row) => row.id === "head_impact")!;
+    head.value = 25; head.range = [8, 40];
+    assert.equal(scoreSwing(faceOn).priorities.some((item) => item.id === "head"), false);
+    assert.deepEqual(scoreSwing(faceOn).components.find((item) => item.id === "head")?.scoreRange, [0, 100]);
+    head.range = [-40, -25];
+    assert.equal(scoreSwing(faceOn).priorities[0]?.id, "head");
+    head.range = [-40, 40];
+    assert.equal(scoreSwing(faceOn).priorities.length, 0); // crosses setup
+
+    const behind = report("down_the_line");
+    const torso = behind.readings.find((row) => row.id === "torso_impact")!;
+    const hip = behind.readings.find((row) => row.id === "hips_impact")!;
+    torso.value = 5; torso.range = [5, 30];
+    hip.value = 12; hip.range = [-2, 12];
+    let score = scoreSwing(behind, "right");
+    assert.equal(score.priorities.length, 0);
+    assert.deepEqual(score.reviews.map((item) => item.id), ["posture", "hip_depth"]);
+    torso.range = [5, 15]; hip.range = [8, 12];
+    score = scoreSwing(behind, "right");
+    assert.deepEqual(score.priorities.map((item) => item.id), ["hip_depth", "posture"]);
+    hip.value = -12; hip.range = [-12, -8];
+    assert.deepEqual(scoreSwing(behind, "left").components.find((item) => item.id === "hip_depth")?.scoreRange,
+      score.components.find((item) => item.id === "hip_depth")?.scoreRange);
+  });
+
+  it("uses the entire timing range before calling rhythm rushed and rejects invalid ranges", () => {
+    const motion = report();
+    motion.tempo!.ratio = 5;
+    motion.tempo!.ratioRange = [3.5, 6];
+    assert.equal(scoreSwing(motion).priorities.length, 0);
+    assert.equal(scoreSwing(motion).reviews[0]?.id, "tempo");
+    motion.tempo!.ratioRange = [4.8, 6];
+    assert.equal(scoreSwing(motion).priorities[0]?.id, "tempo");
+    motion.tempo!.ratio = 1;
+    motion.tempo!.ratioRange = [0.8, 1.2];
+    assert.equal(scoreSwing(motion).priorities[0]?.id, "tempo");
+    for (const range of [[NaN, 6], [6, 4], [0, 5], [1, Infinity]] as [number, number][]) {
+      motion.tempo!.ratioRange = range;
+      assert.equal(scoreSwing(motion).components.some((item) => item.id === "tempo"), false);
+    }
+  });
 });

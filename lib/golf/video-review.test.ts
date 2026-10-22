@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { faceOnSwing } from "./__fixtures__/face-on";
 import { analyseVideoModel, buildVideoModel } from "./video-review";
 import { compactMotionModel, expandMotionModel } from "./motion-storage";
+import { getSwingFocus } from "./swing-focus";
 
 const options = { aspect: 9 / 16, view: "face_on" as const, handedness: "right" as const, clip: [0, 2.4] as [number, number] };
 
@@ -41,6 +42,11 @@ describe("saved 2D video review", () => {
     assert.equal(report.readings.some((reading) => reading.id.startsWith("shoulders_")), false);
   });
 
+  it("preserves the supplied ball side across compact storage for down-the-line checks", () => {
+    const model = buildVideoModel(faceOnSwing(), { ...options, view: "down_the_line", ballSide: "left" });
+    assert.equal(expandMotionModel(compactMotionModel(model))?.ballSide, "left");
+  });
+
   it("preserves manual timing corrections on subsequent analysis and reload", () => {
     const phases = { address: 5, top: 35, impact: 43 };
     const model = buildVideoModel(faceOnSwing(), { ...options, phases });
@@ -59,5 +65,22 @@ describe("saved 2D video review", () => {
     assert.equal(report.usable, false);
     assert.equal(report.readings.length, 0);
     assert.equal(model.imageFrames?.length, 30);
+  });
+
+  it("recomputes contact and rhythm uncertainty from saved image tracks and preserves a timing correction", () => {
+    const frames = faceOnSwing();
+    for (const frame of frames.slice(43)) frame.imageLandmarks![0]!.x = Math.min(0.65, 0.56 + (frame.t - 1.72) * 0.75);
+    const model = buildVideoModel(frames, { ...options, aspect: 1 });
+    const restored = expandMotionModel(compactMotionModel(model))!;
+    const report = analyseVideoModel(restored);
+    assert.deepEqual(report.timing?.impactWindow, [43, 45]);
+    assert.deepEqual(report.readings.find((row) => row.id === "head_impact")?.range, [12.5, 25]);
+    assert.ok(report.tempo?.ratioRange);
+    assert.equal(getSwingFocus(report).status, "needs_input");
+    restored.phasesConfirmed = true;
+    restored.timingStatus = "confirmed";
+    const confirmed = analyseVideoModel(expandMotionModel(compactMotionModel(restored))!);
+    assert.equal(confirmed.timing?.impactWindow, undefined);
+    assert.equal(getSwingFocus(confirmed).id, "head");
   });
 });

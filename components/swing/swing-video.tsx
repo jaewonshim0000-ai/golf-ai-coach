@@ -10,10 +10,10 @@ import {
 import { packFrames, unpackFrames, type PoseModel } from "@/lib/golf/pose";
 import { trustworthyFrames, type MotionView } from "@/lib/golf/motion-analysis";
 import { reviewFaceOn } from "@/lib/golf/face-on-review";
-import { analyseVideoModel } from "@/lib/golf/video-review";
+import { reviewSwing } from "@/lib/swing/review";
 import { BodyOverlay } from "@/components/swing/body-overlay";
 import { SwingTiming } from "@/components/swing/swing-timing";
-import { readSwing } from "@/lib/pose-runner";
+import { captureSwing } from "@/lib/pose-runner";
 import { clampClip, clipWindow, getClip } from "@/lib/video-store";
 import { cn } from "@/lib/utils";
 import { browserClient } from "@/lib/db/supabase";
@@ -70,7 +70,7 @@ export function SwingVideo({
   const savedModel = model?.motionVersion === 1 && model.imageFrames ? model : null;
   const tracked = useMemo(() => savedModel ? trustworthyFrames(unpackFrames(savedModel), savedModel.aspect ?? aspect, view) : [], [savedModel, aspect, view]);
   const review = useMemo(() => savedModel ? reviewFaceOn(unpackFrames(savedModel), savedModel.aspect ?? aspect, view) : null, [savedModel, aspect, view]);
-  const report = useMemo(() => savedModel ? analyseVideoModel(savedModel) : null, [savedModel]);
+  const report = useMemo(() => savedModel ? reviewSwing(savedModel).report : null, [savedModel]);
   const reviewWindow: [number, number] | null = savedModel && report?.phases
     ? [savedModel.t[report.phases.address]!, Math.min(savedModel.t.at(-1)!, savedModel.t[report.phases.impact]! + 0.25)]
     : review?.window ?? null;
@@ -149,9 +149,10 @@ export function SwingVideo({
     try {
       if (!element.videoWidth || !element.videoHeight) throw new Error("The video has not loaded yet.");
       const span: [number, number] = end > start ? [start, end] : [0, element.duration];
-      const posed = await readSwing(element, span[0], span[1], (done, total) =>
-        setProgress("Tracking visible joints: " + Math.min(100, Math.round(done / total * 100)) + "%"), view, run.signal,
+      const captured = await captureSwing(element, span[0], span[1], (done, total, stage) =>
+        setProgress((stage === "scouting" ? "Finding your swing: " : "Tracking visible joints: ") + Math.min(100, Math.round(done / total * 100)) + "%"), view, run.signal,
       );
+      const posed = captured.frames;
       run.signal.throwIfAborted();
       if (posed.length < 8) throw new Error("Too few frames could be tracked. Keep your whole body visible and try a brighter recording.");
       setProgress("Saving your video review");
@@ -164,7 +165,11 @@ export function SwingVideo({
         cameraAngle: view,
         clip: span,
         reconstruct: false,
+        capture: captured.capture,
+        expectedRevision: model?.revision ?? null,
+        sourceVideo: videoUrl,
       });
+      run.signal.throwIfAborted();
       setAnalysis(saved);
       if (saved.ok) { setOverlay(true); router.refresh(); }
     } catch (error) {
@@ -176,7 +181,7 @@ export function SwingVideo({
           : error instanceof Error ? error.message : "Could not track this video. Try again.",
       });
     } finally {
-      analysisRun.current = null;
+      if (analysisRun.current === run) analysisRun.current = null;
       if (!run.signal.aborted) element.currentTime = wasTime;
       setProgress(null);
       setAnalysing(false);
@@ -309,12 +314,12 @@ export function SwingVideo({
         <div className="rounded-xl border border-border bg-surface-2 p-3">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
-              <p className="dsp text-[10px] tracking-[0.17em] text-fg-subtle">2D swing analysis</p>
+              <p className="dsp text-[10px] tracking-[0.17em] text-fg-subtle">Swing analysis</p>
               <p className="mt-1 text-[11px] leading-[1.5] text-fg-muted">
                 {!crossOrigin
                   ? "This video will play but cannot be read, because its storage does not allow it."
                   : (progress ??
-                    "Tracks visible movement and adds guides to your recording. The first review downloads the tracking model; later reviews reuse it.")}
+                    "Find the biggest problem in your swing and get steps to fix it.")}
               </p>
             </div>
             <Button

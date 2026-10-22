@@ -25,7 +25,9 @@ import {
 } from "@/lib/ai/vision";
 import { METRICS_BY_ID } from "@/lib/golf/swing-metrics";
 import { reviewFaceOn } from "@/lib/golf/face-on-review";
-import { analyseVideoModel, buildVideoModel } from "@/lib/golf/video-review";
+import { buildVideoModel } from "@/lib/golf/video-review";
+import { reviewSwing } from "@/lib/swing/review";
+import type { CaptureManifest } from "@/lib/swing/contracts";
 import {
   unpackFrames,
   type PackedLandmark,
@@ -598,9 +600,20 @@ export async function deletePracticeSessionAction(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  const result = await deletePracticeSessionFromListAction(_prev, formData);
+  if (!result.ok) return result;
+  redirect("/practice");
+}
+
+export async function deletePracticeSessionFromListAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   const user = await requireUser();
-  const sessionId = String(formData.get("session_id") ?? "");
-  if (!sessionId) return { ok: false, message: "Missing practice session." };
+  const parsed = z.object({ session_id: z.string().trim().min(1).max(80), confirm: z.literal("delete") })
+    .safeParse({ session_id: formData.get("session_id"), confirm: formData.get("confirm") });
+  if (!parsed.success) return { ok: false, message: "Confirm the session you want to delete." };
+  const sessionId = parsed.data.session_id;
 
   try {
     const practice = await repo.getPracticeSession(user.id, sessionId);
@@ -611,7 +624,7 @@ export async function deletePracticeSessionAction(
   }
 
   revalidatePath("/", "layout");
-  redirect("/practice");
+  return { ok: true, id: sessionId, message: "Session deleted." };
 }
 
 // ------------------------------------------------------------------- swing
@@ -953,6 +966,9 @@ export async function savePoseModelAction(input: {
   clip?: [number, number];
   phases?: SwingPhases;
   reconstruct?: boolean;
+  capture?: CaptureManifest;
+  expectedRevision?: string | null;
+  sourceVideo?: string | null;
 }): Promise<PoseState> {
   const user = await requireUser();
   // Keep the legacy tuple validation while accepting image-only uploads.
@@ -962,6 +978,11 @@ export async function savePoseModelAction(input: {
   const [sessions, profile] = await Promise.all([repo.getSwingSessions(user.id), repo.getProfile(user.id)]);
   const session = sessions.find((item) => item.id === parsed.data.swing_session_id);
   if (!session) return { ok: false, message: "That swing session does not exist." };
+  if (parsed.data.expectedRevision === undefined) return { ok: false, message: "Reload this recording before analyzing it." };
+  if (input.sourceVideo !== session.video_url) return { ok: false, message: "This recording changed during analysis. Reload to use the latest video." };
+  if (parsed.data.clip && (Math.abs(parsed.data.clip[0] - (session.clip_start ?? 0)) > 0.1 ||
+      (session.clip_end !== null && Math.abs(parsed.data.clip[1] - session.clip_end) > 0.1)))
+    return { ok: false, message: "The trim changed during analysis. Review the current clip again." };
 
   const detected = unpackFrames(parsed.data);
   return storeMotion(user.id, session.id, profile?.dominant_hand ?? "right", detected, {
@@ -971,6 +992,8 @@ export async function savePoseModelAction(input: {
     ballSide: parsed.data.ballSide,
     phases: parsed.data.phases,
     reconstruct: parsed.data.reconstruct,
+    capture: parsed.data.capture,
+    guard: { revision: parsed.data.expectedRevision, videoUrl: session.video_url, clipStart: session.clip_start, clipEnd: session.clip_end },
   });
 }
 
@@ -982,12 +1005,21 @@ export async function savePoseModelAction(input: {
 export async function retimeSwingAction(input: {
   swing_session_id: string;
   phases: SwingPhases;
+  expectedRevision?: string | null;
 }): Promise<PoseState> {
   const user = await requireUser();
   const parsed = retimeSchema.safeParse(input);
   if (!parsed.success) return { ok: false, message: "Address, top and impact must be three frames in that order." };
   const model = await repo.getSwingModel(user.id, parsed.data.swing_session_id);
   if (!model) return { ok: false, message: "Measure the swing before moving its phases." };
+  if (parsed.data.expectedRevision === undefined || parsed.data.expectedRevision !== (model.revision ?? null))
+    return { ok: false, message: "This recording changed. Reload before adjusting its timing." };
+  const sessions = await repo.getSwingSessions(user.id);
+  const session = sessions.find((row) => row.id === parsed.data.swing_session_id);
+  if (!session) return { ok: false, message: "That swing recording is unavailable." };
+  if (model.clip && (Math.abs(model.clip[0] - (session.clip_start ?? 0)) > 0.1 ||
+      (session.clip_end !== null && Math.abs(model.clip[1] - session.clip_end) > 0.1)))
+    return { ok: false, message: "The trim changed. Review the current clip before adjusting its timing." };
   if (parsed.data.phases.impact >= model.t.length) {
     return { ok: false, message: "Impact is past the end of the clip." };
   }
@@ -999,6 +1031,8 @@ export async function retimeSwingAction(input: {
     ballSide: model.ballSide,
     phases: parsed.data.phases,
     reconstructionVersion: model.reconstructionVersion,
+    capture: model.capture,
+    guard: { revision: parsed.data.expectedRevision, videoUrl: session.video_url, clipStart: session.clip_start, clipEnd: session.clip_end },
   });
 }
 
@@ -1007,21 +1041,22 @@ async function storeMotion(
   sessionId: string,
   handedness: "right" | "left",
   frames: PoseFrame[],
-  options: { aspect: number; view: MotionView; phases?: SwingPhases; clip?: [number, number]; ballSide?: "left" | "right"; reconstruct?: boolean; reconstructionVersion?: 1 },
+  options: { aspect: number; view: MotionView; phases?: SwingPhases; clip?: [number, number]; ballSide?: "left" | "right"; reconstruct?: boolean; reconstructionVersion?: 1;
+    capture?: CaptureManifest; guard: repo.SwingWriteGuard },
 ): Promise<PoseState> {
   const updatedModel = buildVideoModel(frames, { ...options, handedness });
-  const report = analyseVideoModel(updatedModel);
+  const { report, blocks } = reviewSwing(updatedModel);
   const review = reviewFaceOn(frames, options.aspect, options.view);
   try {
-    await repo.saveSwingModel(userId, sessionId, updatedModel);
+    await repo.saveSwingModel(userId, sessionId, updatedModel, options.guard);
     await repo.deleteSwingMeasurementsBySource(userId, sessionId, "pose");
   } catch (error) { return asError(error); }
   revalidatePath(`/swing/${sessionId}`);
   revalidatePath("/swing");
   return { ok: true, measurements: report.readings.length || review.metrics.length,
-    message: report.usable ? "Your 2D swing analysis is ready. Review the measured positions below."
+    message: blocks[0] ?? (report.usable ? "Your 2D swing analysis is ready. Review the measured positions below."
       : review.status !== "record_again" ? "Your visible movement review is ready. Exact swing timing is unclear."
-      : "Your video tracks are saved. Review the recording notes below or adjust swing timing." };
+      : "Your video tracks are saved. Review the recording notes below or adjust swing timing.") };
 }
 
 // -------------------------------------------------------------------- misc// -------------------------------------------------------------------- misc

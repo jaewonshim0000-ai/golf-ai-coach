@@ -1,18 +1,19 @@
 import type { Landmark } from "./golf/pose";
+import type { PoseVariant } from "./swing/policy";
 
 export type DetectedLandmark = Landmark & { presence?: number };
 export type PoseDetection = { worldLandmarks: DetectedLandmark[][]; landmarks: DetectedLandmark[][] };
-export type PoseDetector = { detect: (image: ImageBitmap | HTMLVideoElement) => PoseDetection; close: () => void };
+export type PoseDetector = { detect: (image: ImageBitmap | HTMLVideoElement | HTMLCanvasElement) => PoseDetection; close: () => void };
 
 // Match the installed JS runtime to its WASM. Pin model assets for repeatability.
 const WASM = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm";
-const MODEL = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_heavy/float16/1/pose_landmarker_heavy.task";
+const modelUrl = (variant: PoseVariant) => `https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_${variant}/float16/1/pose_landmarker_${variant}.task`;
 
-export async function createPoseDetector(delegate: "GPU" | "CPU"): Promise<PoseDetector> {
+export async function createPoseDetector(delegate: "GPU" | "CPU", variant: PoseVariant = "heavy"): Promise<PoseDetector> {
   const { FilesetResolver, PoseLandmarker } = await import("@mediapipe/tasks-vision");
   const fileset = await FilesetResolver.forVisionTasks(WASM);
   return PoseLandmarker.createFromOptions(fileset, {
-    baseOptions: { modelAssetPath: MODEL, delegate },
+    baseOptions: { modelAssetPath: modelUrl(variant), delegate },
     // Refinement seeks backwards, so VIDEO mode's tracking history is invalid.
     runningMode: "IMAGE",
     numPoses: 2,
@@ -25,17 +26,17 @@ export async function createPoseDetector(delegate: "GPU" | "CPU"): Promise<PoseD
 }
 
 /** Retry a failed GPU initialization or inference once using the CPU. */
-export function resilientDetector() {
+export function resilientDetector(variant: PoseVariant = "heavy") {
   let detector: PoseDetector | undefined;
   let delegate: "GPU" | "CPU" = "GPU";
   let closed = false;
   const load = async () => {
-    const loaded = await createPoseDetector(delegate);
+    const loaded = await createPoseDetector(delegate, variant);
     if (closed) { loaded.close(); throw new DOMException("Analysis cancelled.", "AbortError"); }
     detector = loaded;
   };
   return {
-    async detect(image: ImageBitmap | HTMLVideoElement): Promise<PoseDetection> {
+    async detect(image: ImageBitmap | HTMLVideoElement | HTMLCanvasElement): Promise<PoseDetection> {
       if (closed) throw new DOMException("Analysis cancelled.", "AbortError");
       try {
         if (!detector) await load();

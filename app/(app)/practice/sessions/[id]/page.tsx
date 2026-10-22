@@ -78,11 +78,14 @@ export default async function PracticeSessionPage({
         <CardContent className="space-y-3">
           <p className="text-sm font-medium">{summary.data.headline}</p>
           {summary.data.results.length > 0 ? (
+            <details>
+              <summary className="min-h-10 cursor-pointer py-2 text-sm font-medium text-accent">Session results ({summary.data.results.length})</summary>
             <ul className="space-y-1 text-sm text-fg-muted">
               {summary.data.results.map((line, index) => (
                 <li key={index}>{line}</li>
               ))}
             </ul>
+            </details>
           ) : null}
           <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
             <Badge

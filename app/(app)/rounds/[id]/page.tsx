@@ -6,6 +6,7 @@ import { SourceBadge } from "@/components/dashboard/sections";
 import { DeleteRoundButton } from "@/components/rounds/delete-round";
 import { DivergingBars } from "@/components/charts";
 import { ScorecardSummary } from "@/components/rounds/scorecard-summary";
+import { Disclosure } from "@/components/ui/disclosure";
 import { classicStats, holeLines } from "@/lib/analytics/classic";
 import {
   Badge,
@@ -227,8 +228,7 @@ export default async function RoundDetailPage({
             <ShotHighlights title="Biggest gains" shots={biggestGains} tone="good" />
           </div>
 
-          <div className="space-y-3">
-            <h2 className="dsp text-[26px] font-semibold leading-none tracking-[-0.01em]">Hole by hole</h2>
+          <Disclosure title="Hole by hole" count={holes.length} description="Open to review each hole and its shots.">
             <div className="space-y-2">
               {holes.map((hole) => (
                 <details
@@ -337,7 +337,7 @@ export default async function RoundDetailPage({
                 </details>
               ))}
             </div>
-          </div>
+          </Disclosure>
         </>
       )}
 

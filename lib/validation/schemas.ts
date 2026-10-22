@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { captureManifestSchema } from "../swing/contracts";
 
 import {
   CLUBS,
@@ -220,6 +221,8 @@ const packedPoseFrame = z
   .length(33);
 export const poseModelSchema = z
   .object({
+    capture: captureManifestSchema.optional(),
+    expectedRevision: z.string().uuid().nullable().optional(),
     swing_session_id: z.string().min(1).max(80),
     t: z.array(z.number().finite().min(0).max(3600)).min(3).max(128),
     frames: z.array(packedPoseFrame).min(3).max(128),
@@ -261,6 +264,7 @@ export const poseModelSchema = z
 /** Moving the three phases on a model already stored with the swing. */
 export const retimeSchema = z
   .object({
+    expectedRevision: z.string().uuid().nullable().optional(),
     swing_session_id: z.string().min(1).max(80),
     phases: z.object({
       address: z.number().int().min(0).max(127),

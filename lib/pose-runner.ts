@@ -4,10 +4,11 @@ import { LM, type Landmark, type PoseFrame } from "./golf/pose";
 import { findAutomaticTiming, swingSamplingWindow, trustworthyFrames, visiblePoint, type MotionView } from "./golf/motion-analysis";
 
 import { createSwingDetector } from "./pose-worker-client";
+import { runSwingCapture } from "./swing/capture";
+import type { CaptureStage } from "./swing/policy";
 
 /** Reserve half the bounded inference budget for the fast part of the swing. */
-export const POSE_SAMPLES = 64;
-const MAX_POSE_SAMPLES = 128;
+export const POSE_SAMPLES = 48;
 const DENSE_RATE = 120;
 
 type FrameCallbackVideo = HTMLVideoElement & {
@@ -75,7 +76,12 @@ export function selectTrackedPose(poses: Landmark[][], previous?: Landmark[], vi
     return view === "down_the_line" ? visiblePoint(left) ? left : visiblePoint(right) ? right : null : null;
   };
   const prior = previous ? centre(previous) : null;
-  let picked = -1, best = -Infinity;
+  const heightOf = (points: Landmark[]) => {
+    const side = [[11, 27], [12, 28]].find(([s, a]) => visiblePoint(points[s!]) && visiblePoint(points[a!]));
+    return side ? Math.abs(points[side[1]!]!.y - points[side[0]!]!.y) : null;
+  };
+  const priorHeight = previous ? heightOf(previous) : null;
+  let picked = -1, best = -Infinity, second = -Infinity, selectedHeight = 0;
   poses.forEach((points, index) => {
     const core = [LM.leftShoulder, LM.rightShoulder, LM.leftHip, LM.rightHip];
     const body = core.map((joint) => points[joint]);
@@ -87,9 +93,15 @@ export function selectTrackedPose(poses: Landmark[][], previous?: Landmark[], vi
       Math.abs((points[LM.leftAnkle]?.y ?? location.y + 0.15) - points[LM.leftShoulder]!.y);
     const separation = prior ? Math.hypot(location.x - prior.x, location.y - prior.y) : 0;
     if (prior && separation > Math.max(0.12, height * 0.45)) return;
-    const score = prior ? -separation : height - Math.abs(location.x - 0.5) * 0.2;
-    if (score > best) { best = score; picked = index; }
+    const ratio = priorHeight && height > 0 ? height / priorHeight : 1;
+    if (ratio < 0.65 || ratio > 1.35) return;
+    const score = prior ? -separation - Math.abs(Math.log(ratio)) * 0.15 : height - Math.abs(location.x - 0.5) * 1.5;
+    if (score > best) { second = best; best = score; picked = index; selectedHeight = height; }
+    else second = Math.max(second, score);
   });
+  // Similar candidates do not establish identity; abstain instead of jumping
+  // to a spectator when the detector reorders or bodies cross in the image.
+  if (best - second < Math.max(0.012, selectedHeight * 0.04)) return -1;
   return picked;
 }
 
@@ -134,90 +146,43 @@ export async function readSwing(
   view: MotionView = "other",
   signal?: AbortSignal,
 ): Promise<PoseFrame[]> {
-  const span = to > from ? to - from : video.duration;
-  const start = to > from ? from : 0;
-  if (!Number.isFinite(span) || span <= 0) return [];
+  return (await captureSwing(video, from, to, onProgress, view, signal)).frames;
+}
 
+const activeCaptures = new WeakMap<HTMLVideoElement, AbortController>();
+
+/** Browser adapter. A newer run owns the playhead and cancels its predecessor. */
+export async function captureSwing(
+  video: HTMLVideoElement, from: number, to: number,
+  onProgress?: (done: number, total: number, stage: CaptureStage) => void,
+  view: MotionView = "other", signal?: AbortSignal,
+) {
   signal?.throwIfAborted();
-  const detector = createSwingDetector(signal);
-  const wasTime = video.currentTime;
-  const wasPaused = video.paused;
+  activeCaptures.get(video)?.abort();
+  const run = new AbortController();
+  activeCaptures.set(video, run);
+  const cancel = () => run.abort(signal?.reason);
+  signal?.addEventListener("abort", cancel, { once: true });
+  const wasTime = video.currentTime, wasPaused = video.paused;
   video.pause();
-
-  const frames: PoseFrame[] = [];
-  const seenFrames = new Set<number>();
-  let inferences = 0;
-  let previous: Landmark[] | undefined;
-  /** Detect the body at one moment; false when that video frame was already read. */
-  const readAt = async (time: number) => {
-    signal?.throwIfAborted();
-    if (inferences >= MAX_POSE_SAMPLES) return;
-    const t = await seekSwingFrame(video, time, signal);
-    signal?.throwIfAborted();
-    if (!Number.isFinite(t)) return;
-    const key = Math.round(t * 1000);
-    if (seenFrames.has(key)) return;
-    seenFrames.add(key);
-    inferences++;
-    const result = await detector.detect(video);
-    signal?.throwIfAborted();
-    // Apply presence before choosing a person, not only after selection.
-    const imagePoses = result.landmarks.map((pose) => pose.map((point) => ({
-      ...point, visibility: Math.min(point.visibility ?? 0, point.presence ?? 1),
-    })));
-    const nearest = frames.reduce<PoseFrame | null>((best, frame) =>
-      !best || Math.abs(frame.t - t) < Math.abs(best.t - t) ? frame : best, null);
-    const selected = selectTrackedPose(imagePoses, nearest?.imageLandmarks ?? previous, view);
-    if (selected < 0) return;
-    const landmarks = result.worldLandmarks?.[selected];
-    const imageLandmarks = imagePoses[selected];
-    if (imageLandmarks?.length === 33) {
-      previous = imageLandmarks;
-      frames.push({
-        t,
-        landmarks: (landmarks ?? []).map((point, joint) => ({ ...point,
-          visibility: Math.min(point.visibility ?? 0, point.presence ?? 1, imageLandmarks?.[joint]?.visibility ?? 0),
-        })),
-        imageLandmarks: imageLandmarks?.map((point) => ({ ...point, visibility: Math.min(point.visibility ?? 0, point.presence ?? 1) })),
-      });
-    }
-  };
-
   try {
-    // First pass: the whole clip, evenly, to find the swing in it.
-    const coarse = POSE_SAMPLES;
-    // A fixed upper bound keeps progress monotonic as refinement is replanned.
-    const expected = MAX_POSE_SAMPLES;
-    for (let index = 0; index < coarse; index += 1) {
-      await readAt(start + (span * (index + 0.5)) / coarse);
-      onProgress?.(inferences, expected);
-    }
-
-    const aspect = video.videoWidth / video.videoHeight;
-    // Re-plan after a first refinement: the newly observed arc may resolve
-    // timing which was unavailable in the coarse pass. Leave real frames and
-    // timestamps intact, including when a requested sample decodes a repeat.
-    const attempted = new Set<number>();
-    for (let pass = 0; pass < 3 && inferences < MAX_POSE_SAMPLES; pass++) {
-      const room = MAX_POSE_SAMPLES - inferences;
-      const times = refinementTimes(frames, start, start + span - 0.001, aspect, view, Math.min(room, pass === 0 ? 40 : room))
-        .filter((time) => !attempted.has(Math.round(time * 1000000)));
-      if (!times.length) break;
-      for (const time of times) {
-        if (inferences >= MAX_POSE_SAMPLES) break;
-        attempted.add(Math.round(time * 1000000));
-        await readAt(time);
-        onProgress?.(inferences, MAX_POSE_SAMPLES);
-      }
-    }
-    onProgress?.(MAX_POSE_SAMPLES, MAX_POSE_SAMPLES);
+    return await runSwingCapture({
+      width: video.videoWidth, height: video.videoHeight, duration: video.duration,
+      decodedTimestamps: typeof video.requestVideoFrameCallback === "function",
+      seek: (time, abort) => seekSwingFrame(video, time, abort),
+      detector: (variant, abort) => {
+        const detector = createSwingDetector(abort, variant);
+        return { detect: () => detector.detect(video), close: () => detector.close() };
+      },
+    }, { select: selectTrackedPose, refine: refinementTimes }, {
+      from, to, view, signal: run.signal, progress: onProgress,
+    });
   } finally {
-    detector.close();
-    video.currentTime = wasTime;
-    if (!wasPaused && !signal?.aborted) void video.play().catch(() => undefined);
+    signal?.removeEventListener("abort", cancel);
+    if (activeCaptures.get(video) === run) {
+      activeCaptures.delete(video);
+      video.currentTime = wasTime;
+      if (!wasPaused && !signal?.aborted) void video.play().catch(() => undefined);
+    }
   }
-
-  // Keep observed x/y intact. Averaging fast-moving wrists moves contact and
-  // can turn a missed/hidden joint into a convincing but invented coordinate.
-  return frames.sort((a, b) => a.t - b.t);
 }

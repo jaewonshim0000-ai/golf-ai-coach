@@ -1,4 +1,5 @@
 import type { SwingPhase } from "./swing-metrics";
+import type { CaptureManifest } from "../swing/contracts";
 
 /**
  * Turning a pose skeleton into the twelve swing positions.
@@ -671,6 +672,9 @@ export type PackedLandmark = [number, number, number, number];
 
 export type PoseModel = {
   v: 1;
+  /** Server-generated revision for compare-and-swap writes. */
+  revision?: string;
+  capture?: CaptureManifest;
   handedness: "right" | "left";
   phases: SwingPhases;
   /** Seconds from the start of the video, one per frame. */

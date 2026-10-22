@@ -6,6 +6,7 @@ import type { Drill } from "@/types/practice";
 import { TEST_GROUPS, practiceTest, type TestGroup } from "@/lib/practice/tests";
 import { cn } from "@/lib/utils";
 import { Badge, ButtonLink, Card, CardContent, EmptyState, Input } from "@/components/ui/primitives";
+import { Disclosure } from "@/components/ui/disclosure";
 
 const GROUP_LABELS: Record<TestGroup, string> = { range: "Range", chipping: "Chipping", putting: "Putting" };
 
@@ -40,15 +41,12 @@ export function DrillLibrary({ drills }: { drills: Drill[] }) {
         const groupDrills = filtered.filter((drill) => practiceTest(drill.id)!.group === group);
         if (!groupDrills.length) return null;
         return (
-          <section key={group} aria-labelledby={`tests-${group}`} className="space-y-3">
-            <div className="flex items-baseline justify-between gap-3">
-              <h2 id={`tests-${group}`} className="text-base font-semibold">{GROUP_LABELS[group]} practice tests</h2>
-              <span className="text-xs text-fg-subtle">{group === "putting" ? "9 ten-putt tests + spiral" : group === "chipping" ? "10 tests · 100 attempts" : "10 tests · 100 shots"}</span>
-            </div>
+          <Disclosure key={group} title={`${GROUP_LABELS[group]} practice tests`} count={groupDrills.length} defaultOpen={Boolean(query.trim() || area)}
+            description={group === "putting" ? "9 ten-putt tests + spiral" : group === "chipping" ? "10 tests · 100 attempts" : "10 tests · 100 shots"}>
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               {groupDrills.map((drill) => <DrillCard key={drill.id} drill={drill} />)}
             </div>
-          </section>
+          </Disclosure>
         );
       })}
     </div>

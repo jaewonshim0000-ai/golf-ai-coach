@@ -9,13 +9,18 @@ import { resetDemoStore, store } from "./demo-store";
 import {
   DEMO_USER_ID,
   deletePracticeSession,
+  getPracticeSession,
   deleteSwingSession,
   deleteSwingMeasurementsBySource,
   getSwingSessions,
   saveSwingClip,
   getPracticeDrillPriorities,
   savePracticeDrillPriorities,
+  saveSwingModel,
+  getSwingModel,
 } from "./repo";
+import { faceOnSwing } from "../golf/__fixtures__/face-on";
+import { buildVideoModel } from "../golf/video-review";
 
 describe("practice priorities storage", () => {
   beforeEach(() => resetDemoStore());
@@ -42,6 +47,20 @@ describe("practice priorities storage", () => {
  */
 describe("swing storage", () => {
   beforeEach(() => resetDemoStore());
+
+  it("rejects stale analyses, changed trims and another player's write atomically", async () => {
+    const session = (await getSwingSessions(DEMO_USER_ID)).find((s) => s.id === "swing_1")!;
+    const model = buildVideoModel(faceOnSwing(), { aspect: 1, view: "face_on", handedness: "right" });
+    const guard = { revision: null, videoUrl: session.video_url, clipStart: session.clip_start, clipEnd: session.clip_end };
+    await saveSwingModel(DEMO_USER_ID, session.id, model, guard);
+    const saved = (await getSwingModel(DEMO_USER_ID, session.id))!;
+    assert.ok(saved.revision);
+    await assert.rejects(saveSwingModel(DEMO_USER_ID, session.id, model, guard), /changed during analysis/);
+    await assert.rejects(saveSwingModel("another-player", session.id, model, guard), /unavailable/);
+    await saveSwingClip(DEMO_USER_ID, session.id, { start: 0.2, end: 2 });
+    await assert.rejects(saveSwingModel(DEMO_USER_ID, session.id, model, { ...guard, revision: saved.revision! }), /changed during analysis/);
+    assert.equal((await getSwingModel(DEMO_USER_ID, session.id))!.revision, saved.revision);
+  });
 
   it("saves a trim on the swing itself so it survives a reload", async () => {
     await saveSwingClip(DEMO_USER_ID, "swing_1", { start: 0.4, end: 2.1 });
@@ -138,5 +157,22 @@ describe("practice storage", () => {
     assert.equal(store().practiceSessions.some((session) => session.id === sessionId), false);
     assert.equal(store().practiceItems.some((item) => item.session_id === sessionId), false);
     assert.equal(store().drillAttempts.some((attempt) => attempt.session_id === sessionId), false);
+  });
+  it("leaves other sessions, blocks and attempts intact when a practice is deleted", async () => {
+    const sessionId = store().practiceSessions[0]!.id;
+    const others = store().practiceSessions.filter((session) => session.id !== sessionId);
+    const items = store().practiceItems.filter((item) => item.session_id !== sessionId);
+    const attempts = store().drillAttempts.filter((attempt) => attempt.session_id !== sessionId);
+    await deletePracticeSession(DEMO_USER_ID, sessionId);
+    assert.deepEqual(store().practiceSessions, others);
+    assert.deepEqual(store().practiceItems, items);
+    assert.deepEqual(store().drillAttempts, attempts);
+  });
+  it("does not read or delete another player's practice", async () => {
+    const sessionId = store().practiceSessions[0]!.id;
+    const before = structuredClone(store());
+    assert.equal(await getPracticeSession("another-player", sessionId), null);
+    await deletePracticeSession("another-player", sessionId);
+    assert.deepEqual(store(), before);
   });
 });

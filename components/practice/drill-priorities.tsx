@@ -10,6 +10,7 @@ import { goalsForDrill, type RankedPracticeDrill } from "@/lib/practice/drill-pr
 import { cn } from "@/lib/utils";
 import { practiceTest, testObjective } from "@/lib/practice/tests";
 import { CLUB_LABELS, labelize } from "@/types/golf";
+import { Disclosure } from "@/components/ui/disclosure";
 
 const INITIAL: PracticePrioritiesState = { ok: false };
 
@@ -25,22 +26,24 @@ export function PracticeDrillPriorities({
   const [query, setQuery] = useState("");
   const [goal, setGoal] = useState<GoalId | "">("");
   const saved = state.drillIds ?? initialSelected;
-  const dirty = selected.length !== saved.length || selected.some((id) => !saved.includes(id));
+  const dirty = selected.length !== saved.length || selected.some((id, index) => id !== saved[index]);
   const hasRecommendations = drills.some((entry) => entry.reason);
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
+    const priorityOrder = new Map(selected.map((id, index) => [id, index]));
     return drills.filter(({ drill }) =>
       (!goal || goalsForDrill(drill).includes(goal)) &&
       (!needle || `${drill.name} ${drill.description} ${labelize(drill.skill_trained)}`.toLowerCase().includes(needle)),
-    );
-  }, [drills, goal, query]);
+    ).sort((a, b) => (priorityOrder.get(a.drill.id) ?? selected.length) - (priorityOrder.get(b.drill.id) ?? selected.length));
+  }, [drills, goal, query, selected]);
 
   function toggle(id: string) {
-    setSelected((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
+    setSelected((current) => current.includes(id) ? current.filter((item) => item !== id) : [id, ...current]);
   }
 
   return (
     <section id="practice-drills" aria-labelledby="practice-drills-title" className="space-y-3 scroll-mt-6">
+      <Disclosure title="Practice drills" count={filtered.length} description={`${selected.length} prioritized${dirty ? " · Unsaved changes" : ""} · Open to choose or start a drill.`} defaultOpen={Boolean(query.trim() || goal)}>
       <Card>
         <CardHeader className="gap-2">
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -55,8 +58,8 @@ export function PracticeDrillPriorities({
           </div>
           <p className="text-[12px] leading-relaxed text-fg-muted">
             {hasRecommendations
-              ? "The areas needing the most work from your last 10 rounds appear first. Pick any drills you want to focus on."
-              : "Pick the drills you want to focus on. Log shots or detailed scorecards and the areas needing work will move to the top."}
+              ? "Green outlines highlight suggestions from your last 10 rounds. Prioritize any drill to move it to the top."
+              : "Prioritize any drill to move it to the top. Log shots or detailed scorecards to get suggestions from your rounds."}
           </p>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -86,9 +89,9 @@ export function PracticeDrillPriorities({
         </CardContent>
       </Card>
 
-      <div className="flex items-center justify-between gap-2 text-[11px] text-fg-subtle">
+      <div className="mb-3 flex items-center justify-between gap-2 text-[11px] text-fg-subtle">
         <span className="flex items-center gap-1.5"><ListFilter className="h-3.5 w-3.5" aria-hidden />{filtered.length} of {drills.length} drills</span>
-        <span>{hasRecommendations ? "Most needed first" : "All-round practice"}</span>
+        <span>{selected.length ? "Your priorities first" : hasRecommendations ? "Most needed first" : "All-round practice"}</span>
       </div>
 
       <ol className="space-y-2.5">
@@ -96,7 +99,7 @@ export function PracticeDrillPriorities({
           const prioritized = selected.includes(drill.id);
           return (
             <li key={drill.id}>
-              <Card className={cn("transition-colors", prioritized && "border-accent ring-1 ring-accent/30")}>
+              <Card className={cn("transition-colors", reason && "outline outline-2 outline-good/70", prioritized && "bg-accent-soft")}>
                 <CardContent className="space-y-3 p-4 sm:p-5">
                   <div className="flex items-start gap-3">
                     <span className="tabular mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-surface-2 text-[11px] font-medium text-fg-subtle" aria-hidden>{index + 1}</span>
@@ -111,7 +114,7 @@ export function PracticeDrillPriorities({
                   </div>
                   {reason ? (
                     <div className="flex flex-wrap items-center gap-2 rounded-lg bg-accent-soft px-3 py-2">
-                      <Badge tone={signal === "early" ? "neutral" : "accent"}>{signal === "early" ? "Early signal" : "From your rounds"}</Badge>
+                      <Badge tone={signal === "early" ? "neutral" : "good"}>{signal === "early" ? "Early suggestion" : "Recommended"}</Badge>
                       <p className="text-[11px] leading-relaxed text-fg-muted">{reason}</p>
                     </div>
                   ) : null}
@@ -140,6 +143,7 @@ export function PracticeDrillPriorities({
         </div>
         <ButtonLink href="/practice/drills" size="sm" variant="secondary">Explore the full library</ButtonLink>
       </div>
+      </Disclosure>
     </section>
   );
 }

@@ -10,6 +10,7 @@ import { PLAN_LENGTHS, type PlanLength } from "@/lib/practice/plan";
 import { PRACTICE_BLOCK_LABELS, type PracticeBlock } from "@/types/practice";
 import { cn } from "@/lib/utils";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Field, Input } from "@/components/ui/primitives";
+import { Disclosure } from "@/components/ui/disclosure";
 
 export type PlanPreview = {
   title: string;
@@ -104,12 +105,7 @@ export function SessionBuilder({
       </Card>
 
       {preview ? (
-        <Card>
-          <CardHeader className="flex-row items-center justify-between gap-3">
-            <CardTitle>{preview.title.replace(/^./, (c) => c.toUpperCase())}</CardTitle>
-            <Badge tone="neutral">{preview.blocks.length} blocks</Badge>
-          </CardHeader>
-          <CardContent>
+        <Disclosure title={preview.title.replace(/^./, (c) => c.toUpperCase())} count={preview.blocks.length} description="Open to preview your practice blocks.">
             <ol className="space-y-2.5">
               {preview.blocks.map((block, index) => (
                 <li key={index} className="flex gap-3">
@@ -135,8 +131,7 @@ export function SessionBuilder({
                 </li>
               ))}
             </ol>
-          </CardContent>
-        </Card>
+        </Disclosure>
       ) : null}
 
       <Field label="Location (optional)">

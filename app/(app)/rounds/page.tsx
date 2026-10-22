@@ -7,6 +7,7 @@ import { Suspense } from "react";
 import { CountBars, DivergingBars, TrendLine } from "@/components/charts";
 import { BaselinePicker } from "@/components/stats/baseline-picker";
 import { StatsFilters } from "@/components/stats/filters";
+import { Disclosure } from "@/components/ui/disclosure";
 import {
   Badge,
   ButtonLink,
@@ -148,9 +149,7 @@ export default async function RoundsPage({ searchParams }: { searchParams: Promi
         <>
           {/* The hero overlaps whatever comes first; a heading has to clear it. */}
           <div className="pt-12">
-            <SectionHeading title="Last rounds" />
-          </div>
-
+            <Disclosure title="Last rounds" count={state.rounds.length} description="Open to view your scorecards and tracked rounds.">
           <div className="grid gap-2.5 md:grid-cols-2">
             {state.rounds.map((round) => {
               const stats = rebaseRound(
@@ -222,7 +221,11 @@ export default async function RoundsPage({ searchParams }: { searchParams: Promi
               );
             })}
           </div>
+            </Disclosure>
+          </div>
 
+          <Disclosure title="Round statistics" description="Open your scoring trends and performance numbers.">
+            <div className="space-y-5">
           <Card>
             <CardHeader>
               <CardTitle>Scoring</CardTitle>
@@ -337,6 +340,8 @@ export default async function RoundsPage({ searchParams }: { searchParams: Promi
               </div>
             </>
           )}
+            </div>
+          </Disclosure>
         </>
       )}
     </div>

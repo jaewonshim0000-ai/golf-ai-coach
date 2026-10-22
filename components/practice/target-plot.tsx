@@ -46,6 +46,8 @@ export function TargetPlot({
   const toSvg = ([x, y]: Point) => [50 + x * scale, 50 - y * scale] as const;
   const full = points.length >= balls;
   const pattern = missPattern(points, goal, tolerance);
+  const ticks = [-2, -1, 1, 2].map((step) => step * tolerance);
+  const tickLabel = (value: number) => `${value > 0 ? "+" : "−"}${Number(Math.abs(value).toFixed(1))}`;
 
   function place(event: React.PointerEvent<SVGSVGElement>) {
     if (disabled || full) return;
@@ -76,8 +78,15 @@ export function TargetPlot({
           )}
           onPointerDown={place}
           role="img"
-          aria-label={`${landing ? "Landing spot" : "Target"}, ${points.length} of ${balls} balls plotted${pattern && !measurement ? `. ${pattern.successes} inside ${tolerance} ${unit}` : ""}`}
+          aria-label={`${landing ? "Landing spot" : "Target"}, ${points.length} of ${balls} balls plotted${measurement ? `. X axis: left negative, right positive. Y axis: short negative, long positive. Both axes in ${unit}.` : pattern ? `. ${pattern.successes} inside ${tolerance} ${unit}` : ""}`}
         >
+          {measurement ? ticks.map((value) => {
+            const [x, y] = toSvg([value, value]);
+            return <g key={`grid-${value}`} className="stroke-border" strokeWidth={0.25} strokeDasharray="1 1.5">
+              <line x1={x} x2={x} y1={0} y2={100} />
+              <line x1={0} x2={100} y1={y} y2={y} />
+            </g>;
+          }) : null}
           {measurement ? null : chip ? (
             <>
               <circle cx={50} cy={50} r={tolerance * 2 * scale} className="fill-none stroke-border-strong" strokeDasharray="1.5 1.5" strokeWidth={0.4} />
@@ -92,13 +101,25 @@ export function TargetPlot({
               <line x1={50} x2={50} y1={0} y2={100} className="stroke-border-strong" strokeWidth={0.3} strokeDasharray="1.5 1.5" />
             </>
           )}
-          <line x1={0} x2={100} y1={50} y2={50} className="stroke-border" strokeWidth={0.3} />
+          <line x1={0} x2={100} y1={50} y2={50} className={measurement ? "stroke-fg-muted" : "stroke-border"} strokeWidth={measurement ? 0.5 : 0.3} />
+          {measurement ? <>
+            <line x1={50} x2={50} y1={7} y2={93} className="stroke-fg-muted" strokeWidth={0.5} />
+            {ticks.map((value) => {
+              const [x, y] = toSvg([value, value]);
+              return <g key={`tick-${value}`}>
+                <path d={`M ${x} 48.5 V 51.5 M 48.5 ${y} H 51.5`} className="fill-none stroke-fg-muted" strokeWidth={0.4} />
+                <text x={x} y={55} textAnchor="middle" className="fill-fg-muted text-[3px]">{tickLabel(value)}</text>
+                <text x={52.5} y={y + 1} className="fill-fg-muted text-[3px]">{tickLabel(value)}</text>
+              </g>;
+            })}
+            <text x={53} y={54.5} className="fill-fg-muted text-[3px]">0</text>
+          </> : null}
           {/* The target: a flag for a full swing, the hole for a chip. */}
           <circle cx={50} cy={50} r={chip ? 1.4 : 1.8} className="fill-fg" />
-          <text x={50} y={4.5} textAnchor="middle" className="fill-fg-subtle text-[3.2px]">Long</text>
-          <text x={50} y={98} textAnchor="middle" className="fill-fg-subtle text-[3.2px]">Short</text>
-          <text x={2} y={51.2} className="fill-fg-subtle text-[3.2px]">Left</text>
-          <text x={98} y={51.2} textAnchor="end" className="fill-fg-subtle text-[3.2px]">Right</text>
+          <text x={50} y={4.5} textAnchor="middle" className="fill-fg-subtle text-[3.2px]">{measurement ? `Long + (${unit})` : "Long"}</text>
+          <text x={50} y={98} textAnchor="middle" className="fill-fg-subtle text-[3.2px]">{measurement ? `Short − (${unit})` : "Short"}</text>
+          <text x={2} y={measurement ? 46 : 51.2} className="fill-fg-subtle text-[3.2px]">{measurement ? `Left − (${unit})` : "Left"}</text>
+          <text x={98} y={measurement ? 46 : 51.2} textAnchor="end" className="fill-fg-subtle text-[3.2px]">{measurement ? `Right + (${unit})` : "Right"}</text>
           {!measurement ? <text x={50 + tolerance * scale + 1} y={97} className="fill-good text-[3px]">
             {tolerance} {unit}
           </text> : null}
@@ -127,6 +148,7 @@ export function TargetPlot({
             );
           })}
         </svg>
+        {measurement ? <p className="mt-2 text-center text-[11px] text-fg-muted">X: left / right · Y: short / long · Both in {unit}. Target = (0, 0).</p> : null}
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2">

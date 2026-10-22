@@ -433,7 +433,9 @@ export function TodaysSession({
           </div>
         </div>
 
-        <ul className="mt-5 space-y-2">
+        <details className="mt-4">
+        <summary className="min-h-9 cursor-pointer py-2 text-[12px] font-medium text-accent">Today’s drills ({benchmarks.length})</summary>
+        <ul className="mt-2 space-y-2">
           {benchmarks.map((benchmark) => (
             <li
               key={benchmark.drill.id}
@@ -463,6 +465,7 @@ export function TodaysSession({
             </li>
           ))}
         </ul>
+        </details>
 
         <ButtonLink href={`/practice/start?goal=${session.drills[0]?.id ?? ""}`} size="lg" className="press mt-5">
           Start practice

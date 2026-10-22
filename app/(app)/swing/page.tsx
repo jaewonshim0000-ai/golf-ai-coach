@@ -9,6 +9,7 @@ import { diagnoseSwing } from "@/lib/golf/swing-metrics";
 import * as repo from "@/lib/db/repo";
 import { loadPlayerState } from "@/lib/player-state";
 import { formatDate } from "@/lib/utils";
+import { Disclosure } from "@/components/ui/disclosure";
 
 export const metadata: Metadata = { title: "Swing" };
 export const dynamic = "force-dynamic";
@@ -45,6 +46,7 @@ export default async function SwingLibraryPage() {
           message="Record or upload one face-on swing. We automatically add video guides and a supported observation."
         />
       ) : (
+        <Disclosure title="Swing recordings" count={swings.length} description="Open a recording to review your swing.">
         <div className="relative grid grid-cols-2 gap-2.5 md:grid-cols-4">
           {swings.map(({ session, diagnostic }) => (
             <Link key={session.id} href={`/swing/${session.id}`} className="group block">
@@ -74,6 +76,7 @@ export default async function SwingLibraryPage() {
             </Link>
           ))}
         </div>
+        </Disclosure>
       )}
     </div>
   );

@@ -3,8 +3,11 @@ import type { MotionReading, MotionReport } from "./motion-analysis";
 export type SwingScoreComponent = {
   id: string; label: string; score: number; weight: number; value: number; unit: string;
   time: number; evidence: string; cue: string; check: string; rubric: string;
-  /** Bounds from observed body positions across an uncertain transition. */
+  /** Bounds from observed positions or timing around an estimated event. */
   scoreRange?: [number, number];
+  /** Nominal timing score helps distinguish a questionable correction from
+   * an otherwise ordinary rhythm with a broad sampling interval. */
+  estimateScore?: number;
 };
 export type SwingScore = {
   total: number | null;
@@ -56,20 +59,22 @@ export function swingScoreChecks(report: MotionReport, ballSide?: "left" | "righ
     (!row.range || (allowRange && row.range.every(Number.isFinite) && row.range[0] <= row.range[1])));
   const absoluteRange = ([low, high]: [number, number]): [number, number] =>
     [low <= 0 && high >= 0 ? 0 : Math.min(Math.abs(low), Math.abs(high)), Math.max(Math.abs(low), Math.abs(high))];
-  const add = (component: Omit<SwingScoreComponent, "score" | "rubric">, amount: number | [number, number], free: number, severe: number) => {
+  const add = (component: Omit<SwingScoreComponent, "score" | "rubric">, amount: number | [number, number], free: number, severe: number, estimatedAmount?: number) => {
     const grade = (value: number) => Math.round(100 * (1 - Math.min(1, Math.max(0, (value - free) / (severe - free)))));
     const bounds: [number, number] = Array.isArray(amount) ? [grade(amount[1]), grade(amount[0])] : [grade(amount), grade(amount)];
     result.components.push({ ...component, score: bounds[0],
       ...(Array.isArray(amount) ? { scoreRange: bounds } : {}),
+      ...(estimatedAmount !== undefined ? { estimateScore: grade(estimatedAmount) } : {}),
       rubric: `No deduction through ${free}${component.unit}; linear deduction to 0 at ${severe}${component.unit}. Weight: ${component.weight}%.`,
     });
   };
   if (report.view === "face_on") {
-    const head = reading("head_impact", "% stance");
+    const head = reading("head_impact", "% stance", true);
     if (head && report.quality.cameraStable) add({ id: "head", label: "Head control at impact", weight: 40, value: Math.abs(head.value), unit: "% stance", time: head.time,
-      evidence: `Your head shifted ${Math.abs(head.value)}% of stance width ${head.value < 0 ? "toward the trail foot" : "toward the lead foot"} from setup at estimated impact.`,
+      evidence: head.range ? `Head shift ranges from ${head.range[0]}% to ${head.range[1]}% of stance width from setup around estimated contact. The check uses all observed positions in that interval.` :
+        `Your head shifted ${Math.abs(head.value)}% of stance width ${head.value < 0 ? "toward the trail foot" : "toward the lead foot"} from setup at estimated impact.`,
       cue: "Try five waist-high swings at half speed. Allow a natural turn while reducing a large sideways lunge; do not try to freeze your head.",
-      check: "Film from the same position and compare the head guide at setup and impact. Check strike location as well as the score." }, Math.abs(head.value), 12, 40);
+      check: "Film from the same position and compare the head guide at setup and impact. Check strike location as well as the score." }, head.range ? absoluteRange(head.range) : Math.abs(head.value), 12, 40);
     else result.missing.push("Head control needs a visible head and both ankles at impact in a face-on view.");
     const lift = reading("lift_top", "% body height", true);
     if (lift && report.quality.cameraStable) add({ id: "height", label: "Height control in the backswing", weight: 30, value: Math.abs(lift.value), unit: "% body height", time: lift.time,
@@ -80,31 +85,47 @@ export function swingScoreChecks(report: MotionReport, ballSide?: "left" | "righ
         "Compare setup and top on the overlay, then hit five half shots and check centered contact." }, lift.range ? absoluteRange(lift.range) : Math.abs(lift.value), 4, 15);
     else result.missing.push("Backswing height was not scored because the hip position could not be measured at or across the top.");
   } else {
-    const setup = reading("torso_address", "° in picture"), impact = reading("torso_impact", "° in picture");
+    const setup = reading("torso_address", "° in picture", true), impact = reading("torso_impact", "° in picture", true);
     if (setup && impact) {
       const loss = Math.max(0, setup.value - impact.value);
       add({ id: "posture", label: "Posture through impact", weight: 35, value: Math.round(loss * 10) / 10, unit: "°", time: impact.time,
-        evidence: `Visible side inclination changed from ${setup.value}° at setup to ${impact.value}° at estimated impact (${loss.toFixed(1)}° closer to upright). Rotation also affects this projection.`,
+        evidence: impact.range ? `Visible side inclination was ${setup.value}° at setup and ranges from ${impact.range[0]}° to ${impact.range[1]}° around estimated contact. Rotation also affects this projection.` :
+          `Visible side inclination changed from ${setup.value}° at setup to ${impact.value}° at estimated impact (${loss.toFixed(1)}° closer to upright). Rotation also affects this projection.`,
         cue: "Make five slow half swings while keeping room for your arms. Review whether your chest rises abruptly before impact; allow normal rotation and the rise into the finish.",
-        check: "Pause setup and estimated impact from the same camera position. Compare the visible shoulder-to-hip line and check centered contact." }, loss, 10, 30);
+        check: "Pause setup and estimated impact from the same camera position. Compare the visible shoulder-to-hip line and check centered contact." },
+      setup.range || impact.range ? [Math.max(0, (setup.range?.[0] ?? setup.value) - (impact.range?.[1] ?? impact.value)),
+        Math.max(0, (setup.range?.[1] ?? setup.value) - (impact.range?.[0] ?? impact.value))] : loss, 10, 30);
     } else result.missing.push("Posture needs the same visible shoulder and hip at setup and impact.");
-    const hip = reading("hips_impact", "% body height");
+    const hip = reading("hips_impact", "% body height", true);
     if (hip && ballSide && report.quality.cameraStable) {
-      const toward = Math.max(0, hip.value * (ballSide === "right" ? 1 : -1));
+      const direction = ballSide === "right" ? 1 : -1;
+      const toward = Math.max(0, hip.value * direction);
+      const range = hip.range?.map((value) => Math.max(0, value * direction)).sort((a, b) => a - b) as [number, number] | undefined;
       add({ id: "hip_depth", label: "Hip space toward the ball", weight: 35, value: Math.round(toward * 10) / 10, unit: "% body height", time: hip.time,
-        evidence: `The tracked hip moved ${Math.abs(hip.value)}% of visible body height ${toward > 0 ? "toward" : "away from"} the ball side at estimated impact. This is a projected hip landmark, not the rear edge of the pelvis.`,
+        evidence: range ? `The tracked hip's movement toward the ball ranges from ${range[0]}% to ${range[1]}% of visible body height around estimated contact. This is a projected hip landmark, not the rear edge of the pelvis.` :
+          `The tracked hip moved ${Math.abs(hip.value)}% of visible body height ${toward > 0 ? "toward" : "away from"} the ball side at estimated impact. This is a projected hip landmark, not the rear edge of the pelvis.`,
         cue: "Rehearse five slow turns without a ball, maintaining space between your hips and the ball line. Confirm the movement visually before trying to change it at speed.",
-        check: "Review the green address guide and the tracked hip at impact. Movement toward the ball is a review signal, not a confirmed early-extension diagnosis." }, toward, 3, 12);
+        check: "Review the green address guide and the tracked hip at impact. Movement toward the ball is a review signal, not a confirmed early-extension diagnosis." }, range ?? toward, 3, 12);
     } else result.missing.push(ballSide ? "Hip space needs the same hip visible at setup and impact." : "Select which side of your body the ball appears on, then analyze again to score hip space.");
   }
   const topTime = report.readings.find((row) => row.phase === "top" && Number.isFinite(row.time))?.time;
   if (report.tempo && Number.isFinite(report.tempo.ratio) && report.tempo.ratio > 0 && topTime !== undefined) {
     const tempo = report.tempo;
+    if (tempo.ratioRange && (!tempo.ratioRange.every((value) => Number.isFinite(value) && value > 0) ||
+        tempo.ratioRange[0] > tempo.ratioRange[1])) {
+      result.missing.push("Rhythm was not scored because its timing bounds are invalid.");
+      return result;
+    }
     const deviation = Math.max(0, 2 - tempo.ratio, tempo.ratio - 4);
+    const deviationRange: [number, number] | undefined = tempo.ratioRange ? [
+      tempo.ratioRange[1] < 2 ? 2 - tempo.ratioRange[1] : tempo.ratioRange[0] > 4 ? tempo.ratioRange[0] - 4 : 0,
+      Math.max(0, 2 - tempo.ratioRange[0], tempo.ratioRange[1] - 4),
+    ] : undefined;
     add({ id: "tempo", label: "Backswing / downswing rhythm", weight: 30, value: tempo.ratio, unit: ":1", time: topTime,
-      evidence: `Your recorded backswing-to-downswing ratio is ${tempo.ratio}:1.`,
+      evidence: tempo.ratioRange ? `Your recorded backswing-to-downswing ratio is approximately ${tempo.ratio}:1; sample timing permits ${tempo.ratioRange[0].toFixed(1)}:1 to ${tempo.ratioRange[1].toFixed(1)}:1.` :
+        `Your recorded backswing-to-downswing ratio is ${tempo.ratio}:1.`,
       cue: "Rehearse a smooth count: one-two-three going back, four coming down. Try five half-speed swings with a gradual change of direction.",
-      check: "Re-record at a constant playback speed. Compare the rhythm and strike; avoid clips with speed ramps." }, deviation, 0, 2);
+      check: "Re-record at a constant playback speed. Compare the rhythm and strike; avoid clips with speed ramps." }, deviationRange ?? deviation, 0, 2, deviation);
     result.components.at(-1)!.rubric = "No deduction for ratios from 2:1 to 4:1; linear deduction to 0 two ratio points outside that window. Weight: 30%.";
   } else result.missing.push(report.timing?.source === "occluded_transition" ?
     "Rhythm was not scored because the hands are hidden around the backswing transition. Body movement can still be scored; a new recording with the hands visible is needed to add rhythm." :

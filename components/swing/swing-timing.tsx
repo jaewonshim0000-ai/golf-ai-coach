@@ -65,7 +65,7 @@ export function SwingTiming({ model, sessionId, unresolved }: { model: PoseModel
   const save = () => {
     if (!valid) return;
     startTransition(async () => {
-      const result = await retimeSwingAction({ swing_session_id: sessionId, phases: { address, top, impact } });
+      const result = await retimeSwingAction({ swing_session_id: sessionId, phases: { address, top, impact }, expectedRevision: model.revision ?? null });
       setMessage(result.ok ? "Timing saved. Your analysis now uses these frames." : result.message ?? "The timing could not be saved.");
       if (result.ok) router.refresh();
     });

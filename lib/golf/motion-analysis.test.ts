@@ -5,6 +5,8 @@ import { LM, packFrames, unpackFrames, type PoseFrame } from "./pose";
 import { poseModelSchema } from "../validation/schemas";
 import { scoreSwing } from "./swing-score";
 import { scoreReconstruction } from "./reconstruction-score";
+import { faceOnSwing } from "./__fixtures__/face-on";
+import { getSwingFocus } from "./swing-focus";
 
 // Known positions in the image; the depth values deliberately have no meaning.
 function swing(): PoseFrame[] {
@@ -308,6 +310,89 @@ describe("projected swing movement", () => {
   it("withholds timing ratios when the impact interval is undersampled", () => {
     const sparse = swing().map((frame, index) => ({ ...frame, t: index * 0.2 }));
     assert.equal(analyseMotion(sparse, 1, "face_on", "right", phases).tempo, null);
+  });
+
+  it("carries automatic contact brackets into body readings and lets confirmed timing resolve a borderline correction", () => {
+    const frames = faceOnSwing();
+    for (const frame of frames.slice(43)) frame.imageLandmarks![LM.nose]!.x = Math.min(0.65, 0.56 + (frame.t - 1.72) * 0.75);
+    const original = structuredClone(frames);
+    const automatic = analyseMotion(frames, 1, "face_on");
+    assert.deepEqual(automatic.timing?.impactWindow, [43, 45]);
+    assert.deepEqual(automatic.readings.find((row) => row.id === "head_impact")?.range, [12.5, 25]);
+    assert.match(describeMotionReading(automatic.readings.find((row) => row.id === "head_impact")!, automatic), /contact interval/);
+    assert.equal(getSwingFocus(automatic).status, "needs_input");
+    assert.match(getSwingFocus(automatic).issue, /head position around contact/);
+    const confirmed = analyseMotion(frames, 1, "face_on", "right", automatic.phases);
+    assert.equal(confirmed.timing?.source, "marked");
+    assert.equal(confirmed.readings.find((row) => row.id === "head_impact")?.range, undefined);
+    assert.equal(getSwingFocus(confirmed).id, "head");
+    // A hidden bracketing head cannot silently narrow the possible movement.
+    frames[43]!.imageLandmarks![LM.nose]!.visibility = 0.1;
+    assert.equal(analyseMotion(frames, 1, "face_on").readings.some((row) => row.id === "head_impact"), false);
+    frames[43]!.imageLandmarks![LM.nose]!.visibility = 0.95;
+    assert.deepEqual(frames, original);
+  });
+
+  it("withholds displacement at contact when a brief camera movement passes the global percentile", () => {
+    for (const view of ["face_on", "down_the_line"] as const) {
+      const frames = faceOnSwing();
+      for (const point of frames[44]!.imageLandmarks!) point.x += 0.045;
+      const report = analyseMotion(frames, 1, view, "right", { address: 8, top: 36, impact: 44 });
+      assert.equal(report.quality.cameraStable, true); // rest of the clip is steady
+      assert.equal(report.readings.some((row) => row.id === "head_impact" || row.id === "hips_impact" || row.id === "lift_impact"), false);
+      assert.ok(report.readings.some((row) => row.id === "torso_impact"));
+      assert.ok(report.readings.some((row) => row.id === "hips_top"));
+      assert.match(report.warnings.join(" "), /at a measured position/);
+    }
+  });
+
+  it("propagates event intervals into rhythm bounds and narrows them with denser observed samples", () => {
+    const coarse = faceOnSwing();
+    const report = analyseMotion(coarse, 1, "face_on");
+    assert.ok(report.tempo?.ratioRange);
+    const [low, high] = report.tempo.ratioRange;
+    assert.ok(low < report.tempo.ratio && high > report.tempo.ratio);
+    const dense = coarse.flatMap((frame, index) => {
+      const next = coarse[index + 1];
+      return next ? [frame, { ...frame, t: (frame.t + next.t) / 2, imageLandmarks: frame.imageLandmarks!.map((point, joint) => ({ ...point,
+        x: (point.x + next.imageLandmarks![joint]!.x) / 2, y: (point.y + next.imageLandmarks![joint]!.y) / 2,
+      })) }] : [frame];
+    });
+    const refined = analyseMotion(dense, 1, "face_on");
+    assert.ok(refined.tempo?.ratioRange);
+    assert.ok(refined.tempo.ratioRange[1] - refined.tempo.ratioRange[0] < high - low);
+    // A normal nominal rhythm with broad sampling bounds needs no correction.
+    assert.equal(getSwingFocus(report).status, "clear");
+    const slowed = analyseMotion(coarse.map((frame) => ({ ...frame, t: frame.t * 2 + 7 })), 1, "face_on");
+    assert.ok(slowed.tempo?.ratioRange);
+    assert.ok(Math.abs(slowed.tempo.ratioRange[0] - low) < 1e-10);
+    assert.ok(Math.abs(slowed.tempo.ratioRange[1] - high) < 1e-10);
+  });
+
+  it("detects the same smooth hand arc across frame rates and slow-motion exports", () => {
+    const source = faceOnSwing();
+    for (const rate of [24, 30, 60, 120, 240]) {
+      const frames = Array.from({ length: Math.floor(2.4 * rate) + 1 }, (_, index): PoseFrame => {
+        const t = index / rate;
+        const frame = structuredClone(source[0]!);
+        frame.t = t;
+        const handY = t <= 0.24 ? 0.66 : t <= 1.44 ? 0.66 - (t - 0.24) / 1.2 * 0.41 :
+          t <= 1.76 ? 0.25 + (t - 1.44) / 0.32 * 0.41 : Math.max(0.12, 0.66 - (t - 1.76) * 0.8);
+        for (const joint of [LM.leftWrist, LM.rightWrist]) frame.imageLandmarks![joint]!.y = handY;
+        return frame;
+      });
+      for (const speed of [1, 4]) for (const view of ["face_on", "down_the_line"] as const) {
+        const recording = frames.map((frame) => ({ ...frame, t: frame.t * speed }));
+        const found = findMotionPhases(recording, 1, view);
+        if (rate / speed < 10) {
+          assert.equal(found, null); // stretching timestamps cannot invent missing frames
+          continue;
+        }
+        assert.ok(found, `${rate}fps, ${speed}x duration, ${view}`);
+        assert.ok(Math.abs(recording[found.top]!.t / speed - 1.44) <= 1 / rate);
+        assert.ok(Math.abs(recording[found.impact]!.t / speed - 1.76) <= 1 / rate);
+      }
+    }
   });
 
   it("retains fine image coordinates in storage and rejects out-of-order sample times", () => {

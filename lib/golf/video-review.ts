@@ -1,5 +1,6 @@
 import { analyseMotion, type MotionView } from "./motion-analysis";
 import { packFrames, unpackFrames, type PoseFrame, type PoseModel, type SwingPhases } from "./pose";
+import type { CaptureManifest } from "../swing/contracts";
 
 export function analyseVideoModel(model: PoseModel) {
   return analyseMotion(unpackFrames(model), model.aspect ?? 0, model.cameraAngle ?? "other", model.handedness,
@@ -9,7 +10,8 @@ export function analyseVideoModel(model: PoseModel) {
 /** Save the observed 2D tracks even when timing or displacement is unclear.
  * A quality limitation belongs to its reading, not to the entire recording. */
 export function buildVideoModel(frames: PoseFrame[], options: {
-  aspect: number; view: MotionView; handedness: "right" | "left"; clip?: [number, number]; phases?: SwingPhases;
+  aspect: number; view: MotionView; handedness: "right" | "left"; clip?: [number, number]; phases?: SwingPhases; capture?: CaptureManifest;
+  ballSide?: "left" | "right";
 }): PoseModel {
   const report = analyseMotion(frames, options.aspect, options.view, options.handedness, options.phases);
   return {
@@ -18,6 +20,8 @@ export function buildVideoModel(frames: PoseFrame[], options: {
     // presented as observations; analyseVideoModel recomputes automatic timing.
     phases: report.phases ?? { address: 0, top: Math.floor(frames.length / 2), impact: frames.length - 1 },
     aspect: options.aspect, cameraAngle: options.view, motionVersion: 1, clip: options.clip,
+    capture: options.capture,
+    ballSide: options.ballSide,
     phasesConfirmed: Boolean(options.phases),
     timingStatus: options.phases ? "confirmed" : report.phases ? "estimated" : "unresolved",
   };

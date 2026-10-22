@@ -6,16 +6,16 @@ import type { SwingFocus } from "@/lib/golf/swing-focus";
 import { Card, CardContent } from "@/components/ui/primitives";
 import { SwingTimingButton } from "./swing-timing";
 
-export function SwingCoach({ sessionId, focus }: { sessionId: string; focus: SwingFocus }) {
+export function SwingCoach({ sessionId, focus, referenceId }: { sessionId: string; focus: SwingFocus; referenceId?: string }) {
   const [selected, setSelected] = useState<SwingFocus | null>(null);
   useEffect(() => {
     if (!focus.id) return;
     let live = true;
-    void getSwingCoachingAction(sessionId).then((result) => {
+    void getSwingCoachingAction(sessionId, referenceId).then((result) => {
       if (live && result.ok && result.focus?.id === focus.id) setSelected(result.focus);
     }).catch(() => undefined);
     return () => { live = false; };
-  }, [sessionId, focus.id]);
+  }, [sessionId, focus.id, referenceId]);
   const plan = selected ?? focus;
   const hasIssue = plan.status === "issue";
   return <Card>

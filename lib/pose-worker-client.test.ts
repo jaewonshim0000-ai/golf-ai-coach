@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { afterEach, it, mock } from "node:test";
 import { createSwingDetector } from "./pose-worker-client";
-import { readSwing, seekSwingFrame } from "./pose-runner";
+import { captureSwing, readSwing, seekSwingFrame } from "./pose-runner";
+import { faceOnSwing } from "./golf/__fixtures__/face-on";
+import { poseModelSchema } from "./validation/schemas";
+import { packFrames, type Landmark } from "./golf/pose";
 
 const originals = new Map<string, PropertyDescriptor | undefined>();
 function global(name: string, value: unknown) {
@@ -19,18 +22,19 @@ afterEach(() => {
 class FakeWorker {
   static instances: FakeWorker[] = [];
   static respond = true;
+  static poses: Landmark[][] = [];
   onmessage?: (event: { data: unknown }) => void;
   calls = 0;
   terminated = false;
   constructor() { FakeWorker.instances.push(this); }
   postMessage(message: { id: number }) {
     this.calls++;
-    if (FakeWorker.respond) queueMicrotask(() => this.onmessage?.({ data: { id: message.id, result: { landmarks: [], worldLandmarks: [] } } }));
+    if (FakeWorker.respond) queueMicrotask(() => this.onmessage?.({ data: { id: message.id, result: { landmarks: FakeWorker.poses, worldLandmarks: [] } } }));
   }
   terminate() { this.terminated = true; }
 }
 function environment() {
-  FakeWorker.instances = []; FakeWorker.respond = true;
+  FakeWorker.instances = []; FakeWorker.respond = true; FakeWorker.poses = [];
   const close = mock.fn();
   global("Worker", FakeWorker);
   global("OffscreenCanvas", class {});
@@ -121,6 +125,21 @@ it("bounds transferred bitmap size and preserves aspect ratio for a 4K recording
   const options = prepare.mock.calls[0]!.arguments[1] as ImageBitmapOptions;
   assert.equal(options.resizeWidth, 960); assert.equal(options.resizeHeight, 540);
   detector.close();
+});
+
+it("normalizes decoded slow-motion timestamps while validating a trimmed video range", async () => {
+  environment();
+  FakeWorker.poses = [faceOnSwing()[0]!.imageLandmarks!];
+  const video = new FakeVideo(); video.duration = 3;
+  const result = await captureSwing(video as unknown as HTMLVideoElement, 1, 3, undefined, "face_on", undefined, 8);
+  assert.ok(result.frames.length >= 8);
+  assert.ok(result.frames.every((frame) => frame.t >= 1 / 8 && frame.t <= 3 / 8));
+  assert.ok(result.frames.every((frame) => Math.abs(frame.t * 8 * 60 - Math.round(frame.t * 8 * 60)) < 1e-8));
+  const packed = packFrames(result.frames);
+  assert.equal(poseModelSchema.safeParse({ swing_session_id: "trimmed-slow-motion", ...packed,
+    frames: packed.imageFrames, aspect: 720 / 1280, clip: [1, 3], slowMotion: 8, capture: result.capture,
+  }).success, true);
+  assert.equal(video.currentTime, 0);
 });
 
 it("uses the decoded timestamp and removes a cancelled seek callback", async () => {

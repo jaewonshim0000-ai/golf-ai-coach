@@ -1,5 +1,6 @@
 import { strict as assert } from "node:assert";
 import { describe, it, beforeEach } from "node:test";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 // The repository refuses to write without a connection unless demo mode is on,
 // which is the point of that guard. Set it before the module is loaded.
@@ -18,6 +19,7 @@ import {
   savePracticeDrillPriorities,
   saveSwingModel,
   getSwingModel,
+  selectAll,
 } from "./repo";
 import { faceOnSwing } from "../golf/__fixtures__/face-on";
 import { buildVideoModel } from "../golf/video-review";
@@ -174,5 +176,44 @@ describe("practice storage", () => {
     assert.equal(await getPracticeSession("another-player", sessionId), null);
     await deletePracticeSession("another-player", sessionId);
     assert.deepEqual(store(), before);
+  });
+});
+
+/**
+ * PostgREST in miniature: honours the requested range, cuts every response at
+ * the project's row limit without an error, and reports the true total.
+ */
+function cappedClient(total: number, cap: number) {
+  const rows = Array.from({ length: total }, (_, n) => ({ id: `row_${String(n).padStart(5, "0")}` }));
+  const ordered: string[] = [];
+  const sb = {
+    from: () => {
+      let from = 0, to = total;
+      const query = {
+        select: () => query,
+        eq: () => query,
+        order: (column: string) => (ordered.push(column), query),
+        range: (start: number, end: number) => ((from = start), (to = end), query),
+        then: (resolve: (value: unknown) => void) =>
+          resolve({ data: rows.slice(from, Math.min(to + 1, from + cap)), error: null, count: total }),
+      };
+      return query;
+    },
+  } as unknown as SupabaseClient;
+  return { sb, ids: rows.map((row) => row.id), ordered };
+}
+
+describe("whole-history reads", () => {
+  it("returns every row when the server cuts each response at 1,000", async () => {
+    const { sb, ids, ordered } = cappedClient(2500, 1000);
+    const rows = await selectAll<{ id: string }>(sb, "shots", "*", "getShots", (q) => q.eq("user_id", "u").order("hole_number"));
+    assert.deepEqual(rows.map((row) => row.id), ids);
+    assert.ok(ordered.includes("id"), "ties must break on id so no row changes page");
+  });
+
+  it("keeps paging when the project's row limit is below a page", async () => {
+    const { sb, ids } = cappedClient(1001, 300);
+    const rows = await selectAll<{ id: string }>(sb, "shots", "*", "getShots", (q) => q);
+    assert.deepEqual(rows.map((row) => row.id), ids);
   });
 });

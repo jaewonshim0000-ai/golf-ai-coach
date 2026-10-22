@@ -7,12 +7,13 @@ import {
   saveSwingClipAction,
   type PoseState,
 } from "@/app/actions";
-import { packFrames, unpackFrames, type PoseModel } from "@/lib/golf/pose";
+import { packFrames, parseSlowMotion, slowMotionOf, swingSpeedKey, unpackFrames, SLOW_MOTION_LABELS, SLOW_MOTION_SPEEDS, type PoseModel } from "@/lib/golf/pose";
 import { trustworthyFrames, type MotionView } from "@/lib/golf/motion-analysis";
 import { reviewFaceOn } from "@/lib/golf/face-on-review";
 import { reviewSwing } from "@/lib/swing/review";
 import { BodyOverlay } from "@/components/swing/body-overlay";
 import { SwingTiming } from "@/components/swing/swing-timing";
+import { SwingSetup } from "@/components/swing/swing-setup";
 import { captureSwing } from "@/lib/pose-runner";
 import { clampClip, clipWindow, getClip } from "@/lib/video-store";
 import { cn } from "@/lib/utils";
@@ -31,6 +32,7 @@ export function SwingVideo({
   clipEnd = null,
   model = null,
   cameraAngle = "other",
+  initialSlowMotion = 1,
   className,
 }: {
   id: string;
@@ -43,6 +45,8 @@ export function SwingVideo({
   clipEnd?: number | null;
   model?: PoseModel | null;
   cameraAngle?: MotionView;
+  /** Playback slowdown chosen when the clip was added, used until a review saves its own. */
+  initialSlowMotion?: number;
   className?: string;
 }) {
   const router = useRouter();
@@ -68,12 +72,23 @@ export function SwingVideo({
   const analyseCurrent = useRef<() => Promise<void>>(async () => undefined);
   const [view, setView] = useState<MotionView>(model?.cameraAngle ?? cameraAngle);
   const savedModel = model?.motionVersion === 1 && model.imageFrames ? model : null;
+  // Model times are real swing seconds; the video plays them `slowMotion` times slower.
+  const [slowMotion, setSlowMotion] = useState(() => savedModel ? slowMotionOf(savedModel) : initialSlowMotion);
+  const scale = slowMotionOf(savedModel);
+  // Revisiting before the first review saved: use the speed picked when the clip was added here.
+  useEffect(() => {
+    if (savedModel || initialSlowMotion !== 1) return;
+    try {
+      const picked = parseSlowMotion(localStorage.getItem(swingSpeedKey(id)));
+      if (picked !== 1) setSlowMotion(picked);
+    } catch { /* Real speed until the player changes it. */ }
+  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps -- once per swing, before its first review
   const tracked = useMemo(() => savedModel ? trustworthyFrames(unpackFrames(savedModel), savedModel.aspect ?? aspect, view) : [], [savedModel, aspect, view]);
   const review = useMemo(() => savedModel ? reviewFaceOn(unpackFrames(savedModel), savedModel.aspect ?? aspect, view) : null, [savedModel, aspect, view]);
   const report = useMemo(() => savedModel ? reviewSwing(savedModel).report : null, [savedModel]);
   const reviewWindow: [number, number] | null = savedModel && report?.phases
-    ? [savedModel.t[report.phases.address]!, Math.min(savedModel.t.at(-1)!, savedModel.t[report.phases.impact]! + 0.25)]
-    : review?.window ?? null;
+    ? [savedModel.t[report.phases.address]! * scale, Math.min(savedModel.t.at(-1)!, savedModel.t[report.phases.impact]! + 0.25) * scale]
+    : review?.window ? [review.window[0] * scale, review.window[1] * scale] : null;
   const guide = savedModel?.phasesConfirmed && report?.phases ? tracked[report.phases.address]
     : review?.guide ?? (report?.phases ? tracked[report.phases.address] : undefined);
   /*
@@ -115,7 +130,7 @@ export function SwingVideo({
   const [start, end] = draft ?? clipWindow(trim[0], trim[1], duration);
   const trimChanged = Boolean(savedModel?.clip && duration > 0 &&
     (Math.abs(savedModel.clip[0] - start) > 0.1 || Math.abs(savedModel.clip[1] - end) > 0.1));
-  const trackedModel = trimChanged || savedModel?.cameraAngle !== view ? null : savedModel;
+  const trackedModel = trimChanged || savedModel?.cameraAngle !== view || scale !== slowMotion ? null : savedModel;
   useEffect(() => {
     const element = video.current;
     if (!element || !src || !element.requestVideoFrameCallback) return;
@@ -124,14 +139,14 @@ export function SwingVideo({
     const sample = () => {
       callback = element.requestVideoFrameCallback((_, metadata) => {
         if (stopped) return;
-        setTime(metadata.mediaTime);
-        window.dispatchEvent(new CustomEvent("swing:frame", { detail: { id, time: metadata.mediaTime, paused: element.paused } }));
+        setTime(metadata.mediaTime / slowMotion);
+        window.dispatchEvent(new CustomEvent("swing:frame", { detail: { id, time: metadata.mediaTime / slowMotion, paused: element.paused } }));
         sample();
       });
     };
     sample();
     return () => { stopped = true; element.cancelVideoFrameCallback(callback); };
-  }, [src, id]);
+  }, [src, id, slowMotion]);
   async function analyse() {
     const element = video.current;
     if (!element || analysing || analysisRun.current) return;
@@ -150,7 +165,7 @@ export function SwingVideo({
       if (!element.videoWidth || !element.videoHeight) throw new Error("The video has not loaded yet.");
       const span: [number, number] = end > start ? [start, end] : [0, element.duration];
       const captured = await captureSwing(element, span[0], span[1], (done, total, stage) =>
-        setProgress((stage === "scouting" ? "Finding your swing: " : "Tracking visible joints: ") + Math.min(100, Math.round(done / total * 100)) + "%"), view, run.signal,
+        setProgress((stage === "scouting" ? "Finding your swing: " : "Tracking visible joints: ") + Math.min(100, Math.round(done / total * 100)) + "%"), view, run.signal, slowMotion,
       );
       const posed = captured.frames;
       run.signal.throwIfAborted();
@@ -164,6 +179,7 @@ export function SwingVideo({
         aspect: element.videoWidth / element.videoHeight,
         cameraAngle: view,
         clip: span,
+        slowMotion,
         reconstruct: false,
         capture: captured.capture,
         expectedRevision: model?.revision ?? null,
@@ -190,7 +206,7 @@ export function SwingVideo({
   analyseCurrent.current = analyse;
   useEffect(() => {
     if (!analysable || !src || !Number.isFinite(duration) || duration <= 0 || !crossOrigin || trackedModel || analysing || trimming || draft) return;
-    const key = `${id}:${src}:${start}:${end}:${view}`;
+    const key = `${id}:${src}:${start}:${end}:${view}:${slowMotion}`;
     if (attempted.current === key) return;
     const timer = window.setTimeout(() => {
       if (attempted.current === key) return;
@@ -198,12 +214,12 @@ export function SwingVideo({
       void analyseCurrent.current();
     }, 200);
     return () => window.clearTimeout(timer);
-  }, [analysable, id, src, duration, crossOrigin, trackedModel, analysing, trimming, view, draft, start, end]);
+  }, [analysable, id, src, duration, crossOrigin, trackedModel, analysing, trimming, view, draft, start, end, slowMotion]);
   useEffect(() => {
     const element = video.current;
     if (element && trackedModel && reviewWindow) {
       element.currentTime = reviewWindow[0];
-      element.playbackRate = 0.5;
+      element.playbackRate = scale > 1 ? 1 : 0.5;
     }
   }, [trackedModel, report, review]);
   useEffect(() => {
@@ -249,6 +265,7 @@ export function SwingVideo({
       <div className={cn("relative overflow-hidden rounded-2xl bg-black", className)} style={{ aspectRatio: aspect }}>
       <video
         data-swing-player
+        data-slow-motion={slowMotion}
         ref={video}
         src={src}
         crossOrigin={crossOrigin ? "anonymous" : undefined}
@@ -282,32 +299,33 @@ export function SwingVideo({
         onTimeUpdate={(event) => {
           const element = event.currentTarget;
           if (!element.requestVideoFrameCallback) {
-            setTime(element.currentTime);
-            window.dispatchEvent(new CustomEvent("swing:frame", { detail: { id, time: element.currentTime, paused: element.paused } }));
+            setTime(element.currentTime / slowMotion);
+            window.dispatchEvent(new CustomEvent("swing:frame", { detail: { id, time: element.currentTime / slowMotion, paused: element.paused } }));
           }
           if (analysing || end <= start) return;
           const bounds = loop && reviewWindow ? reviewWindow : [start, end];
           if (element.currentTime > bounds[1]! || element.currentTime < bounds[0]! - 0.3) element.currentTime = bounds[0]!;
         }}
         onSeeked={(event) => {
-          setTime(event.currentTarget.currentTime);
-          window.dispatchEvent(new CustomEvent("swing:frame", { detail: { id, time: event.currentTarget.currentTime, paused: event.currentTarget.paused } }));
+          setTime(event.currentTarget.currentTime / slowMotion);
+          window.dispatchEvent(new CustomEvent("swing:frame", { detail: { id, time: event.currentTarget.currentTime / slowMotion, paused: event.currentTarget.paused } }));
         }}
-        onPause={(event) => window.dispatchEvent(new CustomEvent("swing:frame", { detail: { id, time: event.currentTarget.currentTime, paused: true } }))}
+        onPause={(event) => window.dispatchEvent(new CustomEvent("swing:frame", { detail: { id, time: event.currentTarget.currentTime / slowMotion, paused: true } }))}
       />
-      {trackedModel && tracked.length > 0 && overlay && !analysing ? <BodyOverlay frames={tracked} time={time} guide={guide ?? undefined} view={view} aspect={aspect} /> : null}
+      {trackedModel && tracked.length > 0 && overlay && !analysing ? <BodyOverlay frames={tracked} time={time} guide={guide ?? undefined} view={view} aspect={aspect}
+        plane={view === "down_the_line" ? trackedModel.setup : undefined} /> : null}
       {analysing ? <div role="status" className="pointer-events-none absolute inset-x-3 bottom-3 rounded-lg bg-black/75 px-3 py-2 text-center text-[12px] text-white">{progress}</div> : null}
       </div>
       {trackedModel ? <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-fg-muted">
         <label className="flex min-h-10 cursor-pointer items-center gap-2"><input type="checkbox" checked={overlay} onChange={(event) => setOverlay(event.target.checked)} className="accent-accent" /> Show setup guides</label>
-        <span>Green hips / gold hand trail / faint setup outline</span>
+        <span>Green hips / gold hand trail / faint setup outline{view === "down_the_line" && trackedModel.setup ? " / blue plane line" : ""}</span>
       </div> : null}
       {trackedModel && reviewWindow ? <Button type="button" size="sm" variant="secondary" onClick={() => {
         const element = video.current;
         if (!element) return;
-        setLoop(true); element.currentTime = reviewWindow[0]; element.playbackRate = 0.5;
+        setLoop(true); element.currentTime = reviewWindow[0]; element.playbackRate = scale > 1 ? 1 : 0.5;
         void element.play().catch(() => setLoop(false));
-      }}>Replay with guides - half speed</Button> : null}
+      }}>{scale > 1 ? "Replay with guides" : "Replay with guides - half speed"}</Button> : null}
       {error ? <p role="alert" className="text-xs text-bad">{error}</p> : null}
       {trimChanged ? <p role="status" className="text-[11px] text-fg-muted">The clip changed. Reviewing this part of the recording automatically.</p> : null}
       {analysable ? (
@@ -343,6 +361,11 @@ export function SwingVideo({
               <option value="other">Other angle · limited measurements</option>
             </Select>
           </label>
+          <label className="mt-2 block text-[11px] text-fg-muted">Playback speed
+            <Select aria-label="Swing playback speed" value={slowMotion} disabled={analysing || trimming} onChange={(event) => setSlowMotion(Number(event.target.value))} className="mt-1">
+              {SLOW_MOTION_SPEEDS.map((speed) => <option key={speed} value={speed}>{SLOW_MOTION_LABELS[speed]}</option>)}
+            </Select>
+          </label>
           {analysing && progress !== "Saving your video review" ? <Button type="button" size="sm" variant="secondary" className="mt-2" onClick={() => analysisRun.current?.abort()}>Cancel tracking</Button> : null}
           {analysis ? (
             <p
@@ -364,6 +387,8 @@ export function SwingVideo({
           ) : null}
         </div>
       ) : null}
+      {analysable && trackedModel && report?.phases ? <SwingSetup src={src} crossOrigin={crossOrigin} frames={tracked} time={trackedModel.t[report.phases.address]!}
+        view={view} aspect={trackedModel.aspect ?? aspect} saved={trackedModel.setup} sessionId={id} slowMotion={scale} revision={trackedModel.revision} /> : null}
       {analysable && trackedModel ? <SwingTiming model={trackedModel} sessionId={id} unresolved={!report?.phases} /> : null}
       {trimmable ? (
         <details className="rounded-xl border border-border bg-surface-2 p-3">

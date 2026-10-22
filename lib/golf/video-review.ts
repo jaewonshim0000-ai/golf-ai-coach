@@ -11,7 +11,7 @@ export function analyseVideoModel(model: PoseModel) {
  * A quality limitation belongs to its reading, not to the entire recording. */
 export function buildVideoModel(frames: PoseFrame[], options: {
   aspect: number; view: MotionView; handedness: "right" | "left"; clip?: [number, number]; phases?: SwingPhases; capture?: CaptureManifest;
-  ballSide?: "left" | "right";
+  ballSide?: "left" | "right"; slowMotion?: number;
 }): PoseModel {
   const report = analyseMotion(frames, options.aspect, options.view, options.handedness, options.phases);
   return {
@@ -22,6 +22,7 @@ export function buildVideoModel(frames: PoseFrame[], options: {
     aspect: options.aspect, cameraAngle: options.view, motionVersion: 1, clip: options.clip,
     capture: options.capture,
     ballSide: options.ballSide,
+    ...(options.slowMotion && options.slowMotion > 1 ? { slowMotion: options.slowMotion } : {}),
     phasesConfirmed: Boolean(options.phases),
     timingStatus: options.phases ? "confirmed" : report.phases ? "estimated" : "unresolved",
   };

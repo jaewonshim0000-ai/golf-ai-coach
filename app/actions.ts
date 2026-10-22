@@ -32,6 +32,7 @@ import {
   unpackFrames,
   type PackedLandmark,
   type PoseFrame,
+  type SetupMarks,
   type SwingPhases,
 } from "@/lib/golf/pose";
 import type { MotionView } from "@/lib/golf/motion-analysis";
@@ -47,6 +48,7 @@ import {
   measurementSchema,
   poseModelSchema,
   retimeSchema,
+  swingSetupSchema,
   practiceSessionSchema,
   practicePrioritiesSchema,
   profileSchema,
@@ -965,6 +967,8 @@ export async function savePoseModelAction(input: {
   ballSide?: "left" | "right";
   clip?: [number, number];
   phases?: SwingPhases;
+  /** Times in `t` are already real swing seconds; this is the clip's playback slowdown. */
+  slowMotion?: number;
   reconstruct?: boolean;
   capture?: CaptureManifest;
   expectedRevision?: string | null;
@@ -991,6 +995,7 @@ export async function savePoseModelAction(input: {
     clip: parsed.data.clip,
     ballSide: parsed.data.ballSide,
     phases: parsed.data.phases,
+    slowMotion: parsed.data.slowMotion,
     reconstruct: parsed.data.reconstruct,
     capture: parsed.data.capture,
     guard: { revision: parsed.data.expectedRevision, videoUrl: session.video_url, clipStart: session.clip_start, clipEnd: session.clip_end },
@@ -1030,10 +1035,46 @@ export async function retimeSwingAction(input: {
     clip: model.clip,
     ballSide: model.ballSide,
     phases: parsed.data.phases,
+    slowMotion: model.slowMotion,
     reconstructionVersion: model.reconstructionVersion,
     capture: model.capture,
     guard: { revision: parsed.data.expectedRevision, videoUrl: session.video_url, clipStart: session.clip_start, clipEnd: session.clip_end },
+    setup: model.setup,
   });
+}
+
+/**
+ * Keep the player's setup check on the tracks it was made against. A new
+ * review or a trim change replaces those tracks, so the marks go with them.
+ */
+export async function saveSwingSetupAction(input: {
+  swing_session_id: string;
+  setup: SetupMarks | null;
+  expectedRevision?: string | null;
+}): Promise<ActionState> {
+  const user = await requireUser();
+  const parsed = swingSetupSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, message: "Mark the grip and the clubhead at two different points on the picture." };
+  const { swing_session_id: sessionId, setup } = parsed.data;
+  const model = await repo.getSwingModel(user.id, sessionId);
+  if (!model?.imageFrames) return { ok: false, message: "Review the video before checking your setup." };
+  if (input.expectedRevision !== undefined && input.expectedRevision !== (model.revision ?? null))
+    return { ok: false, message: "This recording changed. Reload before marking your setup." };
+  const session = (await repo.getSwingSessions(user.id)).find((row) => row.id === sessionId);
+  if (!session) return { ok: false, message: "That swing recording is unavailable." };
+  if (setup && !model.t.some((time) => Math.abs(time - setup.t) <= 0.06)) {
+    return { ok: false, message: "That frame is not part of the reviewed clip. Review the video again." };
+  }
+  const { setup: _previous, ...rest } = model;
+  // Ball position is a face-on reading only.
+  const kept: SetupMarks | null = setup && { t: setup.t, grip: setup.grip, clubhead: setup.clubhead,
+    ...(setup.ball && model.cameraAngle === "face_on" ? { ball: setup.ball } : {}) };
+  try { await repo.saveSwingModel(user.id, sessionId, kept ? { ...rest, setup: kept } : rest, {
+    revision: model.revision ?? null, videoUrl: session.video_url, clipStart: session.clip_start, clipEnd: session.clip_end,
+  }); }
+  catch (error) { return asError(error); }
+  revalidatePath(`/swing/${sessionId}`);
+  return { ok: true, message: setup ? "Setup saved. The club readings use these marks." : "Setup marks removed." };
 }
 
 async function storeMotion(
@@ -1042,17 +1083,21 @@ async function storeMotion(
   handedness: "right" | "left",
   frames: PoseFrame[],
   options: { aspect: number; view: MotionView; phases?: SwingPhases; clip?: [number, number]; ballSide?: "left" | "right"; reconstruct?: boolean; reconstructionVersion?: 1;
-    capture?: CaptureManifest; guard: repo.SwingWriteGuard },
+    capture?: CaptureManifest; guard: repo.SwingWriteGuard; slowMotion?: number; setup?: SetupMarks },
 ): Promise<PoseState> {
   const updatedModel = buildVideoModel(frames, { ...options, handedness });
+  if (options.setup && Math.abs(frames[updatedModel.phases.address]!.t - options.setup.t) < 0.001) updatedModel.setup = options.setup;
   const { report, blocks } = reviewSwing(updatedModel);
   const review = reviewFaceOn(frames, options.aspect, options.view);
   try {
+    const previous = await repo.getSwingModel(userId, sessionId);
+    if (previous?.reference) updatedModel.reference = previous.reference;
     await repo.saveSwingModel(userId, sessionId, updatedModel, options.guard);
     await repo.deleteSwingMeasurementsBySource(userId, sessionId, "pose");
   } catch (error) { return asError(error); }
   revalidatePath(`/swing/${sessionId}`);
   revalidatePath("/swing");
+  revalidatePath("/swing/references");
   return { ok: true, measurements: report.readings.length || review.metrics.length,
     message: blocks[0] ?? (report.usable ? "Your 2D swing analysis is ready. Review the measured positions below."
       : review.status !== "record_again" ? "Your visible movement review is ready. Exact swing timing is unclear."

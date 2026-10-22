@@ -475,6 +475,11 @@ export function analyseMotion(
   const uncertainty = Math.max(report.timing?.uncertainty ?? 0, nearby(phases.address), nearby(phases.top), nearby(phases.impact));
   if (report.timing) report.timing.uncertainty = uncertainty;
   const backswing = t("top") - t("address"), downswing = t("impact") - t("top");
+  // Times are real swing seconds. A real downswing takes about 0.2–0.5 s, so a
+  // reading far outside that almost always means the playback speed is wrong.
+  if (downswing > 0 && (downswing < 0.15 || downswing > 0.6) && uncertainty <= downswing / 2) {
+    report.warnings.push(`The downswing measured ${downswing.toFixed(2)}s, outside the usual 0.2–0.5s of a real swing. Check the playback speed under the video: slow motion set as real speed, or the reverse, stretches or squeezes every time.`);
+  }
   if (downswing >= uncertainty * 2 && uncertainty <= 0.12 && report.quality.largestGap <= 0.12 &&
       (Boolean(override) || [phases.address, phases.top, phases.impact].every((index) => hands(frames[index]!, aspect)))) {
     // Propagate each event's sample interval jointly: moving the top changes
@@ -491,7 +496,7 @@ export function analyseMotion(
       ratioRange: [(t0 - a1) / (i1 - t0), (t1 - a0) / (i0 - t1)] };
   }
   if (report.tempo) {
-    report.observations.push({ title: "Swing rhythm", detail: `Backswing-to-downswing timing is approximately ${report.tempo.ratio}:1. Recorded times are ${backswing.toFixed(2)}s and ${downswing.toFixed(2)}s; slow-motion recording changes these durations. Contact timing is estimated from the hand path.` });
+    report.observations.push({ title: "Swing rhythm", detail: `Backswing-to-downswing timing is approximately ${report.tempo.ratio}:1. In real swing time that is ${backswing.toFixed(2)}s back and ${downswing.toFixed(2)}s down, using the playback speed set for this clip. Contact timing is estimated from the hand path.` });
   }
   const hip = report.readings.find((reading) => reading.id === "hips_impact");
   if (hip) report.observations.push({ title: "Hip movement", detail: view === "face_on" ?

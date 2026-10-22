@@ -231,6 +231,7 @@ export const poseModelSchema = z
     aspect: z.number().finite().min(0.3).max(3.5).optional(),
     cameraAngle: z.enum(["face_on", "down_the_line", "other"]).optional(),
     ballSide: z.enum(["left", "right"]).optional(),
+    slowMotion: z.number().int().min(1).max(32).optional(),
     reconstruct: z.boolean().optional(),
     clip: z.tuple([z.number().finite().min(0).max(3600), z.number().finite().min(0).max(3600)]).optional(),
     phases: z
@@ -251,7 +252,7 @@ export const poseModelSchema = z
     (model) => model.t.every((time, index) => index === 0 || time > model.t[index - 1]!),
     "Frame times must increase in video order.",
   )
-  .refine((model) => !model.clip || (model.clip[0] < model.clip[1] && model.t[0]! >= model.clip[0] - 0.1 && model.t.at(-1)! <= model.clip[1] + 0.1), "Samples must sit inside the analysed clip.")
+  .refine((model) => !model.clip || (model.clip[0] < model.clip[1] && model.t[0]! * (model.slowMotion ?? 1) >= model.clip[0] - 0.1 && model.t.at(-1)! * (model.slowMotion ?? 1) <= model.clip[1] + 0.1), "Samples must sit inside the analysed clip.")
   .refine(
     (model) =>
       !model.phases ||
@@ -273,3 +274,20 @@ export const retimeSchema = z
     }),
   })
   .refine((input) => input.phases.address < input.phases.top && input.phases.top < input.phases.impact);
+
+// Taps on the setup frame, as fractions of the picture.
+const imagePoint = z.tuple([z.number().finite().min(0).max(1), z.number().finite().min(0).max(1)]);
+export const setupMarksSchema = z
+  .object({
+    t: z.number().finite().min(0).max(3600),
+    grip: imagePoint,
+    clubhead: imagePoint,
+    ball: imagePoint.optional(),
+  })
+  // Two taps on the same spot have no shaft angle.
+  .refine((marks) => Math.hypot(marks.grip[0] - marks.clubhead[0], marks.grip[1] - marks.clubhead[1]) >= 0.02, "Mark the grip and clubhead apart.");
+
+export const swingSetupSchema = z.object({
+  swing_session_id: z.string().min(1).max(80),
+  setup: setupMarksSchema.nullable(),
+});

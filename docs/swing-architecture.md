@@ -47,6 +47,8 @@ Scouting coordinates never enter measurement tracks. The scout locates a time in
 
 The manifest records engine/model identity, timestamp source, input dimensions, preprocessing bound, inference/seek/duplicate/rejected-pose counts and elapsed time. It persists with the image tracks through compact storage and manual retiming. Changing the engine invalidates coaching cache fingerprints. Old image recordings remain reviewable; absent decoded-timestamp provenance withholds rhythm.
 
+Slow-motion integration keeps stored sample times in real swing seconds and stores the playback slowdown alongside them. Video time equals sample time multiplied by that slowdown. Sampling and refinement operate in real swing time; seeking, trimming and replay use video time. Upload validation checks both time bases consistently. Setup edits and reference metadata use the same revision guards, and reference comparisons pass through the canonical evidence gate.
+
 ## Capture state and resource ownership
 
 ```mermaid

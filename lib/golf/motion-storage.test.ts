@@ -24,3 +24,10 @@ test("dense motion storage preserves observed x/y and visibility without inferre
   assert.equal(compactMotionModel(legacy), legacy);
   assert.equal(expandMotionModel(legacy), legacy);
 });
+
+test("keeps a clip's slow-motion speed and drops one we never offered", () => {
+  const stored = compactMotionModel({ ...denseMotionModel(), slowMotion: 8 });
+  assert.equal(expandMotionModel(stored)!.slowMotion, 8);
+  assert.equal(expandMotionModel({ ...stored, slowMotion: 0.5 })!.slowMotion, undefined);
+  assert.equal(expandMotionModel({ ...stored, slowMotion: 100 })!.slowMotion, undefined);
+});

@@ -15,8 +15,8 @@ import { cn, formatDate } from "@/lib/utils";
 import { Badge, Card, CardContent, CardHeader, CardTitle, Eyebrow } from "@/components/ui/primitives";
 
 /**
- * Capture-style reference bands apply only to comparable coach measurements.
- * The automatic video criteria are rendered separately by SwingMotionReport.
+ * Capture-style reference bands apply only to comparable coach measurements,
+ * not to the automatic video analysis.
  */
 export function SwingDiagnostic({
   session,

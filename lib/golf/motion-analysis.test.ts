@@ -30,6 +30,14 @@ function swing(): PoseFrame[] {
 const phases = { address: 1, top: 5, impact: 8 };
 
 describe("projected swing movement", () => {
+  it("flags a downswing no real swing has, which means the playback speed is set wrong", () => {
+    const real = swing().map((frame) => ({ ...frame, t: frame.t * 2.5 })); // 0.3 s from top to impact
+    const flagged = (frames: PoseFrame[]) => analyseMotion(frames, 9 / 16, "face_on", "right", phases).warnings.some((warning) => warning.includes("playback speed"));
+    assert.equal(flagged(real), false);
+    assert.equal(flagged(real.map((frame) => ({ ...frame, t: frame.t * 8 }))), true, "240 fps slow motion read as real speed");
+    assert.equal(flagged(real.map((frame) => ({ ...frame, t: frame.t / 4 }))), true, "a real-speed clip read as 4x slow motion");
+  });
+
   it("finds a complete hand arc without confusing the higher finish for top", () => {
     assert.deepEqual(findMotionPhases(swing(), 9 / 16), phases);
     assert.equal(findMotionPhases(swing().slice(0, 8), 9 / 16), null);

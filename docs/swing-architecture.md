@@ -9,19 +9,21 @@ This document describes the implemented architecture and the remaining empirical
 ```mermaid
 flowchart TD
   V[Private original video] --> P[Validate dimensions, duration and clip]
-  P --> S{Clip longer than 4 seconds?}
+  P --> V[Three probe frames decide the camera view]
+  V --> S{Clip longer than 4 seconds?}
   S -->|Yes| L[At most 32 Lite scout inferences]
-  L --> W[Locate plausible swing window]
+  L --> W[Locate the last plausible swing window]
   W --> H[Close scout, load measurement model]
   S -->|No| H
   H --> M[At most 96 Heavy measurement inferences]
   M --> R[Refine around observed hand arc]
-  R --> T[Image tracks, actual timestamps and capture manifest]
+  R --> X[Downswing length in the video picks the slow-motion speed]
+  X --> T[Image tracks in real swing seconds and capture manifest]
   T --> C[Owner, source, trim and revision checks]
   C --> D[Atomic compare-and-swap save]
   D --> E[Canonical evidence review]
   E --> O[Supported observation and maintained exercise]
-  E --> A[Specific timing or recording correction]
+  E --> A[Specific recording correction]
   O --> I[Optional AI procedure selection]
 ```
 
@@ -38,16 +40,17 @@ Scouting coordinates never enter measurement tracks. The scout locates a time in
 | `lib/pose-runner.ts` | Browser seeking, capture ownership, identity selection, sampling | A newer run cancels the previous owner of that video element |
 | `lib/pose-worker-client.ts` | One pending inference; bounded bitmap; worker and foreground fallback | Rejects overlapping calls; releases worker, canvas and bitmaps |
 | `lib/pose-detector.ts` | Pinned Lite/Heavy model assets; GPU-to-CPU fallback | Random-access decoding uses IMAGE mode |
-| `lib/swing/segments.ts` | Detect separate plausible swing arcs | Multiple candidates request a trim; candidates do not prove timing |
-| `lib/golf/motion-analysis.ts` | Projected geometry, phase estimates and sampling ranges | No inferred depth used for player-facing measurements |
+| `lib/swing/segments.ts` | Detect separate plausible swing arcs | The last candidate is measured; candidates do not prove timing |
+| `lib/golf/motion-analysis.ts` | Projected geometry, phase estimates, sampling ranges and slow-motion speed | No inferred depth used for player-facing measurements |
+| `lib/golf/framing.ts` | Recording framing aid and face-on/down-the-line detection | A shoulder-geometry heuristic, not a calibrated classifier |
 | `lib/swing/review.ts` | Canonical evidence and coaching decision | Shared by browser, detail page and coaching endpoint |
 | `lib/db/repo.ts` | Ownership and atomic revision/source/trim checks | Stale writes fail explicitly, including concurrent tabs |
 | `lib/ai/swing-focus.ts` | Optional selection between maintained procedures | Cannot invent an issue, measurement or instruction |
 | `lib/swing/evaluation.ts` | Offline recorded-corpus evaluation and release eligibility | Synthetic fixtures never count as real-world validation |
 
-The manifest records engine/model identity, timestamp source, input dimensions, preprocessing bound, inference/seek/duplicate/rejected-pose counts and elapsed time. It persists with the image tracks through compact storage and manual retiming. Changing the engine invalidates coaching cache fingerprints. Old image recordings remain reviewable; absent decoded-timestamp provenance withholds rhythm.
+The manifest records engine/model identity, timestamp source, input dimensions, preprocessing bound, inference/seek/duplicate/rejected-pose counts and elapsed time. It persists with the image tracks through compact storage. Changing the engine invalidates coaching cache fingerprints. Old image recordings remain reviewable; absent decoded-timestamp provenance withholds rhythm.
 
-Slow-motion integration keeps stored sample times in real swing seconds and stores the playback slowdown alongside them. Video time equals sample time multiplied by that slowdown. Sampling and refinement operate in real swing time; seeking, trimming and replay use video time. Upload validation checks both time bases consistently. Setup edits and reference metadata use the same revision guards, and reference comparisons pass through the canonical evidence gate.
+Slow-motion integration keeps stored sample times in real swing seconds and stores the playback slowdown alongside them. Video time equals sample time multiplied by that slowdown. Nobody enters the slowdown: capture runs in video seconds, then the downswing's length in the video picks the nearest of real speed, 4× or 8× (a 0.32 s downswing is assumed; the pick tolerates at least about 40% either way). Hand-arc detection ignores sample gaps, so it works before the time base is known. A misread speed scales absolute durations and the gap tolerances but not the rhythm ratio. The camera view is detected the same way, from shoulder spacing relative to torso length on three early probe frames. Seeking and replay use video time. Upload validation checks both time bases consistently. Reference metadata uses the same revision guards, and reference comparisons pass through the canonical evidence gate.
 
 ## Capture state and resource ownership
 
@@ -56,11 +59,10 @@ stateDiagram-v2
   [*] --> Preflight
   Preflight --> Scouting: longer clip
   Preflight --> Measuring: short clip
-  Scouting --> Measuring: one plausible window or bounded fallback
+  Scouting --> Measuring: last plausible window or bounded fallback
   Measuring --> Refining
   Refining --> Complete: budget spent or no useful requests
   Preflight --> Failed: invalid source or clip
-  Scouting --> Failed: multiple candidate swings
   Measuring --> Failed: detector failure
   Refining --> Failed: detector failure
   Scouting --> Cancelled: abort or deadline
@@ -73,8 +75,8 @@ stateDiagram-v2
 
 | Resource | Implemented limit |
 | --- | --- |
-| Clip admitted for automatic processing | 30 seconds; longer clips require a trim |
-| Logical detector requests, including failed/empty results | 128 total; at most 96 measurement requests |
+| Clip admitted for automatic processing | 60 video seconds, enough for an 8× slow-motion swing; longer clips must be re-recorded |
+| Logical detector requests, including failed/empty results | 128 total, including 3 view probes; at most 96 measurement requests |
 | Scout inferences on clips over 4 seconds | At most 32 |
 | Seek requests, including duplicates and failures | 256 |
 | In-flight inference/bitmap queue | One; overlapping calls rejected |
@@ -98,12 +100,12 @@ Each view has three explicit checks. Face on uses head movement, backswing heigh
 1. Validate increasing finite timestamps, frame count, 33 landmarks per frame, coordinate/visibility bounds, aspect ratio and compatible provenance.
 2. Reject isolated body/joint jumps without smoothing a missing observation into an invented coordinate.
 3. Keep one body identity using proximity and scale consistency. Prefer a central initial golfer; similarly plausible candidates abstain rather than silently selecting a spectator. This remains a heuristic, not biometric re-identification.
-4. Require a complete hand arc before automatic phase timing. Separate plausible arcs require a trim. Follow-through is not a second backswing merely because it reaches higher.
+4. Require a complete hand arc before automatic phase timing. With separate plausible arcs, the last is measured (practice swings usually come first); a wrong pick needs a re-record. Follow-through is not a second backswing merely because it reaches higher.
 5. Evaluate each reading independently. Global coverage does not certify a hidden joint at contact. Required joints must support every observed position in an automatic contact or occluded-transition bracket.
 6. Require a consistently planted ankle at each displacement position, including bracket endpoints. A global percentile cannot excuse foot/camera movement at the measured moment. This is screening, not optical background stabilization; a camera rotating around an apparently fixed anchor can still evade it.
 7. Carry observed contact/transition ranges through head, posture and hip checks. A correction must remain supported throughout the range. Never collapse an uncertain range to the most alarming point.
 8. Carry setup/top/contact sampling intervals jointly into rhythm bounds. Withhold rhythm when decoded timestamp provenance is absent. Constant slow-motion scaling preserves a ratio; speed-ramped exports do not. The app cannot currently detect all speed ramps.
-9. Preserve manual phase corrections as explicit chosen observed frames. Retiming does not rerun inference or invent observations. Frame resolution still limits rhythm precision.
+9. Timing is automatic only. Phase corrections saved by the former manual tool remain explicit chosen observed frames. Frame resolution still limits rhythm precision, which is why the recording guide asks for slow motion.
 10. Use one selected supported issue and maintained exercises. AI sees calculated evidence only, never raw joint arrays or video, and cannot choose new faults or text instructions.
 
 The ranges are sensitivity bounds over observed samples, not statistical confidence intervals. Hand-path bottom is an estimated contact region, not detected club-ball impact. No camera-only result certifies clubface, club path, clubhead speed, pressure transfer, exact pelvic rotation or ball flight.
@@ -112,7 +114,7 @@ The ranges are sensitivity bounds over observed samples, not statistical confide
 
 The original private video remains the source. Normalized x/y/visibility and timestamps are stored separately from any legacy 3D research output. New captures discard world output, and compact storage omits inferred depth.
 
-Every model write generates a server revision UUID. The browser submits the revision it reviewed, the stable video reference and the analyzed trim. The server validates ownership and clip consistency, then performs one conditional database update matching owner, recording ID, prior revision, video reference and saved trim. No matching row is a conflict, not a successful save. Demo storage applies the same comparisons. Retiming also requires the current revision and trim.
+Every model write generates a server revision UUID and copies the detected camera view onto the swing row. The browser submits the revision it reviewed, the stable video reference and the analyzed trim. The server validates ownership and clip consistency, then performs one conditional database update matching owner, recording ID, prior revision, video reference and saved trim. No matching row is a conflict, not a successful save. Demo storage applies the same comparisons. Trims saved before trimming was removed from the UI are still honored.
 
 This provides first-writer-wins conflict detection. It does not promise that the most recently started analysis wins. A conflicting tab must reload explicitly; silently replacing a newer committed result is prohibited. Revision checks use the existing JSONB column, so this change needs no migration.
 
@@ -127,11 +129,11 @@ Local cancellation cannot retract a server action already executing. Revision/so
 | Model failure or asynchronous operation hangs | Abort/deadline, cleanup, retry message; no successful completion |
 | Repeated decoded source frame | Count duplicate and seek; no duplicate inference or invented timestamp |
 | Person identity ambiguous | Drop that observation; unsupported phases/readings remain unavailable |
-| Multiple plausible swings | Ask for a trim; no automatic fault selection |
+| Multiple plausible swings | Measure the last one |
 | Missing joint near contact | Withhold affected check; preserve independent evidence |
 | Stable overall camera, movement at contact | Withhold displacement at contact |
 | Coarse/unknown timestamps | Withhold rhythm; retain readable body positions |
-| Sampling range crosses a correction threshold | Ask for the relevant timing correction; no definite fault |
+| Sampling range crosses a correction threshold | Ask for a clearer slow-motion recording; no definite fault |
 | Corrupt/incompatible stored tracks | Fail closed into a review request |
 | Competing save, trim change, source change | Reject stale write and request reload |
 | AI timeout or invalid selection | Retain the immediate maintained procedure |

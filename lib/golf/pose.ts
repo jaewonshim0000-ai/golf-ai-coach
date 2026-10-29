@@ -725,21 +725,9 @@ export type PoseModel = {
 
 /** Real speed, and phone slow motion (120 or 240 fps) played back at 30 fps. */
 export const SLOW_MOTION_SPEEDS = [8, 4, 1] as const;
-export const SLOW_MOTION_LABELS: Record<number, string> = {
-  8: "Slow motion · 240 fps (8× slower)",
-  4: "Slow motion · 120 fps (4× slower)",
-  1: "Real speed",
-};
 export function slowMotionOf(model?: Pick<PoseModel, "slowMotion"> | null): number {
   return model?.slowMotion ?? 1;
 }
-/** A speed from a URL, form or storage, or real speed when it is not one we offer. */
-export function parseSlowMotion(value: unknown): number {
-  const speed = Number(value);
-  return (SLOW_MOTION_SPEEDS as readonly number[]).includes(speed) ? speed : 1;
-}
-/** Device storage for the speed picked when a swing was added, until its first review saves it. */
-export const swingSpeedKey = (swingId: string) => `golf:swing-speed:${swingId}`;
 
 const mm = (value: number) => Math.round(value * 1000) / 1000;
 

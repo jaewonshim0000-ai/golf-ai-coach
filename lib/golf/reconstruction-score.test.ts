@@ -101,13 +101,13 @@ describe("reconstructed swing score", () => {
     }
   });
 
-  it("explains unresolved timing on an existing reconstruction and accepts corrected positions", () => {
+  it("explains unresolved timing on an existing reconstruction without asking for manual marks", () => {
     const { model, report } = fixture();
     const unresolved = { ...report, usable: false, phases: null };
     const score = scoreReconstruction(model, unresolved);
     assert.equal(score.total, null);
     assert.match(score.reason!, /automatic swing timing/);
-    assert.match(score.reason!, /mark address, top and impact/);
+    assert.match(score.reason!, /Record again in slow motion/);
     assert.doesNotMatch(score.reason!, /Build a 3D model/);
     assert.equal(scoreReconstruction(model, report).total, 60);
   });

@@ -3,8 +3,7 @@
 import { useEffect, useState } from "react";
 import { getSwingCoachingAction } from "@/app/swing-coach-actions";
 import type { SwingFocus } from "@/lib/golf/swing-focus";
-import { Card, CardContent } from "@/components/ui/primitives";
-import { SwingTimingButton } from "./swing-timing";
+import { ButtonLink, Card, CardContent } from "@/components/ui/primitives";
 
 export function SwingCoach({ sessionId, focus, referenceId }: { sessionId: string; focus: SwingFocus; referenceId?: string }) {
   const [selected, setSelected] = useState<SwingFocus | null>(null);
@@ -21,7 +20,7 @@ export function SwingCoach({ sessionId, focus, referenceId }: { sessionId: strin
   return <Card>
     <CardContent className="space-y-6 pt-5">
       <div>
-        <h2 className="text-[15px] font-semibold">{hasIssue ? "Biggest problem" : plan.status === "clear" ? "Swing review" : "Complete your analysis"}</h2>
+        <h2 className="text-[15px] font-semibold">{hasIssue ? "Biggest problem" : plan.status === "clear" ? "Swing review" : "Needs a clearer recording"}</h2>
         <p className="mt-2 text-[18px] font-semibold leading-snug">{plan.issue}</p>
       </div>
       <div className="border-t border-border pt-5">
@@ -29,7 +28,7 @@ export function SwingCoach({ sessionId, focus, referenceId }: { sessionId: strin
         <ol className="mt-3 list-decimal space-y-3 pl-5 text-[13px] leading-relaxed text-fg-muted">
           {plan.steps.map((step) => <li key={step}>{step}</li>)}
         </ol>
-        {plan.action === "timing" ? <div className="mt-4"><SwingTimingButton /></div> : null}
+        {plan.status === "needs_input" ? <ButtonLink href="/swing" size="sm" className="mt-4">Record again</ButtonLink> : null}
       </div>
     </CardContent>
   </Card>;

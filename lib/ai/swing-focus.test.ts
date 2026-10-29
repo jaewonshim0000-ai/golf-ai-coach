@@ -81,7 +81,6 @@ it("does not ask AI for a correction when the contact interval includes ordinary
   const recording = buildVideoModel(frames, { aspect: 1, view: "face_on", handedness: "right" });
   const plan = await coachSwingFocus(recording, "7_iron", provider({}, () => assert.fail("Uncertain contact must not call AI")));
   assert.equal(plan.status, "needs_input");
-  assert.equal(plan.action, "timing");
   assert.match(plan.issue, /head position around contact/);
 
 });

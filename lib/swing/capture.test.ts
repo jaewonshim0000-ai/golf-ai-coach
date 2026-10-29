@@ -1,12 +1,15 @@
 import assert from "node:assert/strict";
 import { it } from "node:test";
 import { faceOnSwing } from "../golf/__fixtures__/face-on";
+import { findAutomaticTiming } from "../golf/motion-analysis";
+import type { PoseFrame } from "../golf/pose";
 import { selectTrackedPose, refinementTimes } from "../pose-runner";
 import { runSwingCapture, type CaptureSource } from "./capture";
 import { CAPTURE_LIMITS } from "./policy";
 
 const algorithms = { select: selectTrackedPose, refine: refinementTimes };
-function camera(duration = 2.4) {
+/** `slow`: the clip plays that many times slower than the swing. */
+function camera(duration = 2.4, slow = 1, reference: PoseFrame[] = faceOnSwing()) {
   let time = 0, active = 0, peak = 0, calls = 0, seeks = 0;
   const models: string[] = [], closed: string[] = [];
   const source: CaptureSource = {
@@ -17,8 +20,7 @@ function camera(duration = 2.4) {
       return {
         async detect() {
           calls++;
-          const reference = faceOnSwing();
-          const frame = reference.reduce((best, f) => Math.abs(f.t - time) < Math.abs(best.t - time) ? f : best);
+          const frame = reference.reduce((best, f) => Math.abs(f.t - time / slow) < Math.abs(best.t - time / slow) ? f : best);
           // Distinct model outputs make scout leakage observable.
           const points = frame.imageLandmarks!.map((p) => ({ ...p, z: variant === "lite" ? 99 : 42 }));
           return { landmarks: [points], worldLandmarks: [] };
@@ -75,8 +77,8 @@ it("cancels a hung inference promptly and closes its resources", async () => {
 });
 
 it("validates duration before allocating any model and labels fallback timestamps", async () => {
-  const c = camera(60);
-  await assert.rejects(runSwingCapture(c.source, algorithms, { from: 0, to: 60, view: "face_on" }), /30 seconds/);
+  const c = camera(90);
+  await assert.rejects(runSwingCapture(c.source, algorithms, { from: 0, to: 90, view: "face_on" }), /60 seconds/);
   assert.deepEqual(c.models, []);
   c.source.decodedTimestamps = false;
   const r = await runSwingCapture(c.source, algorithms, { from: 0, to: 2.4, view: "face_on" });
@@ -102,4 +104,29 @@ it("enforces the measurement cap even if a refinement strategy overproduces requ
   assert.ok(result.capture.inferences <= CAPTURE_LIMITS.measurements);
   assert.ok(result.capture.seeks <= CAPTURE_LIMITS.seeks);
   assert.equal(c.stats().active, 0);
+});
+
+it("detects the camera view and playback speed, and labels samples in real swing seconds", async () => {
+  const real = await runSwingCapture(camera().source, algorithms, { from: 0, to: 2.4 });
+  assert.equal(real.view, "face_on");
+  assert.equal(real.slowMotion, 1);
+  const c = camera(2.4 * 8, 8);
+  const slow = await runSwingCapture(c.source, algorithms, { from: 0, to: 2.4 * 8 });
+  assert.deepEqual(c.models, ["lite", "heavy"]);
+  assert.equal(slow.view, "face_on");
+  assert.equal(slow.slowMotion, 8);
+  assert.ok(slow.frames.every((f) => f.t <= 2.4 + 1e-9));
+  assert.ok(slow.capture.inferences <= CAPTURE_LIMITS.inferences);
+  // The relabelled tracks time automatically, with no manual phase marks.
+  const timing = findAutomaticTiming(slow.frames, 720 / 1280, "face_on");
+  assert.ok(timing);
+  assert.ok(Math.abs(slow.frames[timing.phases.top]!.t - 1.44) < 0.05 && Math.abs(slow.frames[timing.phases.impact]!.t - 1.76) < 0.05);
+});
+
+it("reviews the last of several swings instead of asking for a trim", async () => {
+  const first = faceOnSwing(), second = faceOnSwing().map((frame) => ({ ...frame, t: frame.t + 2.44 }));
+  const c = camera(4.84, 1, [...first, ...second]);
+  const r = await runSwingCapture(c.source, algorithms, { from: 0, to: 4.84, view: "face_on" });
+  assert.ok(r.frames.length > 30);
+  assert.ok(r.frames.every((f) => f.t > 1.9), "the first swing's top and contact are not measured");
 });

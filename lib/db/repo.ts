@@ -668,6 +668,8 @@ export async function saveSwingModel(
 ): Promise<void> {
   const sb = await client();
   const stored = compactMotionModel({ ...model, revision: randomUUID() });
+  // The view is detected from the video, so the swing row follows its review.
+  const view = model.cameraAngle === "face_on" || model.cameraAngle === "down_the_line" ? { camera_angle: model.cameraAngle } : {};
   if (!sb) {
     const state = store();
     const session = state.swingSessions.find((row) => row.id === sessionId && row.user_id === userId);
@@ -676,11 +678,12 @@ export async function saveSwingModel(
         session.clip_start !== guard.clipStart || session.clip_end !== guard.clipEnd))
       throw new Error("This recording changed during analysis. Reload to use the latest version.");
     state.swingModels[sessionId] = stored;
+    Object.assign(session, view);
     return;
   }
   let query = sb
     .from("swing_sessions")
-    .update({ pose_model: stored, analysis_status: "processed" })
+    .update({ pose_model: stored, analysis_status: "processed", ...view })
     .eq("id", sessionId)
     .eq("user_id", userId);
   if (guard) {

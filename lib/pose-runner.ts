@@ -5,7 +5,7 @@ import { findAutomaticTiming, swingSamplingWindow, trustworthyFrames, visiblePoi
 
 import { createSwingDetector } from "./pose-worker-client";
 import { runSwingCapture } from "./swing/capture";
-import { CAPTURE_LIMITS, type CaptureStage } from "./swing/policy";
+import type { CaptureStage } from "./swing/policy";
 
 /** Reserve half the bounded inference budget for the fast part of the swing. */
 export const POSE_SAMPLES = 48;
@@ -139,32 +139,30 @@ export function refinementTimes(frames: PoseFrame[], from: number, to: number, a
  * for part of its length still yields the part it does show.
  *
  * `from`, `to` and every seek are video seconds. Returned frames are labelled
- * in real swing seconds (video time / `slowMotion`), because every timing rule
- * downstream, from hand gaps to tempo, is written for a swing at real speed.
+ * in real swing seconds (video time / the detected slowdown), because every
+ * timing rule downstream, from hand gaps to tempo, is written for real speed.
  */
 export async function readSwing(
   video: HTMLVideoElement,
   from: number,
   to: number,
   onProgress?: PoseProgress,
-  view: MotionView = "other",
+  view?: MotionView,
   signal?: AbortSignal,
-  slowMotion = 1,
 ): Promise<PoseFrame[]> {
-  return (await captureSwing(video, from, to, onProgress, view, signal, slowMotion)).frames;
+  return (await captureSwing(video, from, to, onProgress, view, signal)).frames;
 }
 
 const activeCaptures = new WeakMap<HTMLVideoElement, AbortController>();
 
-/** Browser adapter. A newer run owns the playhead and cancels its predecessor. */
+/** Browser adapter. A newer run owns the playhead and cancels its predecessor.
+ * Without a `view`, the camera view is detected from the clip. */
 export async function captureSwing(
   video: HTMLVideoElement, from: number, to: number,
   onProgress?: (done: number, total: number, stage: CaptureStage) => void,
-  view: MotionView = "other", signal?: AbortSignal, slowMotion = 1,
+  view?: MotionView, signal?: AbortSignal,
 ) {
   signal?.throwIfAborted();
-  if (to - from > CAPTURE_LIMITS.maxClipSeconds) throw new Error("Shorten this recording to one swing, no longer than 30 seconds.");
-  const speed = Number.isInteger(slowMotion) && slowMotion >= 1 && slowMotion <= 32 ? slowMotion : 1;
   activeCaptures.get(video)?.abort();
   const run = new AbortController();
   activeCaptures.set(video, run);
@@ -174,15 +172,15 @@ export async function captureSwing(
   video.pause();
   try {
     return await runSwingCapture({
-      width: video.videoWidth, height: video.videoHeight, duration: video.duration / speed,
+      width: video.videoWidth, height: video.videoHeight, duration: video.duration,
       decodedTimestamps: typeof video.requestVideoFrameCallback === "function",
-      seek: async (time, abort) => (await seekSwingFrame(video, time * speed, abort)) / speed,
+      seek: (time, abort) => seekSwingFrame(video, time, abort),
       detector: (variant, abort) => {
         const detector = createSwingDetector(abort, variant);
         return { detect: () => detector.detect(video), close: () => detector.close() };
       },
     }, { select: selectTrackedPose, refine: refinementTimes }, {
-      from: from / speed, to: to / speed, view, signal: run.signal, progress: onProgress,
+      from, to, view, signal: run.signal, progress: onProgress,
     });
   } finally {
     signal?.removeEventListener("abort", cancel);

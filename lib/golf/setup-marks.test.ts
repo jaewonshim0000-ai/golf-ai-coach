@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { planeLine, setupReadings, shaftAngle } from "./setup-marks";
 import { compactMotionModel, expandMotionModel } from "./motion-storage";
 import { LM, type PackedLandmark, type PoseModel } from "./pose";
-import { setupMarksSchema, swingSetupSchema } from "../validation/schemas";
+import { setupMarksSchema } from "../validation/schemas";
 
 // Right-hander filmed face on: the left (lead) ankle sits on screen right.
 function faceOnModel(setup: PoseModel["setup"]): PoseModel {
@@ -38,7 +38,6 @@ test("face-on readings place the ball against the stance midpoint", () => {
 test("setup marks must stay on the picture and apart", () => {
   const marks = { t: 1.2, grip: [0.4, 0.5], clubhead: [0.5, 0.8] };
   assert.ok(setupMarksSchema.safeParse(marks).success);
-  assert.ok(swingSetupSchema.safeParse({ swing_session_id: "s1", setup: null }).success);
   assert.ok(!setupMarksSchema.safeParse({ ...marks, grip: [1.2, 0.5] }).success);
   assert.ok(!setupMarksSchema.safeParse({ ...marks, ball: [0.5, -0.1] }).success);
   assert.ok(!setupMarksSchema.safeParse({ ...marks, clubhead: [0.4, 0.505] }).success);

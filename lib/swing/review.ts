@@ -30,7 +30,7 @@ export function reviewSwing(model: PoseModel) {
     blocks.push("This recording needs a review with the current tracking engine. Select Review again.");
   const frames = valid ? trustworthyFrames(unpackFrames(model), model.aspect!, model.cameraAngle ?? "other") : [];
   const candidates = valid ? swingCandidates(frames, model.aspect!, model.cameraAngle) : [];
-  if (candidates.length > 1) blocks.push("More than one possible swing appears in this recording. Shorten it to the swing you want to review.");
+  if (candidates.length > 1) blocks.push("More than one possible swing appears in this recording. Record one swing per video.");
   if (model.capture?.timestampSource !== "decoded") {
     report.tempo = null;
     report.warnings.push("Decoded-frame timestamps are unavailable for these tracks. Rhythm is withheld; visible body positions can still be reviewed.");
@@ -50,8 +50,8 @@ export function reviewSwing(model: PoseModel) {
     id, state: "unavailable", reason: checks.missing[index] ?? "The required visible positions are unavailable.", sampleTimes: [],
   }));
   const focus: SwingFocus = blocks.length ? { status: "needs_input", id: null, issue: blocks[0]!, steps: [
-    "Open the recording and check that it contains one complete swing with the golfer clearly visible.",
-    "Shorten the recording if needed, then select Review again.",
+    "Record one complete swing, from setup through the finish, with only you in view.",
+    "Use slow motion and a phone stand, placed as the filming guide shows. The new video is analyzed automatically.",
   ] } : getSwingFocus(report, model.ballSide);
   return { engine: SWING_ENGINE, report, evidence, focus, blocks, candidates };
 }

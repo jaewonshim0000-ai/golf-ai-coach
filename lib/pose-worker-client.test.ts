@@ -127,17 +127,20 @@ it("bounds transferred bitmap size and preserves aspect ratio for a 4K recording
   detector.close();
 });
 
-it("normalizes decoded slow-motion timestamps while validating a trimmed video range", async () => {
+it("keeps decoded timestamps inside a trimmed video range and detects the view", async () => {
   environment();
   FakeWorker.poses = [faceOnSwing()[0]!.imageLandmarks!];
   const video = new FakeVideo(); video.duration = 3;
-  const result = await captureSwing(video as unknown as HTMLVideoElement, 1, 3, undefined, "face_on", undefined, 8);
+  const result = await captureSwing(video as unknown as HTMLVideoElement, 1, 3);
+  assert.equal(result.view, "face_on");
+  // A still golfer has no downswing to read a slowdown from.
+  assert.equal(result.slowMotion, 1);
   assert.ok(result.frames.length >= 8);
-  assert.ok(result.frames.every((frame) => frame.t >= 1 / 8 && frame.t <= 3 / 8));
-  assert.ok(result.frames.every((frame) => Math.abs(frame.t * 8 * 60 - Math.round(frame.t * 8 * 60)) < 1e-8));
+  assert.ok(result.frames.every((frame) => frame.t >= 1 && frame.t <= 3));
+  assert.ok(result.frames.every((frame) => Math.abs(frame.t * 60 - Math.round(frame.t * 60)) < 1e-8));
   const packed = packFrames(result.frames);
-  assert.equal(poseModelSchema.safeParse({ swing_session_id: "trimmed-slow-motion", ...packed,
-    frames: packed.imageFrames, aspect: 720 / 1280, clip: [1, 3], slowMotion: 8, capture: result.capture,
+  assert.equal(poseModelSchema.safeParse({ swing_session_id: "trimmed-recording", ...packed,
+    frames: packed.imageFrames, aspect: 720 / 1280, clip: [1, 3], capture: result.capture,
   }).success, true);
   assert.equal(video.currentTime, 0);
 });

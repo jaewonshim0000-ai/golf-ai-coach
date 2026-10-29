@@ -44,17 +44,16 @@ it("keeps readable issues when an unrelated gap or partial coverage prevents an 
   }
 });
 
-it("offers a timing correction on the same video for an uncertain top instead of inventing a fault", () => {
+it("asks for a clearer recording for an uncertain top instead of inventing a fault", () => {
   const motion = report();
   motion.readings.find((row) => row.id === "head_impact")!.value = 8;
   motion.readings.find((row) => row.id === "lift_top")!.range = [0, 15];
   const focus = getSwingFocus(motion);
   assert.equal(focus.id, null);
   assert.equal(focus.status, "needs_input");
-  assert.equal(focus.action, "timing");
   assert.match(focus.issue, /hip position near the top/);
-  assert.match(focus.steps.join(" "), /using this recording/);
-  assert.doesNotMatch(focus.steps.join(" "), /Upload|Record one swing/);
+  assert.match(focus.steps.join(" "), /slow motion/);
+  assert.doesNotMatch(focus.steps.join(" "), /Adjust swing timing|Shorten/);
   motion.readings = [];
   motion.tempo = null;
   assert.equal(getSwingFocus(motion).id, null);
@@ -70,20 +69,18 @@ it("withholds displacement for camera motion but retains independent posture and
   assert.equal(getSwingFocus(behind).id, "posture");
 });
 
-it("explains the missing input and starts with fixes on the existing recording", () => {
+it("explains what was missing and asks for a clearer recording, never a manual correction", () => {
   const unknownView = getSwingFocus(report("other"));
   assert.equal(unknownView.status, "needs_input");
-  assert.match(unknownView.issue, /camera view/);
-  assert.match(unknownView.steps.join(" "), /Camera view.*Review again/);
+  assert.match(unknownView.issue, /camera angle/);
   const incomplete = report(); incomplete.phases = null; incomplete.usable = false;
   const timing = getSwingFocus(incomplete);
-  assert.equal(timing.action, "timing");
   assert.match(timing.issue, /positions could not be identified/);
+  assert.match(timing.steps.join(" "), /analyzed automatically/);
   incomplete.quality.coverage = 0.4;
   const hidden = getSwingFocus(incomplete);
   assert.match(hidden.issue, /body could not be tracked/);
-  assert.equal(hidden.action, undefined);
-  assert.match(hidden.steps[1]!, /Shorten the recording/);
+  for (const focus of [unknownView, timing, hidden]) assert.doesNotMatch(focus.steps.join(" "), /Adjust swing timing|Camera view|Shorten|Review again/);
   // An unusable report has not necessarily evaluated camera stability yet.
   const unreadable = report(); unreadable.usable = false; unreadable.quality.cameraStable = false;
   assert.match(getSwingFocus(unreadable).issue, /key body positions/);
@@ -130,7 +127,7 @@ it("asks for the relevant contact or timing correction when a sampled fault is u
   motion.readings.find((row) => row.id === "head_impact")!.range = [8, 40];
   motion.readings.find((row) => row.id === "lift_top")!.value = 2;
   assert.match(getSwingFocus(motion).issue, /head position around contact/);
-  assert.equal(getSwingFocus(motion).action, "timing");
+  assert.equal(getSwingFocus(motion).status, "needs_input");
   motion.tempo!.ratio = 5; motion.tempo!.ratioRange = [3.5, 6];
   motion.readings.find((row) => row.id === "head_impact")!.range = [0, 8];
   assert.match(getSwingFocus(motion).issue, /swing timing/);

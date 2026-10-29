@@ -1,6 +1,6 @@
 import type { PoseDetection } from "../pose-detector";
 import type { Landmark, PoseFrame } from "../golf/pose";
-import { estimateSlowMotion, swingSamplingWindow, trustworthyFrames, type MotionView } from "../golf/motion-analysis";
+import { estimateSlowMotion, motionGeometry, swingSamplingWindow, trustworthyFrames, visibleHands, type MotionView } from "../golf/motion-analysis";
 import { detectView } from "../golf/framing";
 import { CAPTURE_LIMITS, SWING_ENGINE, type CaptureStage, type PoseVariant } from "./policy";
 import type { CaptureManifest } from "./contracts";
@@ -93,14 +93,32 @@ export async function runSwingCapture(source: CaptureSource, algorithms: Capture
     }
     if (scout) {
       detector ??= source.detector("lite", run.signal);
-      const scouts: PoseFrame[] = [];
-      await scan(evenly(from, to, CAPTURE_LIMITS.scout), scouts, new Set(), "scouting", inferences + CAPTURE_LIMITS.scout);
-      detector.close(); detector = undefined;
-      scouts.sort((a, b) => a.t - b.t);
+      const scouts: PoseFrame[] = [], scouted = new Set<number>(), spacing = (to - from) / CAPTURE_LIMITS.scout;
       // ponytail: practice swings come before the shot, so the last complete swing is reviewed. A wrong pick needs a re-record.
-      const arc = swingCandidates(scouts, aspect, view).at(-1) ?? swingSamplingWindow(scouts, aspect, view);
+      const scoutView = view;
+      const locate = () => {
+        scouts.sort((a, b) => a.t - b.t);
+        return swingCandidates(scouts, aspect, scoutView).at(-1) ?? swingSamplingWindow(scouts, aspect, scoutView);
+      };
+      await scan(evenly(from, to, CAPTURE_LIMITS.scout), scouts, scouted, "scouting", inferences + CAPTURE_LIMITS.scout);
+      let arc = locate();
+      if (!arc) {
+        // A sparse pass over a long real-speed clip skips the downswing but
+        // rarely the held finish: look again, densely, before the last run of
+        // raised hands.
+        const shoulders = motionGeometry(scouts, aspect, view).shoulders;
+        const raised = scouts.filter((frame) => { const hands = visibleHands(frame, aspect), top = shoulders(frame); return hands && top && hands.y < top.y; });
+        let first = raised.at(-1);
+        for (const frame of [...raised].reverse()) if (first && first.t - frame.t <= spacing * 1.5) first = frame;
+        if (first) {
+          await scan(evenly(Math.max(from, first.t - Math.max(2.5, spacing * 4)), Math.min(to, raised.at(-1)!.t + spacing), CAPTURE_LIMITS.scout),
+            scouts, scouted, "scouting", inferences + CAPTURE_LIMITS.scout);
+          arc = locate();
+        }
+      }
+      detector.close(); detector = undefined;
       // Margins scale with the swing so a slowed clip keeps its setup and finish.
-      if (arc) { const span = arc[2] - arc[0]; lower = Math.max(from, arc[0] - Math.max(0.2, span * 0.25)); upper = Math.min(to, arc[2] + Math.max(0.3, span * 0.4)); }
+      if (arc) { const span = arc[2] - arc[0]; lower = Math.max(from, arc[0] - Math.max(0.2, span * 0.25)); upper = Math.min(to, arc[2] + Math.max(0.8, span * 0.8)); }
       // Without a supported hint, spend the measurement budget uniformly.
       // The evidence gate will abstain if a full swing remains undersampled.
     }

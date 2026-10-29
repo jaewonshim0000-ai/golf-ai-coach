@@ -130,3 +130,18 @@ it("reviews the last of several swings instead of asking for a trim", async () =
   assert.ok(r.frames.length > 30);
   assert.ok(r.frames.every((f) => f.t > 1.9), "the first swing's top and contact are not measured");
 });
+
+it("finds a fast swing after a long still address by looking again where the hands were raised", async () => {
+  // As in a real phone clip: 17 s at address, then a 0.7 s backswing and 0.2 s downswing.
+  const swing = faceOnSwing(), still = swing[0]!;
+  const idle = Array.from({ length: 425 }, (_, n) => ({ ...still, t: n * 0.04 }));
+  const fast = swing.map((frame) => ({ ...frame, t: 17 + frame.t * 0.6 }));
+  // The hands blur out for 0.2 s after contact, so sparse samples never see the bottom.
+  for (const frame of fast) if (frame.t > 18.09 && frame.t < 18.29) frame.imageLandmarks = frame.imageLandmarks!.map((point, joint) => joint === 15 || joint === 16 ? { ...point, visibility: 0.1 } : point);
+  const c = camera(20, 1, [...idle, ...fast]);
+  const r = await runSwingCapture(c.source, algorithms, { from: 0, to: 20, view: "face_on" });
+  const timing = findAutomaticTiming(r.frames, 720 / 1280, "face_on");
+  assert.ok(timing, "automatic timing from the measured window");
+  assert.ok(Math.abs(r.frames[timing.phases.top]!.t - 17.864) < 0.05 && Math.abs(r.frames[timing.phases.impact]!.t - 18.056) < 0.05);
+  assert.ok(r.capture.inferences <= CAPTURE_LIMITS.inferences);
+});

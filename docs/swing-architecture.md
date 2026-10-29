@@ -11,7 +11,7 @@ flowchart TD
   V[Private original video] --> P[Validate dimensions, duration and clip]
   P --> V[Three probe frames decide the camera view]
   V --> S{Clip longer than 4 seconds?}
-  S -->|Yes| L[At most 32 Lite scout inferences]
+  S -->|Yes| L[32 Lite scout inferences, plus 32 more around raised hands if no swing was found]
   L --> W[Locate the last plausible swing window]
   W --> H[Close scout, load measurement model]
   S -->|No| H
@@ -24,7 +24,8 @@ flowchart TD
   D --> E[Canonical evidence review]
   E --> O[Supported observation and maintained exercise]
   E --> A[Specific recording correction]
-  O --> I[Optional AI procedure selection]
+  E --> B[Six-phase breakdown, hand path and extra positions]
+  B --> I[Written coaching from the measured facts, grounded and saved]
 ```
 
 Scouting coordinates never enter measurement tracks. The scout locates a time interval; the Heavy model independently re-reads it. All scored positions come from one pinned measurement model. The architecture retains Heavy until a lighter measurement model demonstrates acceptable holdout error; a smaller network is not assumed equally accurate.
@@ -45,7 +46,8 @@ Scouting coordinates never enter measurement tracks. The scout locates a time in
 | `lib/golf/framing.ts` | Recording framing aid and face-on/down-the-line detection | A shoulder-geometry heuristic, not a calibrated classifier |
 | `lib/swing/review.ts` | Canonical evidence and coaching decision | Shared by browser, detail page and coaching endpoint |
 | `lib/db/repo.ts` | Ownership and atomic revision/source/trim checks | Stale writes fail explicitly, including concurrent tabs |
-| `lib/ai/swing-focus.ts` | Optional selection between maintained procedures | Cannot invent an issue, measurement or instruction |
+| `lib/golf/swing-breakdown.ts` | GolfPosePro-style six phases, hand-height trace, knee, hand-height and finish positions | Derived from the same tracks and phases; no new detector |
+| `lib/ai/swing-feedback.ts` | Detailed written coaching from measured facts, with a rule-based report of the same shape | Every quoted figure must appear in the facts; output is validated, trimmed and saved per tracks/club/model |
 | `lib/swing/evaluation.ts` | Offline recorded-corpus evaluation and release eligibility | Synthetic fixtures never count as real-world validation |
 
 The manifest records engine/model identity, timestamp source, input dimensions, preprocessing bound, inference/seek/duplicate/rejected-pose counts and elapsed time. It persists with the image tracks through compact storage. Changing the engine invalidates coaching cache fingerprints. Old image recordings remain reviewable; absent decoded-timestamp provenance withholds rhythm.
@@ -76,8 +78,8 @@ stateDiagram-v2
 | Resource | Implemented limit |
 | --- | --- |
 | Clip admitted for automatic processing | 60 video seconds, enough for an 8× slow-motion swing; longer clips must be re-recorded |
-| Logical detector requests, including failed/empty results | 128 total, including 3 view probes; at most 96 measurement requests |
-| Scout inferences on clips over 4 seconds | At most 32 |
+| Logical detector requests, including failed/empty results | 160 total, including 3 view probes; at most 96 measurement requests |
+| Scout inferences on clips over 4 seconds | At most 32, and 32 more in a zoom pass when the first finds no swing |
 | Seek requests, including duplicates and failures | 256 |
 | In-flight inference/bitmap queue | One; overlapping calls rejected |
 | Input image longest edge | At most 960 pixels, preserving aspect ratio; no upscaling |
@@ -85,7 +87,7 @@ stateDiagram-v2
 | Capture deadline | 90 seconds, with abort and resource cleanup |
 | Stored measurement frames | At most 96 for new captures; legacy envelope accepts 128 |
 | Stored model envelope | Existing 256 KiB database constraint |
-| External coaching | Optional; 12-second deadline, maintained local fallback |
+| External coaching | Optional; 55-second deadline on a 60-second page function, rule-based report fallback, written once per recording and saved |
 
 Short clips avoid the scout download entirely and perform at most 96 Heavy inferences versus the previous 128. Long clips can locate the swing with Lite before spending Heavy inferences. This is a resource bound and a reduction in maximum Heavy calls, not a measured latency or accuracy claim. Bitmap resizing bounds preparation/transfer cost; it is a preprocessing change requiring corpus evaluation. Original playback resolution remains intact.
 
@@ -100,13 +102,13 @@ Each view has three explicit checks. Face on uses head movement, backswing heigh
 1. Validate increasing finite timestamps, frame count, 33 landmarks per frame, coordinate/visibility bounds, aspect ratio and compatible provenance.
 2. Reject isolated body/joint jumps without smoothing a missing observation into an invented coordinate.
 3. Keep one body identity using proximity and scale consistency. Prefer a central initial golfer; similarly plausible candidates abstain rather than silently selecting a spectator. This remains a heuristic, not biometric re-identification.
-4. Require a complete hand arc before automatic phase timing. With separate plausible arcs, the last is measured (practice swings usually come first); a wrong pick needs a re-record. Follow-through is not a second backswing merely because it reaches higher.
+4. Require a complete hand arc before automatic phase timing. Hands hidden for up to 0.4 s just after contact (blur or occlusion at 30 fps) do not void it once a rising sample has bracketed the bottom; a follow-through that reappears above the top completes the swing rather than starting a new one. With separate plausible arcs, the last is measured (practice swings usually come first); a wrong pick needs a re-record. Follow-through is not a second backswing merely because it reaches higher.
 5. Evaluate each reading independently. Global coverage does not certify a hidden joint at contact. Required joints must support every observed position in an automatic contact or occluded-transition bracket.
 6. Require a consistently planted ankle at each displacement position, including bracket endpoints. A global percentile cannot excuse foot/camera movement at the measured moment. This is screening, not optical background stabilization; a camera rotating around an apparently fixed anchor can still evade it.
 7. Carry observed contact/transition ranges through head, posture and hip checks. A correction must remain supported throughout the range. Never collapse an uncertain range to the most alarming point.
 8. Carry setup/top/contact sampling intervals jointly into rhythm bounds. Withhold rhythm when decoded timestamp provenance is absent. Constant slow-motion scaling preserves a ratio; speed-ramped exports do not. The app cannot currently detect all speed ramps.
 9. Timing is automatic only. Phase corrections saved by the former manual tool remain explicit chosen observed frames. Frame resolution still limits rhythm precision, which is why the recording guide asks for slow motion.
-10. Use one selected supported issue and maintained exercises. AI sees calculated evidence only, never raw joint arrays or video, and cannot choose new faults or text instructions.
+10. Coaching is written from calculated facts only: phases, timing, readings with their ranges and notes, check states, tracking warnings and any reference differences. AI never sees raw joint arrays or video. It is told to treat uncertain checks as things to verify and to stay off what the camera cannot measure. Any title, evidence, summary, strength, phase note or caveat quoting a figure that is not in the facts (allowing rounding, a dropped sign and changes between phases of one measurement) is removed; a dropped supported issue falls back to the maintained procedure.
 
 The ranges are sensitivity bounds over observed samples, not statistical confidence intervals. Hand-path bottom is an estimated contact region, not detected club-ball impact. No camera-only result certifies clubface, club path, clubhead speed, pressure transfer, exact pelvic rotation or ball flight.
 
@@ -136,9 +138,11 @@ Local cancellation cannot retract a server action already executing. Revision/so
 | Sampling range crosses a correction threshold | Ask for a clearer slow-motion recording; no definite fault |
 | Corrupt/incompatible stored tracks | Fail closed into a review request |
 | Competing save, trim change, source change | Reject stale write and request reload |
-| AI timeout or invalid selection | Retain the immediate maintained procedure |
+| AI timeout, invalid output or ungrounded figures | Show the rule-based report; nothing is saved, so the next visit tries again |
 
 ## Accuracy evaluation and release eligibility
+
+A spot check ran the Heavy model over every frame of four real clips (two phone recordings with 10–15 s of address and waggles, two speed-ramped pro clips) and replayed the dumps through `runSwingCapture` and the review. Before the zoom pass and the post-contact gap rule no swing was timed; after them all four were timed, the view and playback speed matched what the frames show, and the ramped pro clips showed compressed 1.5–1.8:1 rhythm. Four clips are a smoke test, not a validation corpus.
 
 Run software/failure checks with `npm test`, type checks with `npm run typecheck`, and production compilation with `npm run build`. They establish software behavior only.
 

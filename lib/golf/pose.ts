@@ -716,6 +716,8 @@ export type PoseModel = {
   clip?: [number, number];
   /** Belongs to these tracks: a new review or a trim change starts without it. */
   setup?: SetupMarks;
+  /** Written coaching for these tracks; `key` says which tracks, club and model it was written for. */
+  feedback?: { key: string; data: unknown };
   /**
    * The frames were rebuilt from the picture (`liftFrames`): they move with
    * the body and are in camera axes, so movement can be measured on them.

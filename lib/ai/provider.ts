@@ -70,7 +70,7 @@ export class AnthropicProvider implements AIProvider {
 
   constructor(
     private readonly apiKey: string,
-    model = process.env.AI_MODEL || "claude-sonnet-5",
+    model = process.env.AI_MODEL || "claude-opus-5-5",
   ) {
     this.model = model;
   }

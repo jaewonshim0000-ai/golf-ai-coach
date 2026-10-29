@@ -665,9 +665,11 @@ export async function saveSwingModel(
   sessionId: string,
   model: PoseModel,
   guard?: SwingWriteGuard,
+  /** Attach data that does not change the tracks, such as written feedback, without invalidating open tabs. */
+  keepRevision = false,
 ): Promise<void> {
   const sb = await client();
-  const stored = compactMotionModel({ ...model, revision: randomUUID() });
+  const stored = compactMotionModel(keepRevision ? model : { ...model, revision: randomUUID() });
   // The view is detected from the video, so the swing row follows its review.
   const view = model.cameraAngle === "face_on" || model.cameraAngle === "down_the_line" ? { camera_angle: model.cameraAngle } : {};
   if (!sb) {

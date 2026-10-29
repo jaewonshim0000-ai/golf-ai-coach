@@ -416,3 +416,19 @@ describe("projected swing movement", () => {
     assert.equal(poseModelSchema.safeParse({ swing_session_id: "s1", ...bounded, t: [...bounded.t].reverse() }).success, false);
   });
 });
+
+describe("hands hidden just after contact", () => {
+  it("times the swing when a rising sample brackets contact before the hands disappear", () => {
+    const frames = faceOnSwing();
+    // At 30 fps the hands often blur or pass behind the body through early follow-through.
+    for (const frame of frames) if (frame.t > 1.81 && frame.t < 2.07) for (const joint of [15, 16]) frame.imageLandmarks![joint]!.visibility = 0.1;
+    const timing = findAutomaticTiming(frames, 1, "face_on");
+    assert.ok(timing);
+    assert.equal(frames[timing.phases.top]!.t.toFixed(2), "1.44");
+    assert.equal(frames[timing.phases.impact]!.t.toFixed(2), "1.76");
+    // Hidden contact itself is still never bridged.
+    const hiddenContact = faceOnSwing();
+    for (const frame of hiddenContact) if (frame.t > 1.65 && frame.t < 1.95) for (const joint of [15, 16]) frame.imageLandmarks![joint]!.visibility = 0.1;
+    assert.equal(findMotionPhases(hiddenContact, 1, "face_on"), null);
+  });
+});

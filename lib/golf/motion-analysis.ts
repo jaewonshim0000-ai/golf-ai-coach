@@ -154,6 +154,13 @@ function findHandArc(frames: PoseFrame[], aspect: number, view: MotionView, maxi
   let baseline = -Infinity, address = -1, top = -1, highest = Infinity;
   let locked = false, impact = -1, lowest = -Infinity;
   let previousHand = -1;
+  // The hands came back through at least 60% of the rise and are on their way up again.
+  const completes = (value: number) => locked && impact >= 0 && lowest >= highest + (baseline - highest) * 0.6 && value < lowest - 0.08;
+  const arc = (): SwingPhases | null => {
+    const still = addressBefore(top);
+    if (still >= 0) address = still;
+    return address < top && top < impact ? { address, top, impact } : null;
+  };
   for (let index = 0; index < frames.length; index++) {
     const value = path[index];
     if (value === null || value === undefined) continue;
@@ -170,6 +177,12 @@ function findHandArc(frames: PoseFrame[], aspect: number, view: MotionView, maxi
       const continues = next !== null && frames[nextHand]!.t - frames[index]!.t <= 0.101 &&
         ((!locked && value < previous && value < highest && next < value) ||
         (locked && value > previous && value > lowest && next > value));
+      // Hands blurred or behind the body just after contact, as at 30 fps, do
+      // not hide contact once a rising sample has bracketed the bottom and the
+      // hands return clearly higher into the follow-through.
+      const pastContact = completes(value) && previousHand > impact && path[previousHand]! < lowest &&
+        frames[index]!.t - frames[previousHand]!.t <= 0.401;
+      if (pastContact) return arc();
       if (frames[index]!.t - frames[previousHand]!.t > 0.201 || !continues || !hidden.length ||
           !hidden.every((frame, n) => visibleBody(frame) && frame.t - frames[previousHand + n]!.t <= 0.101) ||
           frames[index]!.t - frames[index - 1]!.t > 0.101) return null;
@@ -182,6 +195,9 @@ function findHandArc(frames: PoseFrame[], aspect: number, view: MotionView, maxi
       address = index;
     }
     if (index <= address) continue;
+    // A sparse or gappy follow-through can reappear above the top; it still
+    // completes the swing rather than starting a new backswing.
+    if (completes(value)) return arc();
     if (locked && value < highest) {
       highest = value; top = index; locked = false; impact = -1; lowest = -Infinity;
     }
@@ -196,11 +212,7 @@ function findHandArc(frames: PoseFrame[], aspect: number, view: MotionView, maxi
     }
     if (locked && index > top) {
       if (value > lowest) { lowest = value; impact = index; }
-      if (lowest >= highest + (baseline - highest) * 0.6 && value < lowest - 0.08) {
-        const still = addressBefore(top);
-        if (still >= 0) address = still;
-        return address < top && top < impact ? { address, top, impact } : null;
-      }
+      if (completes(value)) return arc();
     }
   }
   // A low hand position alone cannot prove contact without the return upward.

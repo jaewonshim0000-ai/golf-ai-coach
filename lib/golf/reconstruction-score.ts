@@ -11,15 +11,15 @@ export function scoreReconstruction(model: PoseModel, report: MotionReport): Swi
     return result;
   }
   if (!report.phases) {
-    result.reason = "The 3D replay is ready, but automatic swing timing could not be resolved. Open Adjust swing timing and mark address, top and impact to analyze the tracked positions.";
+    result.reason = "The 3D replay is ready, but automatic swing timing could not be resolved. Record again in slow motion with your hands visible from setup through the finish.";
     return result;
   }
   if (report.view === "other") {
-    result.reason = "Choose Face on or Down the line under the original video, then rebuild the swing to use the checks for that view.";
+    result.reason = "This camera angle has no matching checks. Film face on or down the line.";
     return result;
   }
   if (!report.usable || report.quality.coverage < 0.85) {
-    result.reason = `Clear body tracking is available in ${Math.round(report.quality.coverage * 100)}% of the swing; scoring needs 85%. Review the timing markers or rebuild with the shoulders and hips visible from setup through impact.`;
+    result.reason = `Clear body tracking is available in ${Math.round(report.quality.coverage * 100)}% of the swing; scoring needs 85%. Record again with the shoulders and hips visible from setup through impact.`;
     return result;
   }
   const frames = trustworthyFrames(unpackFrames(model), model.aspect ?? 1, report.view);

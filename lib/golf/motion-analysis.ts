@@ -1,4 +1,4 @@
-import { LM, type Landmark, type PoseFrame, type SwingPhases } from "./pose";
+import { LM, SLOW_MOTION_SPEEDS, type Landmark, type PoseFrame, type SwingPhases } from "./pose";
 
 export type MotionView = "face_on" | "down_the_line" | "other";
 const SEEN = 0.6;
@@ -215,6 +215,20 @@ export function swingSamplingWindow(frames: PoseFrame[], aspect: number, view: M
   return [frames[arc.address]!.t, frames[arc.top]!.t, frames[arc.impact]!.t];
 }
 
+/**
+ * Most downswings take 0.2–0.5 s, so the downswing's length in the video
+ * shows how much a clip was slowed. Picks the nearest export speed, which
+ * tolerates a downswing at least ~40% off 0.32 s. Arc detection ignores sample
+ * gaps, so it works before the real time base is known. Returns 1 without an arc.
+ */
+export function estimateSlowMotion(frames: PoseFrame[], aspect: number, view: MotionView): number {
+  const arc = swingSamplingWindow(frames, aspect, view);
+  const downswing = arc ? arc[2] - arc[1] : 0;
+  if (!(downswing > 0)) return 1;
+  const off = (speed: number) => Math.abs(Math.log(downswing / 0.32 / speed));
+  return SLOW_MOTION_SPEEDS.reduce<number>((best, speed) => off(speed) < off(best) ? speed : best, 1);
+}
+
 export type MotionTiming = {
   source: "hands" | "occluded_transition" | "marked";
   uncertainty: number;
@@ -393,7 +407,7 @@ export function analyseMotion(
   };
   const hiddenHands = frames.filter((frame) => !hands(frame, aspect)).length;
   if (hiddenHands > frames.length * 0.05) report.warnings.push(`The hands are hidden or unclear in ${hiddenHands} of ${frames.length} samples. Hidden joints and unsupported arm angles are omitted; the overlay does not fill them in.`);
-  if (coverage >= 0.65 && !validPhases) report.summary = `Tracked the body in ${visible} of ${window.length} samples, but could not identify a complete swing. Review and mark address, top and impact in Adjust swing timing, or trim to include setup through follow-through and rebuild.`;
+  if (coverage >= 0.65 && !validPhases) report.summary = `Tracked the body in ${visible} of ${window.length} samples, but could not identify a complete swing. Record one full swing in slow motion, from setup through the finish, with your hands visible.`;
   if (!(aspect > 0) || coverage < 0.65 || !phases || !validPhases) return report;
   const address = frames[phases.address]!;
   const body = median(window.flatMap((frame) => {
@@ -476,9 +490,9 @@ export function analyseMotion(
   if (report.timing) report.timing.uncertainty = uncertainty;
   const backswing = t("top") - t("address"), downswing = t("impact") - t("top");
   // Times are real swing seconds. A real downswing takes about 0.2–0.5 s, so a
-  // reading far outside that almost always means the playback speed is wrong.
+  // reading far outside that means the detected playback speed is wrong or the clip ramps its slow motion.
   if (downswing > 0 && (downswing < 0.15 || downswing > 0.6) && uncertainty <= downswing / 2) {
-    report.warnings.push(`The downswing measured ${downswing.toFixed(2)}s, outside the usual 0.2–0.5s of a real swing. Check the playback speed under the video: slow motion set as real speed, or the reverse, stretches or squeezes every time.`);
+    report.warnings.push(`The downswing measured ${downswing.toFixed(2)}s, outside the usual 0.2–0.5s of a real swing. The detected playback speed may be wrong, or the slow motion speeds up and slows down within the clip. Rhythm may be off; body positions are unaffected.`);
   }
   if (downswing >= uncertainty * 2 && uncertainty <= 0.12 && report.quality.largestGap <= 0.12 &&
       (Boolean(override) || [phases.address, phases.top, phases.impact].every((index) => hands(frames[index]!, aspect)))) {
@@ -496,7 +510,7 @@ export function analyseMotion(
       ratioRange: [(t0 - a1) / (i1 - t0), (t1 - a0) / (i0 - t1)] };
   }
   if (report.tempo) {
-    report.observations.push({ title: "Swing rhythm", detail: `Backswing-to-downswing timing is approximately ${report.tempo.ratio}:1. In real swing time that is ${backswing.toFixed(2)}s back and ${downswing.toFixed(2)}s down, using the playback speed set for this clip. Contact timing is estimated from the hand path.` });
+    report.observations.push({ title: "Swing rhythm", detail: `Backswing-to-downswing timing is approximately ${report.tempo.ratio}:1. In real swing time that is ${backswing.toFixed(2)}s back and ${downswing.toFixed(2)}s down, using the playback speed detected for this clip. Contact timing is estimated from the hand path.` });
   }
   const hip = report.readings.find((reading) => reading.id === "hips_impact");
   if (hip) report.observations.push({ title: "Hip movement", detail: view === "face_on" ?

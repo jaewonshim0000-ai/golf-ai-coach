@@ -2,7 +2,7 @@
 export const SWING_ENGINE = "swing-2d-3";
 export const CAPTURE_LIMITS = Object.freeze({
   inferences: 128, scout: 32, measurements: 96, seeks: 256,
-  deadlineMs: 90000, maxEdge: 960, maxClipSeconds: 30,
+  deadlineMs: 90000, maxEdge: 960, maxClipSeconds: 60,
 });
 export type CaptureStage = "scouting" | "measuring" | "refining";
 export type PoseVariant = "lite" | "heavy";

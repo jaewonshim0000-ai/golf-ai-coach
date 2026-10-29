@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
 
-import { holeSchema, holeShotsSchema, poseModelSchema, retimeSchema } from "./schemas";
+import { holeSchema, holeShotsSchema, poseModelSchema } from "./schemas";
 
 describe("hole and scorecard validation", () => {
   it("needs a length for every shot of a hole", () => {
@@ -83,13 +83,5 @@ describe("rebuilding and re-timing a stored swing", () => {
     assert.equal(poseModelSchema.safeParse({ ...model, aspect: 9 / 16 }).success, true);
     assert.equal(poseModelSchema.safeParse({ ...model, aspect: 0 }).success, false);
     assert.equal(poseModelSchema.safeParse({ ...model, aspect: 20 }).success, false);
-  });
-
-  it("re-times only to three phases in order", () => {
-    const retime = (address: number, top: number, impact: number) =>
-      retimeSchema.safeParse({ swing_session_id: "swing_1", phases: { address, top, impact } }).success;
-    assert.equal(retime(0, 40, 60), true);
-    assert.equal(retime(40, 40, 60), false);
-    assert.equal(retime(0, 60, 40), false);
   });
 });

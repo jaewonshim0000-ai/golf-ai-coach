@@ -8,7 +8,6 @@ export type SwingFocus = {
   id: SwingFocusId | null;
   issue: string;
   steps: string[];
-  action?: "timing";
 };
 
 const procedures: Record<SwingFocusId, Record<SwingProcedure, string[]>> = {
@@ -78,11 +77,12 @@ export function swingFocusProcedure(id: SwingFocusId, procedure: SwingProcedure)
   return [...procedures[id][procedure]];
 }
 
-function needsTiming(issue: string): SwingFocus {
-  return { status: "needs_input", id: null, issue, action: "timing", steps: [
-    "Open Adjust swing timing for this video.",
-    "Pause at setup, the top of the backswing and contact, and mark each position.",
-    "Save the timing to update the analysis using this recording.",
+/** Timing and views are automatic, so the remedy is always a clearer recording. */
+function recordAgain(issue: string): SwingFocus {
+  return { status: "needs_input", id: null, issue, steps: [
+    "Record again in slow motion with the phone on a stand, placed as the filming guide shows.",
+    "Keep your whole body, hands and club in view from setup through the finish.",
+    "The new video is timed and analyzed automatically.",
   ] };
 }
 
@@ -117,7 +117,7 @@ export function getSwingFocus(report: MotionReport, ballSide?: "left" | "right")
       hip_depth: "Your hip position around contact needs checking before choosing a correction.",
       tempo: "Your swing timing needs checking before choosing a rhythm correction.",
     };
-    return needsTiming(details[uncertain.id] ?? "Your swing positions need checking before choosing a correction.");
+    return recordAgain(details[uncertain.id] ?? "Your swing positions need checking before choosing a correction.");
   }
   if (components.length) {
     return { status: "clear", id: null, issue: "The visible checks do not show a clear swing fault.", steps: [
@@ -125,29 +125,14 @@ export function getSwingFocus(report: MotionReport, ballSide?: "left" | "right")
       "Record another swing from the same phone position to check whether a consistent issue appears.",
     ] };
   }
-  if (report.view === "other") {
-    return { status: "needs_input", id: null, issue: "Choose the camera view to finish analyzing this swing.", steps: [
-      "Under the video, set Camera view to Face on if the camera faces your chest, or Down the line if it is behind you.",
-      "Select Review again to analyze this recording with the matching checks.",
-    ] };
-  }
-  if (report.quality.coverage < 0.65) {
-    return { status: "needs_input", id: null, issue: "Your body could not be tracked clearly through this swing.", steps: [
-      "Play this video and check that the guides follow you, with your shoulders, hips and hands visible.",
-      "Shorten the recording to one swing and select Review again.",
-      "If those body parts are hidden in the video, use a brighter recording with your whole body in view.",
-    ] };
-  }
-  if (!report.phases) return needsTiming("The setup, top and contact positions could not be identified automatically.");
+  if (report.view === "other") return recordAgain("This camera angle has no matching checks. Film face on or down the line.");
+  if (report.quality.coverage < 0.65) return recordAgain("Your body could not be tracked clearly through this swing.");
+  if (!report.phases) return recordAgain("The setup, top and contact positions could not be identified automatically.");
   if (report.usable && !report.quality.cameraStable) {
     return { status: "needs_input", id: null, issue: "Camera or foot movement prevented a reliable head and hip check.", steps: [
       "Check whether the phone moves or both feet leave the frame during this swing.",
       "Use a fixed phone support and keep your feet visible for the next recording.",
     ] };
   }
-  return { status: "needs_input", id: null, issue: "The key body positions could not be read in this video.", steps: [
-    "Use Check your setup beside the video to confirm the tracked outline follows you.",
-    "Check the setup, top and contact frames in Adjust swing timing, then save to update this analysis.",
-    "If a key body part is hidden at those positions, use a recording where it stays visible.",
-  ], action: "timing" };
+  return recordAgain("The key body positions could not be read in this video.");
 }

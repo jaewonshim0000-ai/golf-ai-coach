@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { captureManifestSchema } from "../swing/contracts";
+import { GPP_PHASES } from "../golfposepro/phases";
+import { MAX_FRAMES } from "../golfposepro/result";
 
 import {
   CLUBS,
@@ -273,3 +275,16 @@ export const setupMarksSchema = z
   })
   // Two taps on the same spot have no shaft angle.
   .refine((marks) => Math.hypot(marks.grip[0] - marks.clubhead[0], marks.grip[1] - marks.clubhead[1]) >= 0.02, "Mark the grip and clubhead apart.");
+
+/** GolfPosePro's per-frame wrist heights and key-frame poses from the browser.
+ * The phases are not accepted from the client: the server recomputes them. */
+const keyPoint = z.tuple([z.number().finite().min(-2).max(3), z.number().finite().min(-2).max(3), z.number().finite().min(0).max(1)]);
+export const golfPoseProSchema = z.object({
+  version: z.number().int().min(1).max(1000),
+  fps: z.number().finite().min(1).max(1000),
+  width: z.number().int().min(1).max(10000),
+  height: z.number().int().min(1).max(10000),
+  startFrame: z.number().int().min(0).max(10_000_000),
+  wristY: z.array(z.number().finite().min(-100_000).max(100_000).nullable()).min(10).max(MAX_FRAMES),
+  keyFrames: z.array(z.object({ phase: z.enum(GPP_PHASES), frame: z.number().int().min(0).max(MAX_FRAMES), pose: z.array(keyPoint).length(33).nullable() })).length(GPP_PHASES.length),
+});

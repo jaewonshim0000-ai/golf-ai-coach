@@ -36,6 +36,8 @@ export type GenerateRequest<T> = {
   timeoutMs?: number;
   /** Base64 JPEG frames, sent before the prompt so the model reads them first. */
   images?: string[];
+  /** Thinking depth; lower answers sooner. The model's default when omitted. */
+  effort?: "low" | "medium" | "high";
 };
 
 export interface AIProvider {
@@ -83,6 +85,8 @@ export class AnthropicProvider implements AIProvider {
       const message = await client.messages.create({
         model: this.model,
         max_tokens: request.maxTokens ?? 2000,
+        // SDK 0.68 predates `output_config`; the API accepts it.
+        ...(request.effort ? { output_config: { effort: request.effort } } as object : {}),
         system: request.system,
         messages: [
           {

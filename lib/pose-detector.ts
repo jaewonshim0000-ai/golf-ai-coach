@@ -7,7 +7,7 @@ export type PoseDetector = { detect: (image: ImageBitmap | HTMLVideoElement | HT
 
 // Match the installed JS runtime to its WASM. Pin model assets for repeatability.
 const WASM = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm";
-const modelUrl = (variant: PoseVariant) => `https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_${variant}/float16/1/pose_landmarker_${variant}.task`;
+const modelUrl = (variant: PoseVariant | "full") => `https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_${variant}/float16/1/pose_landmarker_${variant}.task`;
 
 export async function createPoseDetector(delegate: "GPU" | "CPU", variant: PoseVariant = "heavy"): Promise<PoseDetector> {
   const { FilesetResolver, PoseLandmarker } = await import("@mediapipe/tasks-vision");
@@ -51,4 +51,23 @@ export function resilientDetector(variant: PoseVariant = "heavy") {
     },
     close() { closed = true; detector?.close(); detector = undefined; },
   };
+}
+
+/**
+ * GolfPosePro's model: MediaPipe Pose "Full" tracking from frame to frame, as
+ * `mp.solutions.pose.Pose(static_image_mode=False)` with its 0.5 defaults.
+ * Frames must be passed in order with increasing timestamps.
+ */
+export async function createVideoPoseLandmarker(delegate: "GPU" | "CPU") {
+  const { FilesetResolver, PoseLandmarker } = await import("@mediapipe/tasks-vision");
+  const fileset = await FilesetResolver.forVisionTasks(WASM);
+  return PoseLandmarker.createFromOptions(fileset, {
+    baseOptions: { modelAssetPath: modelUrl("full"), delegate },
+    runningMode: "VIDEO",
+    numPoses: 1,
+    minPoseDetectionConfidence: 0.5,
+    minPosePresenceConfidence: 0.5,
+    minTrackingConfidence: 0.5,
+    outputSegmentationMasks: false,
+  });
 }

@@ -6,6 +6,7 @@ import { getSwingFeedbackAction } from "@/app/swing-coach-actions";
 import type { SwingFeedback } from "@/lib/ai/swing-feedback";
 import { GPP_PHASES, type GppPhase } from "@/lib/golfposepro/phases";
 import { frameTime, type GolfPoseProResult } from "@/lib/golfposepro/result";
+import { DRILLS_BY_ID } from "@/lib/seed/drills";
 import { Badge, Card, CardContent } from "@/components/ui/primitives";
 import { Disclosure } from "@/components/ui/disclosure";
 import { seekSwing } from "@/components/swing/seek-button";
@@ -128,8 +129,7 @@ export function SwingReport({ sessionId, result, initial, pending }: {
     {feedback.priorities.map((item, index) => <Card key={item.title}><CardContent className="space-y-3 pt-5">
       <div className="flex items-start justify-between gap-3">
         <h3 className="text-[15px] font-semibold leading-snug"><span className="text-fg-subtle">{index + 1}.</span> {item.title}</h3>
-        <button type="button" onClick={() => show(frameTime(result, result.phases[item.phase][0]))}
-          className="shrink-0 rounded-full bg-surface-2 px-2.5 py-1 text-[11px] font-medium text-accent">{item.phase}</button>
+        <PhaseButton result={result} phase={item.phase} />
       </div>
       <p className="text-[13px] leading-relaxed text-fg-muted">{item.evidence}</p>
       <p className="text-[13px] leading-relaxed">{item.why}</p>
@@ -137,8 +137,26 @@ export function SwingReport({ sessionId, result, initial, pending }: {
         <p className="text-[12px] font-semibold">How to fix it</p>
         <ol className="mt-2 list-decimal space-y-2 pl-5 text-[13px] leading-relaxed text-fg-muted">{item.fix.map((step) => <li key={step}>{step}</li>)}</ol>
       </div>
-      <p className="rounded-lg bg-accent-soft px-3 py-2 text-[12.5px] leading-relaxed"><span className="font-semibold">Drill: </span>{item.drill}</p>
     </CardContent></Card>)}
+
+    {feedback.practice.length ? <Card id="swing-practice"><CardContent className="pt-5">
+      <h3 className="text-[15px] font-semibold">Your practice list</h3>
+      <p className="mt-1 text-[12px] text-fg-muted">What to practise for the best result, most important first.</p>
+      <ol className="mt-4 space-y-4">{feedback.practice.map((item, index) => {
+        const drill = item.drill ? DRILLS_BY_ID.get(item.drill) : undefined;
+        return <li key={item.title} className="space-y-2 border-t border-border pt-4 first:border-0 first:pt-0">
+          <div className="flex items-start justify-between gap-3">
+            <p className="text-[14px] font-semibold leading-snug"><span className="text-fg-subtle">{index + 1}.</span> {item.title}</p>
+            <PhaseButton result={result} phase={item.phase} />
+          </div>
+          <p className="text-[13px] leading-relaxed text-fg-muted">{item.why}</p>
+          <ol className="list-decimal space-y-1.5 pl-5 text-[13px] leading-relaxed">{item.steps.map((step) => <li key={step}>{step}</li>)}</ol>
+          <p className="rounded-lg bg-accent-soft px-3 py-2 text-[12.5px] leading-relaxed"><span className="font-semibold">Dose: </span>{item.dose}</p>
+          {drill ? <p className="text-[12px] leading-relaxed text-fg-subtle">Library drill: {drill.name} · track {drill.metric_to_track.toLowerCase()}, aim for {Math.round(drill.success_threshold * 100)}%
+            {drill.equipment_required.length ? ` · needs ${drill.equipment_required.join(", ")}` : ""}</p> : null}
+        </li>;
+      })}</ol>
+    </CardContent></Card> : null}
 
     {feedback.strengths.length ? <Card><CardContent className="pt-5">
       <h3 className="text-[15px] font-semibold">What is working</h3>
@@ -152,13 +170,13 @@ export function SwingReport({ sessionId, result, initial, pending }: {
       </li>)}</ul>
     </Disclosure> : null}
 
-    {feedback.practice.length ? <Card><CardContent className="pt-5">
-      <h3 className="text-[15px] font-semibold">Practice plan</h3>
-      <ol className="mt-3 list-decimal space-y-2 pl-5 text-[13px] leading-relaxed text-fg-muted">{feedback.practice.map((step) => <li key={step}>{step}</li>)}</ol>
-    </CardContent></Card> : null}
-
     {feedback.caveats.length ? <ul className="space-y-1 px-1 text-[11px] leading-relaxed text-fg-subtle">{feedback.caveats.map((item) => <li key={item}>{item}</li>)}</ul> : null}
   </section>;
+}
+
+function PhaseButton({ result, phase }: { result: GolfPoseProResult; phase: GppPhase }) {
+  return <button type="button" onClick={() => show(frameTime(result, result.phases[phase][0]))}
+    className="shrink-0 rounded-full bg-surface-2 px-2.5 py-1 text-[11px] font-medium text-accent">{phase}</button>;
 }
 
 function Phases({ result }: { result: GolfPoseProResult }) {

@@ -15,8 +15,16 @@ function provider(output: unknown, observe: (request: GenerateRequest<unknown>) 
 const reply = (evidence: string, summary = "A full swing with a quick transition.") => ({
   summary, strengths: ["You finish with your hands high."],
   priorities: [{ title: "Let the backswing finish", phase: "Backswing", evidence, why: "A rushed top costs timing.",
-    fix: ["Count one-two going back."], drill: "Ten pause-at-the-top swings." }],
-  phases: [{ phase: "Top", note: "Hands well above your head." }], practice: ["Hit twenty half shots."], caveats: [],
+    fix: ["Count one-two going back."] }],
+  phases: [{ phase: "Top", note: "Hands well above your head." }],
+  practice: [
+    { title: "Pause at the top", phase: "Top", why: "Finishing the backswing gives the downswing time.", steps: ["Swing to the top and hold for one count."],
+      dose: "3 sets of 10 swings, 3 days a week", drill: "drill_pause_at_top" },
+    { title: "Feet-together swings", phase: "Downswing", why: "Balance shows a rushed start.", steps: ["Hit half shots with your feet together."],
+      dose: "20 balls before each session", drill: "drill_made_up" },
+    { title: "Speed ladder", phase: "Impact", why: "You swing at 113.7 mph.", steps: ["Swing faster."], dose: "10 swings" },
+  ],
+  caveats: [],
 });
 
 it("sends GolfPosePro's exact values and the key-frame images, not raw video", async () => {
@@ -34,6 +42,16 @@ it("sends GolfPosePro's exact values and the key-frame images, not raw video", a
   }), ["/9j/a", "/9j/b", "/9j/c", "/9j/d", "/9j/e", "/9j/f"]);
   assert.equal(feedback.source, "ai");
   assert.equal(feedback.priorities[0]!.phase, "Backswing");
+});
+
+it("keeps library drills it offered, drops unknown ids and practices quoting invented figures", async () => {
+  const input = swingFacts(result, "7_iron", "right");
+  const feedback = await generateSwingFeedback(input, provider(reply("Your backswing is quick."), (request) => {
+    assert.match(request.system, /drill_pause_at_top: Pause-at-the-Top Transition/);
+    assert.doesNotMatch(request.system, /drill_lag_ladder/);
+  }));
+  assert.deepEqual(feedback.practice.map((item) => [item.title, item.drill]), [["Pause at the top", "drill_pause_at_top"], ["Feet-together swings", null]]);
+  assert.equal(feedback.practice[0]!.dose, "3 sets of 10 swings, 3 days a week");
 });
 
 it("drops quoted figures GolfPosePro did not produce", async () => {

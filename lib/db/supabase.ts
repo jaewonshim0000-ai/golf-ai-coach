@@ -20,6 +20,26 @@ export function browserClient(): SupabaseClient | null {
   return createBrowserClient(url, anonKey);
 }
 
+/** The client library already retries reads on 503, 520 and network failure. */
+const GATEWAY_ERRORS = new Set([500, 502, 504]);
+
+/**
+ * Retry reads on the gateway errors the client library passes straight
+ * through. One such reply, with an empty body, failed a production page.
+ * Writes are never repeated.
+ */
+export function retryReads(base: typeof fetch, delayMs = 250): typeof fetch {
+  return async (input, init) => {
+    const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
+    for (let attempt = 1; ; attempt++) {
+      const response = await base(input, init);
+      if (attempt >= 3 || (method !== "GET" && method !== "HEAD") || !GATEWAY_ERRORS.has(response.status)) return response;
+      await response.body?.cancel();
+      await new Promise((resolve) => setTimeout(resolve, delayMs * attempt));
+    }
+  };
+}
+
 type CookieStore = {
   getAll(): { name: string; value: string }[];
   set(name: string, value: string, options?: Record<string, unknown>): void;
@@ -33,6 +53,7 @@ type CookieStore = {
 export function serverClient(store: CookieStore): SupabaseClient | null {
   if (!url || !anonKey) return null;
   return createServerClient(url, anonKey, {
+    global: { fetch: retryReads((input, init) => fetch(input, init)) },
     cookies: {
       getAll: () => store.getAll(),
       setAll: (cookiesToSet) => {

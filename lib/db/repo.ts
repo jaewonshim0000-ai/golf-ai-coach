@@ -49,8 +49,9 @@ async function client(): Promise<SupabaseClient | null> {
   return serverClient(cookieStore);
 }
 
-function unwrap<T>(result: { data: T | null; error: { message: string } | null }, what: string): T {
-  if (result.error) throw new Error(`${what}: ${result.error.message}`);
+function unwrap<T>(result: { data: T | null; error: { message: string } | null; status?: number }, what: string): T {
+  // An empty-bodied gateway error has no message; the status still says what failed.
+  if (result.error) throw new Error(`${what}: ${result.error.message || `HTTP ${result.status ?? "error"} with no message`}`);
   return (result.data ?? []) as T;
 }
 

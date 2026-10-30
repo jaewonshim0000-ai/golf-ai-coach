@@ -1,3 +1,4 @@
+import type { GolfPoseProResult } from "../golfposepro/result";
 import type { SwingPhase } from "./swing-metrics";
 import type { CaptureManifest } from "../swing/contracts";
 
@@ -718,6 +719,8 @@ export type PoseModel = {
   setup?: SetupMarks;
   /** Written coaching for these tracks; `key` says which tracks, club and model it was written for. */
   feedback?: { key: string; data: unknown };
+  /** GolfPosePro's analysis of every frame; the swing report is built from this. */
+  golfPosePro?: GolfPoseProResult;
   /**
    * The frames were rebuilt from the picture (`liftFrames`): they move with
    * the body and are in camera axes, so movement can be measured on them.

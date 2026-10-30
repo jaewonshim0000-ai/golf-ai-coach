@@ -35,6 +35,8 @@ import {
   type SwingPhases,
 } from "@/lib/golf/pose";
 import type { MotionView } from "@/lib/golf/motion-analysis";
+import { detectSwingPhases } from "@/lib/golfposepro/phases";
+import type { GolfPoseProResult } from "@/lib/golfposepro/result";
 import { holeShots, type HoleRow } from "@/lib/golf/hole-entry";
 import { DRILLS_BY_ID } from "@/lib/seed/drills";
 import { loadPlayerState } from "@/lib/player-state";
@@ -46,6 +48,7 @@ import {
   fieldErrors,
   measurementSchema,
   poseModelSchema,
+  golfPoseProSchema,
   practiceSessionSchema,
   practicePrioritiesSchema,
   profileSchema,
@@ -932,6 +935,8 @@ export async function savePoseModelAction(input: {
   capture?: CaptureManifest;
   expectedRevision?: string | null;
   sourceVideo?: string | null;
+  /** GolfPosePro's wrist series and key-frame poses; its phases are recomputed here. */
+  golfPosePro?: unknown;
 }): Promise<PoseState> {
   const user = await requireUser();
   // Keep the legacy tuple validation while accepting image-only uploads.
@@ -947,6 +952,17 @@ export async function savePoseModelAction(input: {
       (session.clip_end !== null && Math.abs(parsed.data.clip[1] - session.clip_end) > 0.1)))
     return { ok: false, message: "The trim changed during analysis. Review the current clip again." };
 
+  let golfPosePro: GolfPoseProResult | undefined;
+  if (input.golfPosePro !== undefined) {
+    const sent = golfPoseProSchema.safeParse(input.golfPosePro);
+    const segmentation = sent.success ? detectSwingPhases(sent.data.wristY) : null;
+    if (!sent.success || !segmentation) return { ok: false, message: "GolfPosePro could not find a swing in this video." };
+    // Key frames must be the middles of the phases recomputed from the same wrist series.
+    if (sent.data.keyFrames.some(({ phase, frame }) => frame !== Math.floor((segmentation.phases[phase][0] + segmentation.phases[phase][1]) / 2)))
+      return { ok: false, message: "GolfPosePro's results did not match their wrist series. Review the video again." };
+    golfPosePro = { ...sent.data, phases: segmentation.phases, swingStart: segmentation.swingStart, swingEnd: segmentation.swingEnd };
+  }
+
   const detected = unpackFrames(parsed.data);
   return storeMotion(user.id, session.id, profile?.dominant_hand ?? "right", detected, {
     aspect: parsed.data.aspect ?? 0,
@@ -958,6 +974,7 @@ export async function savePoseModelAction(input: {
     reconstruct: parsed.data.reconstruct,
     capture: parsed.data.capture,
     guard: { revision: parsed.data.expectedRevision, videoUrl: session.video_url, clipStart: session.clip_start, clipEnd: session.clip_end },
+    golfPosePro,
   });
 }
 
@@ -967,9 +984,10 @@ async function storeMotion(
   handedness: "right" | "left",
   frames: PoseFrame[],
   options: { aspect: number; view: MotionView; phases?: SwingPhases; clip?: [number, number]; ballSide?: "left" | "right"; reconstruct?: boolean; reconstructionVersion?: 1;
-    capture?: CaptureManifest; guard: repo.SwingWriteGuard; slowMotion?: number },
+    capture?: CaptureManifest; guard: repo.SwingWriteGuard; slowMotion?: number; golfPosePro?: GolfPoseProResult },
 ): Promise<PoseState> {
   const updatedModel = buildVideoModel(frames, { ...options, handedness });
+  if (options.golfPosePro) updatedModel.golfPosePro = options.golfPosePro;
   const { report, blocks } = reviewSwing(updatedModel);
   const review = reviewFaceOn(frames, options.aspect, options.view);
   try {
@@ -982,7 +1000,7 @@ async function storeMotion(
   revalidatePath("/swing");
   revalidatePath("/swing/references");
   return { ok: true, measurements: report.readings.length || review.metrics.length,
-    message: blocks[0] ?? (report.usable ? "Your 2D swing analysis is ready. Review the measured positions below."
+    message: options.golfPosePro ? "GolfPosePro has read your swing." : blocks[0] ?? (report.usable ? "Your 2D swing analysis is ready. Review the measured positions below."
       : review.status !== "record_again" ? "Your visible movement review is ready. Exact swing timing is unclear."
       : "Your video tracks are saved. Review the recording notes below.") };
 }

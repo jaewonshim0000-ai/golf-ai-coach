@@ -1,99 +1,55 @@
 # Swing analysis architecture
 
-The design objective is **bounded local processing with conservative, traceable coaching**. A single phone camera cannot provide foolproof biomechanical measurements. The system must return a useful supported observation, ask for a specific correction, or abstain. It must not turn an unavailable reading into a good score, or a detector's visibility probability into measurement accuracy.
-
-This document describes the implemented architecture and the remaining empirical validation requirement. There is no claim of validated real-world accuracy.
+The swing report is **GolfPosePro's analysis**: [GolfPosePro](https://github.com/ryanboscobanze/GolfPosePro) (MIT) runs MediaPipe Pose on every frame of the video, takes the wrist height, and splits the swing into six phases from it. The app reproduces that pipeline in the browser and has an AI coach write a comprehensive analysis from exactly those values and the six key frames. A single phone camera still cannot provide foolproof biomechanical measurements; nothing here is validated against a capture system.
 
 ## End-to-end data path
 
 ```mermaid
 flowchart TD
-  V[Private original video] --> P[Validate dimensions, duration and clip]
-  P --> V[Three probe frames decide the camera view]
-  V --> S{Clip longer than 4 seconds?}
-  S -->|Yes| L[32 Lite scout inferences, plus 32 more around raised hands if no swing was found]
-  L --> W[Locate the last plausible swing window]
-  W --> H[Close scout, load measurement model]
-  S -->|No| H
-  H --> M[At most 96 Heavy measurement inferences]
-  M --> R[Refine around observed hand arc]
-  R --> X[Downswing length in the video picks the slow-motion speed]
-  X --> T[Image tracks in real swing seconds and capture manifest]
-  T --> C[Owner, source, trim and revision checks]
-  C --> D[Atomic compare-and-swap save]
-  D --> E[Canonical evidence review]
-  E --> O[Supported observation and maintained exercise]
-  E --> A[Specific recording correction]
-  E --> B[Six-phase breakdown, hand path and extra positions]
-  B --> I[Written coaching from the measured facts, grounded and saved]
+  V[Private original video] --> F[Estimate frame rate from decoded frames]
+  F --> R[Step through every frame in order]
+  R --> P[MediaPipe Pose Full, VIDEO mode: GolfPosePro's model and 0.5 confidences]
+  P --> W[Wrist height per frame: visible wrists over 0.4, averaged, in pixels]
+  W --> S[detect_swing_phases: six phases, swing start and end]
+  S --> K[Middle frame of each phase with its pose]
+  K --> D[Save: server recomputes phases from the wrist series and checks the key frames]
+  D --> I[Browser draws the six key frames with the pose]
+  I --> A[AI coach: GolfPosePro values plus key-frame images]
+  A --> G[Quoted figures checked against the values, then saved]
 ```
 
-Scouting coordinates never enter measurement tracks. The scout locates a time interval; the Heavy model independently re-reads it. All scored positions come from one pinned measurement model. The architecture retains Heavy until a lighter measurement model demonstrates acceptable holdout error; a smaller network is not assumed equally accurate.
+The phase detection is a line-for-line port of the notebook's `detect_swing_phases`, including NumPy float32 rounding and SciPy's running-sum filter, which carries a NaN forward once a frame has no visible wrist. Running the notebook's own functions on its four sample videos (MediaPipe 0.10.21) and the port on the same wrist series gives identical frames for every phase (`lib/golfposepro/phases.test.ts`). Running the browser's model (Pose Landmarker Full in VIDEO mode) over the same videos lands within one to four frames of the notebook's phases. In the app, the iron sample read 564 frames and matched the notebook's printed phases within one frame.
 
 ## Modules and contracts
 
 | Module | Responsibility | Boundary |
 | --- | --- | --- |
-| `lib/swing/policy.ts` | Engine version and immutable resource budgets | No model, validation or UI dependency |
-| `lib/swing/contracts.ts` | Strict capture-manifest schema | Diagnostics are client-reported, not an accuracy certificate |
-| `lib/swing/manifest.ts` | Shared pure manifest validator | Keeps the schema library out of the video player |
-| `lib/swing/capture.ts` | Sequential capture orchestration with injected source and algorithms | No React, database or browser globals required |
-| `lib/pose-runner.ts` | Browser seeking, capture ownership, identity selection, sampling | A newer run cancels the previous owner of that video element |
-| `lib/pose-worker-client.ts` | One pending inference; bounded bitmap; worker and foreground fallback | Rejects overlapping calls; releases worker, canvas and bitmaps |
-| `lib/pose-detector.ts` | Pinned Lite/Heavy model assets; GPU-to-CPU fallback | Random-access decoding uses IMAGE mode |
-| `lib/swing/segments.ts` | Detect separate plausible swing arcs | The last candidate is measured; candidates do not prove timing |
-| `lib/golf/motion-analysis.ts` | Projected geometry, phase estimates, sampling ranges and slow-motion speed | No inferred depth used for player-facing measurements |
-| `lib/golf/framing.ts` | Recording framing aid and face-on/down-the-line detection | A shoulder-geometry heuristic, not a calibrated classifier |
-| `lib/swing/review.ts` | Canonical evidence and coaching decision | Shared by browser, detail page and coaching endpoint |
+| `lib/golfposepro/phases.ts` | GolfPosePro's wrist rule and `detect_swing_phases` | Pure; pinned to the notebook's results by tests. Do not "improve" it |
+| `lib/golfposepro/result.ts` | Result shape, key frames at phase middles, a ≤96-frame track for the overlay and comparisons | Pure; phases computed on the stored (0.01 px) wrist values |
+| `lib/golfposepro/capture.ts` | Frame-rate probe, every-frame stepping, GPU-to-CPU fallback | Browser only; at most 1,800 frames and six minutes |
+| `lib/pose-detector.ts` | Pinned model assets; GolfPosePro's Full VIDEO-mode landmarker | VIDEO mode needs frames in order with rising timestamps |
+| `app/actions.ts` (`savePoseModelAction`) | Validates the wrist series and key frames, recomputes the phases, stores the result | Client phases are never trusted |
+| `lib/ai/swing-feedback.ts` | Facts from GolfPosePro's values, AI call with key-frame images, rule-based report | Quoted figures must appear in the values; low effort keeps a call near 35 s |
+| `app/swing-coach-actions.ts` | Writes feedback once per result, club, handedness and model, and saves it | Saved without changing the swing's revision |
+| `components/swing/swing-report.tsx` | Phases, wrist trajectory, key frames, AI analysis | Key frames are drawn from the player's own video |
+| `lib/golf/motion-analysis.ts`, `lib/swing/review.ts` | Projected review of the stored track | Used by reference comparison, not by the report |
 | `lib/db/repo.ts` | Ownership and atomic revision/source/trim checks | Stale writes fail explicitly, including concurrent tabs |
-| `lib/golf/swing-breakdown.ts` | GolfPosePro-style six phases, hand-height trace, knee, hand-height and finish positions | Derived from the same tracks and phases; no new detector |
-| `lib/ai/swing-feedback.ts` | Detailed written coaching from measured facts, with a rule-based report of the same shape | Every quoted figure must appear in the facts; output is validated, trimmed and saved per tracks/club/model |
-| `lib/swing/evaluation.ts` | Offline recorded-corpus evaluation and release eligibility | Synthetic fixtures never count as real-world validation |
 
-The manifest records engine/model identity, timestamp source, input dimensions, preprocessing bound, inference/seek/duplicate/rejected-pose counts and elapsed time. It persists with the image tracks through compact storage. Changing the engine invalidates coaching cache fingerprints. Old image recordings remain reviewable; absent decoded-timestamp provenance withholds rhythm.
+## Capture and resources
 
-Slow-motion integration keeps stored sample times in real swing seconds and stores the playback slowdown alongside them. Video time equals sample time multiplied by that slowdown. Nobody enters the slowdown: capture runs in video seconds, then the downswing's length in the video picks the nearest of real speed, 4× or 8× (a 0.32 s downswing is assumed; the pick tolerates at least about 40% either way). Hand-arc detection ignores sample gaps, so it works before the time base is known. A misread speed scales absolute durations and the gap tolerances but not the rhythm ratio. The camera view is detected the same way, from shoulder spacing relative to torso length on three early probe frames. Seeking and replay use video time. Upload validation checks both time bases consistently. Reference metadata uses the same revision guards, and reference comparisons pass through the canonical evidence gate.
-
-## Capture state and resource ownership
-
-```mermaid
-stateDiagram-v2
-  [*] --> Preflight
-  Preflight --> Scouting: longer clip
-  Preflight --> Measuring: short clip
-  Scouting --> Measuring: last plausible window or bounded fallback
-  Measuring --> Refining
-  Refining --> Complete: budget spent or no useful requests
-  Preflight --> Failed: invalid source or clip
-  Measuring --> Failed: detector failure
-  Refining --> Failed: detector failure
-  Scouting --> Cancelled: abort or deadline
-  Measuring --> Cancelled: abort or deadline
-  Refining --> Cancelled: abort or deadline
-  Complete --> [*]
-  Failed --> [*]
-  Cancelled --> [*]
-```
-
-| Resource | Implemented limit |
+| Resource | Limit |
 | --- | --- |
-| Clip admitted for automatic processing | 60 video seconds, enough for an 8× slow-motion swing; longer clips must be re-recorded |
-| Logical detector requests, including failed/empty results | 160 total, including 3 view probes; at most 96 measurement requests |
-| Scout inferences on clips over 4 seconds | At most 32, and 32 more in a zoom pass when the first finds no swing |
-| Seek requests, including duplicates and failures | 256 |
-| In-flight inference/bitmap queue | One; overlapping calls rejected |
-| Input image longest edge | At most 960 pixels, preserving aspect ratio; no upscaling |
-| Concurrent detector instances per run | One; scout closed before measurement |
-| Capture deadline | 90 seconds, with abort and resource cleanup |
-| Stored measurement frames | At most 96 for new captures; legacy envelope accepts 128 |
-| Stored model envelope | Existing 256 KiB database constraint |
-| External coaching | Optional; 55-second deadline on a 60-second page function, rule-based report fallback, written once per recording and saved |
+| Frames read | Every frame, up to 1,800 (about a minute at 30 fps); longer clips must be trimmed or re-recorded |
+| Reading time | Six-minute deadline; about 45 s for a 564-frame clip in testing |
+| Detector | One Full-model landmarker, GPU first, CPU if the GPU fails at start or mid-clip |
+| Stored per swing | Wrist height per frame, six key-frame poses, a ≤96-frame overlay track |
+| AI call | Low effort, six 360-px key frames, 55-second timeout on a 60-second page function; rule-based report otherwise |
 
-Short clips avoid the scout download entirely and perform at most 96 Heavy inferences versus the previous 128. Long clips can locate the swing with Lite before spending Heavy inferences. This is a resource bound and a reduction in maximum Heavy calls, not a measured latency or accuracy claim. Bitmap resizing bounds preparation/transfer cost; it is a preprocessing change requiring corpus evaluation. Original playback resolution remains intact.
+Frame rate is not exposed by browsers, so a short muted playback measures the smallest step between decoded frames. Each frame is then reached by seeking to its centre and waiting for `seeked`. GolfPosePro's frame indices start at the first frame of the analysed clip; times are video seconds, and slow motion stretches every duration while leaving phase ratios unchanged.
 
-The manifest's `inferences` counter counts logical detector requests. A GPU initialization/inference failure can retry on CPU once, and an unavailable worker can retry the frame on the foreground path. Those bounded recovery attempts can add native model calls beyond the request count; the counter is not represented as a count of every backend invocation.
+## Stored-track review (reference comparison)
 
-The orchestrator races asynchronous seeking and inference against cancellation and a deadline. Its `finally` path closes the active detector. The browser adapter restores the playhead only if it still owns that video, so a cancelled older run cannot move a newer run's playhead. JavaScript cannot interrupt a synchronous foreground inference in progress; browsers without workers may exceed the response deadline until that call returns. No claim of a hard real-time guarantee is made.
+The sections below describe the projected 2D review that still runs on the stored overlay track. The swing report does not use it; reference comparisons and the overlay on the video do.
 
 ## Evidence rules
 

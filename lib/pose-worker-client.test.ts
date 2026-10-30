@@ -1,10 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, it, mock } from "node:test";
 import { createSwingDetector } from "./pose-worker-client";
-import { captureSwing, readSwing, seekSwingFrame } from "./pose-runner";
-import { faceOnSwing } from "./golf/__fixtures__/face-on";
-import { poseModelSchema } from "./validation/schemas";
-import { packFrames, type Landmark } from "./golf/pose";
+import type { Landmark } from "./golf/pose";
 
 const originals = new Map<string, PropertyDescriptor | undefined>();
 function global(name: string, value: unknown) {
@@ -89,21 +86,6 @@ it("cancels in-flight inference promptly and terminates the worker", async () =>
   assert.equal(FakeWorker.instances[0]!.terminated, true);
 });
 
-it("counts failed detections against the inference budget and restores the playhead", async () => {
-  environment();
-  const video = new FakeVideo(); video.currentTime = 0.75;
-  const progress: number[] = [];
-  const frames = await readSwing(video as unknown as HTMLVideoElement, 0, 8, (done) => progress.push(done), "face_on");
-  assert.deepEqual(frames, []);
-  const calls = FakeWorker.instances.reduce((sum, worker) => sum + worker.calls, 0);
-  assert.ok(calls <= 128 && calls >= 80);
-  assert.equal(FakeWorker.instances.length, 2);
-  assert.ok(FakeWorker.instances.every((worker) => worker.terminated));
-  assert.equal(video.currentTime, 0.75);
-  assert.equal(FakeWorker.instances[0]!.terminated, true);
-  assert.ok(progress.every((value, index) => !index || value >= progress[index - 1]!));
-});
-
 it("rejects overlapping frame requests rather than growing a queue", async () => {
   environment(); FakeWorker.respond = false;
   const detector = createSwingDetector();
@@ -127,31 +109,3 @@ it("bounds transferred bitmap size and preserves aspect ratio for a 4K recording
   detector.close();
 });
 
-it("keeps decoded timestamps inside a trimmed video range and detects the view", async () => {
-  environment();
-  FakeWorker.poses = [faceOnSwing()[0]!.imageLandmarks!];
-  const video = new FakeVideo(); video.duration = 3;
-  const result = await captureSwing(video as unknown as HTMLVideoElement, 1, 3);
-  assert.equal(result.view, "face_on");
-  // A still golfer has no downswing to read a slowdown from.
-  assert.equal(result.slowMotion, 1);
-  assert.ok(result.frames.length >= 8);
-  assert.ok(result.frames.every((frame) => frame.t >= 1 && frame.t <= 3));
-  assert.ok(result.frames.every((frame) => Math.abs(frame.t * 60 - Math.round(frame.t * 60)) < 1e-8));
-  const packed = packFrames(result.frames);
-  assert.equal(poseModelSchema.safeParse({ swing_session_id: "trimmed-recording", ...packed,
-    frames: packed.imageFrames, aspect: 720 / 1280, clip: [1, 3], capture: result.capture,
-  }).success, true);
-  assert.equal(video.currentTime, 0);
-});
-
-it("uses the decoded timestamp and removes a cancelled seek callback", async () => {
-  environment();
-  const video = new FakeVideo() as unknown as HTMLVideoElement;
-  const t = await seekSwingFrame(video, 1.234);
-  assert.equal(t, 74 / 60);
-  const controller = new AbortController();
-  const pending = seekSwingFrame(video, 2, controller.signal);
-  const rejected = assert.rejects(pending, { name: "AbortError" });
-  controller.abort(); await rejected;
-});

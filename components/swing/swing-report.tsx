@@ -4,68 +4,132 @@ import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { getSwingFeedbackAction } from "@/app/swing-coach-actions";
 import type { SwingFeedback } from "@/lib/ai/swing-feedback";
-import { PHASE_LABELS, SWING_PHASES, type BreakdownReading, type SwingBreakdown, type SwingPhaseName } from "@/lib/golf/swing-breakdown";
-import { Badge, ButtonLink, Card, CardContent } from "@/components/ui/primitives";
+import { GPP_PHASES, type GppPhase } from "@/lib/golfposepro/phases";
+import { frameTime, type GolfPoseProResult } from "@/lib/golfposepro/result";
+import { Badge, Card, CardContent } from "@/components/ui/primitives";
 import { Disclosure } from "@/components/ui/disclosure";
 import { seekSwing } from "@/components/swing/seek-button";
 import { cn } from "@/lib/utils";
 
-const TONE: Record<SwingPhaseName, string> = {
-  address: "bg-fg-subtle", backswing: "bg-info", top: "bg-gold", downswing: "bg-warn", impact: "bg-bad", follow_through: "bg-good",
-};
-const FILL: Record<SwingPhaseName, string> = {
-  address: "fill-fg-subtle", backswing: "fill-info", top: "fill-gold", downswing: "fill-warn", impact: "fill-bad", follow_through: "fill-good",
+/** GolfPosePro's plot colors for its six phases. */
+const COLOR: Record<GppPhase, string> = {
+  Address: "#808080", Backswing: "#1f4fd8", Top: "#f28c28", Downswing: "#2e9e44", Impact: "#d62728", "Follow Through": "#8e44ad",
 };
 const show = (time: number) => { if (seekSwing(time)) window.dispatchEvent(new Event("swing:review")); };
+/** MediaPipe's pose connections, without the face. */
+const BONES: [number, number][] = [[11, 12], [11, 13], [13, 15], [12, 14], [14, 16], [11, 23], [12, 24], [23, 24], [23, 25], [25, 27], [27, 29],
+  [29, 31], [27, 31], [24, 26], [26, 28], [28, 30], [30, 32], [28, 32], [15, 17], [15, 19], [17, 19], [16, 18], [16, 20], [18, 20]];
 
 /**
- * The full swing report: GolfPosePro-style phases and hand path from the
- * measurements, and written coaching on top. Rules feedback shows at once;
- * AI feedback replaces it when it arrives.
+ * GolfPosePro's compare_swing_phases frames: the middle frame of each phase
+ * with the detected pose drawn on it, read from the player's own video.
+ * The same JPEGs go to the coach. Null entries when a frame cannot be read.
  */
-export function SwingReport({ sessionId, referenceId, initial, pending, breakdown, readings }: {
-  sessionId: string; referenceId?: string; initial: SwingFeedback; pending: boolean;
-  breakdown: SwingBreakdown | null; readings: BreakdownReading[];
+function useKeyFrames(result: GolfPoseProResult) {
+  const [frames, setFrames] = useState<(string | null)[] | null>(null);
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      let player: HTMLVideoElement | null = null;
+      for (let wait = 0; wait < 60 && live; wait++) {
+        player = document.querySelector<HTMLVideoElement>("video[data-swing-player]");
+        if (player?.currentSrc && player.readyState >= 1) break;
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+      if (!live || !player?.currentSrc) { if (live) setFrames([]); return; }
+      const video = document.createElement("video");
+      video.muted = true;
+      video.playsInline = true;
+      video.preload = "auto";
+      if (player.crossOrigin !== null) video.crossOrigin = "anonymous";
+      video.src = player.currentSrc;
+      await new Promise((resolve) => { video.onloadeddata = resolve; video.onerror = resolve; setTimeout(resolve, 10000); });
+      const drawn: (string | null)[] = [];
+      for (const key of result.keyFrames) {
+        try {
+          await new Promise((resolve) => { video.onseeked = resolve; setTimeout(resolve, 3000); video.currentTime = (result.startFrame + key.frame + 0.5) / result.fps; });
+          const width = 360, height = Math.round(width * (video.videoHeight || result.height) / (video.videoWidth || result.width));
+          const canvas = Object.assign(document.createElement("canvas"), { width, height });
+          const context = canvas.getContext("2d")!;
+          context.drawImage(video, 0, 0, width, height);
+          if (key.pose) {
+            const seen = (i: number) => key.pose![i]![2] >= 0.5;
+            context.lineWidth = 3; context.strokeStyle = "rgba(255,255,255,0.9)";
+            for (const [a, b] of BONES) if (seen(a) && seen(b)) {
+              context.beginPath(); context.moveTo(key.pose[a]![0] * width, key.pose[a]![1] * height); context.lineTo(key.pose[b]![0] * width, key.pose[b]![1] * height); context.stroke();
+            }
+            key.pose.forEach(([x, y], i) => {
+              if (!seen(i) || (i > 0 && i < 11)) return;
+              context.fillStyle = i % 2 ? "#ff7a1a" : "#22d3ee";
+              context.beginPath(); context.arc(x * width, y * height, 4, 0, Math.PI * 2); context.fill();
+            });
+          }
+          drawn.push(canvas.toDataURL("image/jpeg", 0.75));
+        } catch { drawn.push(null); } // A storage host without CORS taints the canvas.
+      }
+      video.removeAttribute("src");
+      if (live) setFrames(drawn);
+    })();
+    return () => { live = false; };
+  }, [result]);
+  return frames;
+}
+
+/**
+ * The swing report: GolfPosePro's phases, wrist trajectory and key frames,
+ * with comprehensive coaching written from exactly those values and frames.
+ */
+export function SwingReport({ sessionId, result, initial, pending }: {
+  sessionId: string; result: GolfPoseProResult; initial: SwingFeedback; pending: boolean;
 }) {
   const [feedback, setFeedback] = useState(initial);
   const [writing, setWriting] = useState(pending);
+  const frames = useKeyFrames(result);
   useEffect(() => {
-    if (!pending) return;
+    if (!pending || frames === null) return;
     let live = true;
-    void getSwingFeedbackAction(sessionId, referenceId)
-      .then((result) => { if (live && result.ok && result.feedback) setFeedback(result.feedback); })
+    const images = frames.flatMap((url) => url ? [url.slice(url.indexOf(",") + 1)] : []);
+    void getSwingFeedbackAction(sessionId, images.length === GPP_PHASES.length ? images : [])
+      .then((response) => { if (live && response.ok && response.feedback) setFeedback(response.feedback); })
       .catch(() => undefined)
       .finally(() => { if (live) setWriting(false); });
     return () => { live = false; };
-  }, [sessionId, referenceId, pending]);
-  const start = (phase: SwingPhaseName) => breakdown?.phases.find((item) => item.name === phase)?.start;
-
-  if (feedback.status === "needs_input") return <section id="swing-analysis" className="scroll-mt-6" aria-label="Swing analysis"><Card>
-    <CardContent className="space-y-4 pt-5">
-      <h2 className="text-[15px] font-semibold">Needs a clearer recording</h2>
-      <p className="text-[18px] font-semibold leading-snug">{feedback.summary}</p>
-      <ol className="list-decimal space-y-3 pl-5 text-[13px] leading-relaxed text-fg-muted">{feedback.practice.map((step) => <li key={step}>{step}</li>)}</ol>
-      <ButtonLink href="/swing" size="sm">Record again</ButtonLink>
-    </CardContent>
-  </Card></section>;
+  }, [sessionId, pending, frames]);
 
   return <section id="swing-analysis" className="scroll-mt-6 space-y-3" aria-label="Swing analysis">
     <Card><CardContent className="space-y-5 pt-5">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="text-[15px] font-semibold">Swing report</h2>
+        <div>
+          <h2 className="text-[15px] font-semibold">Swing report</h2>
+          <p className="text-[11px] text-fg-subtle">Analyzed with GolfPosePro · {result.wristY.length} frames at {Math.round(result.fps)} fps</p>
+        </div>
         <Badge tone={feedback.source === "ai" ? "accent" : "neutral"}>{feedback.source === "ai" ? "AI coach" : "Quick review"}</Badge>
       </div>
-      {writing ? <p role="status" className="flex items-center gap-2 text-[12px] text-fg-muted"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Writing detailed feedback from your measurements…</p> : null}
+      {writing ? <p role="status" className="flex items-center gap-2 text-[12px] text-fg-muted"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Writing your analysis from GolfPosePro’s results…</p> : null}
       <p className="text-[14px] leading-relaxed">{feedback.summary}</p>
-      {breakdown ? <Phases breakdown={breakdown} /> : null}
-      {breakdown && breakdown.handPath.length > 2 ? <HandPath breakdown={breakdown} /> : null}
+      <Phases result={result} />
+      <WristTrajectory result={result} />
+    </CardContent></Card>
+
+    <Card><CardContent className="pt-5">
+      <h3 className="text-[15px] font-semibold">Swing phases</h3>
+      <p className="mt-1 text-[12px] text-fg-muted">The middle frame of each phase, with the pose GolfPosePro detected.</p>
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+        {result.keyFrames.map((key, index) => <button key={key.phase} type="button" onClick={() => show(frameTime(result, key.frame))} className="text-left">
+          <div className="overflow-hidden rounded-lg bg-surface-2" style={{ aspectRatio: `${result.width} / ${result.height}` }}>
+            {frames?.[index] ? <img src={frames[index]!} alt={`${key.phase}, frame ${key.frame}`} className="h-full w-full object-cover" />
+              : <div className="flex h-full items-center justify-center text-[11px] text-fg-subtle">{frames === null ? "Drawing…" : "Frame unavailable"}</div>}
+          </div>
+          <p className="mt-1 flex items-center gap-1.5 text-[12px] font-medium"><span aria-hidden className="h-2 w-2 rounded-full" style={{ background: COLOR[key.phase] }} />{key.phase}<span className="text-fg-subtle">· frame {key.frame}</span></p>
+        </button>)}
+      </div>
     </CardContent></Card>
 
     {feedback.priorities.map((item, index) => <Card key={item.title}><CardContent className="space-y-3 pt-5">
       <div className="flex items-start justify-between gap-3">
         <h3 className="text-[15px] font-semibold leading-snug"><span className="text-fg-subtle">{index + 1}.</span> {item.title}</h3>
-        <button type="button" onClick={() => { const time = start(item.phase); if (time !== undefined) show(time); }}
-          className="shrink-0 rounded-full bg-surface-2 px-2.5 py-1 text-[11px] font-medium text-accent">{PHASE_LABELS[item.phase]}</button>
+        <button type="button" onClick={() => show(frameTime(result, result.phases[item.phase][0]))}
+          className="shrink-0 rounded-full bg-surface-2 px-2.5 py-1 text-[11px] font-medium text-accent">{item.phase}</button>
       </div>
       <p className="text-[13px] leading-relaxed text-fg-muted">{item.evidence}</p>
       <p className="text-[13px] leading-relaxed">{item.why}</p>
@@ -82,9 +146,9 @@ export function SwingReport({ sessionId, referenceId, initial, pending, breakdow
     </CardContent></Card> : null}
 
     {feedback.phases.length ? <Disclosure title="Phase by phase" count={feedback.phases.length}>
-      <ul className="space-y-3">{SWING_PHASES.flatMap((phase) => feedback.phases.filter((item) => item.phase === phase)).map((item) => <li key={item.phase + item.note} className="flex gap-3">
-        <span aria-hidden className={cn("mt-1.5 h-2 w-2 shrink-0 rounded-full", TONE[item.phase])} />
-        <p className="text-[13px] leading-relaxed"><span className="font-semibold">{PHASE_LABELS[item.phase]}. </span><span className="text-fg-muted">{item.note}</span></p>
+      <ul className="space-y-3">{GPP_PHASES.flatMap((phase) => feedback.phases.filter((item) => item.phase === phase)).map((item) => <li key={item.phase + item.note} className="flex gap-3">
+        <span aria-hidden className="mt-1.5 h-2 w-2 shrink-0 rounded-full" style={{ background: COLOR[item.phase] }} />
+        <p className="text-[13px] leading-relaxed"><span className="font-semibold">{item.phase}. </span><span className="text-fg-muted">{item.note}</span></p>
       </li>)}</ul>
     </Disclosure> : null}
 
@@ -93,52 +157,43 @@ export function SwingReport({ sessionId, referenceId, initial, pending, breakdow
       <ol className="mt-3 list-decimal space-y-2 pl-5 text-[13px] leading-relaxed text-fg-muted">{feedback.practice.map((step) => <li key={step}>{step}</li>)}</ol>
     </CardContent></Card> : null}
 
-    {readings.length ? <Disclosure title="All measurements" count={readings.length} description="Measured in the picture from the tracked body.">
-      <table className="w-full text-left text-[12px]">
-        <tbody>{SWING_PHASES.flatMap((phase) => readings.filter((row) => row.phase === phase)).map((row) => <tr key={row.id} className="border-t border-border">
-          <td className="py-2 pr-2"><span className="block font-medium">{row.label}</span><span className="text-fg-subtle">{PHASE_LABELS[row.phase]}</span></td>
-          <td className="py-2 text-right tabular-nums">{row.value}{row.unit.startsWith("°") ? "°" : "%"}{row.range ? <span className="block text-fg-subtle">{row.range[0]} to {row.range[1]}</span> : null}</td>
-        </tr>)}</tbody>
-      </table>
-    </Disclosure> : null}
-
     {feedback.caveats.length ? <ul className="space-y-1 px-1 text-[11px] leading-relaxed text-fg-subtle">{feedback.caveats.map((item) => <li key={item}>{item}</li>)}</ul> : null}
   </section>;
 }
 
-function Phases({ breakdown }: { breakdown: SwingBreakdown }) {
-  const { phases } = breakdown, first = phases[0]!.start, total = Math.max(0.01, phases.at(-1)!.end - first);
-  return <div>
-    <p className="text-[12px] font-semibold">Swing phases</p>
-    <div aria-hidden className="mt-2 flex h-2.5 overflow-hidden rounded-full">
-      {phases.map((phase) => <span key={phase.name} className={TONE[phase.name]} style={{ flexGrow: Math.max(phase.end - phase.start, total * 0.03), flexBasis: 0 }} />)}
-    </div>
-    <div className="mt-2 grid grid-cols-[repeat(auto-fill,minmax(7.5rem,1fr))] gap-1.5">
-      {phases.map((phase) => <button key={phase.name} type="button" onClick={() => show(phase.start)}
+function Phases({ result }: { result: GolfPoseProResult }) {
+  return <div className="grid grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))] gap-1.5">
+    {GPP_PHASES.map((phase) => {
+      const [start, end] = result.phases[phase];
+      return <button key={phase} type="button" onClick={() => show(frameTime(result, start))}
         className="flex min-h-11 items-center gap-2 rounded-lg bg-surface-2 px-2.5 py-1.5 text-left text-[12px]">
-        <span aria-hidden className={cn("h-2 w-2 shrink-0 rounded-full", TONE[phase.name])} />
-        <span className="min-w-0 leading-tight">{PHASE_LABELS[phase.name]}<span className="block tabular-nums text-[11px] text-fg-subtle">{(phase.end - phase.start).toFixed(2)}s</span></span>
-      </button>)}
-    </div>
+        <span aria-hidden className="h-2 w-2 shrink-0 rounded-full" style={{ background: COLOR[phase] }} />
+        <span className="min-w-0 leading-tight">{phase}<span className="block tabular-nums text-[11px] text-fg-subtle">frames {start}–{end} · {((end - start) / result.fps).toFixed(2)}s</span></span>
+      </button>;
+    })}
   </div>;
 }
 
-/** GolfPosePro's wrist chart: hand height through the swing over the phase bands. */
-function HandPath({ breakdown }: { breakdown: SwingBreakdown }) {
-  const { phases, handPath } = breakdown;
-  const first = Math.min(phases[0]!.start, handPath[0]![0]), last = Math.max(phases.at(-1)!.end, handPath.at(-1)![0]);
-  const top = Math.max(120, ...handPath.map(([, height]) => height)) + 10;
-  const W = 320, H = 120, x = (time: number) => (time - first) / Math.max(0.01, last - first) * W, y = (height: number) => H - height / top * H;
+/** GolfPosePro's "Wrist Trajectory with Dynamic Phase Detection", around the swing. */
+function WristTrajectory({ result }: { result: GolfPoseProResult }) {
+  const from = Math.max(0, result.phases.Address[1] - Math.round(result.fps)), to = Math.min(result.wristY.length - 1, result.swingEnd + Math.round(result.fps / 2));
+  const points = result.wristY.slice(from, to + 1).flatMap((y, n): [number, number][] => y === null ? [] : [[from + n, y]]);
+  if (points.length < 3) return null;
+  const top = Math.min(...points.map(([, y]) => y)), bottom = Math.max(...points.map(([, y]) => y));
+  const W = 320, H = 110, x = (frame: number) => (frame - from) / Math.max(1, to - from) * W;
+  // Flipped like the notebook: higher wrists plot higher.
+  const y = (wrist: number) => 6 + (wrist - top) / Math.max(1, bottom - top) * (H - 12);
   return <figure>
-    <figcaption className="text-[12px] font-semibold">Hand height through the swing</figcaption>
-    <svg viewBox={`0 0 ${W} ${H + 14}`} className="mt-2 w-full" role="img"
-      aria-label={`Hand height rises to ${Math.max(...handPath.map(([, height]) => height))}% of body height`}>
-      {phases.map((phase) => <rect key={phase.name} x={x(phase.start)} y={0} width={Math.max(0.5, x(phase.end) - x(phase.start))} height={H} className={cn(FILL[phase.name], "opacity-15")} />)}
-      <line x1={0} x2={W} y1={y(100)} y2={y(100)} className="stroke-fg-subtle" strokeDasharray="3 3" strokeWidth={0.75} />
-      <text x={W - 2} y={y(100) - 3} textAnchor="end" className="fill-fg-subtle text-[8px]">head height</text>
-      <polyline points={handPath.map(([time, height]) => `${x(time).toFixed(1)},${y(height).toFixed(1)}`).join(" ")} fill="none" className="stroke-accent" strokeWidth={2} strokeLinejoin="round" />
-      <text x={0} y={H + 11} className="fill-fg-subtle text-[8px]">0s</text>
-      <text x={W} y={H + 11} textAnchor="end" className="fill-fg-subtle text-[8px]">{(last - first).toFixed(2)}s</text>
+    <figcaption className="text-[12px] font-semibold">Wrist trajectory</figcaption>
+    <svg viewBox={`0 0 ${W} ${H + 14}`} className="mt-2 w-full" role="img" aria-label={`Wrist height from frame ${from} to ${to}, with GolfPosePro's six phases shaded`}>
+      {GPP_PHASES.map((phase) => {
+        const [start, end] = result.phases[phase];
+        const left = x(Math.max(from, Math.min(start, end))), right = x(Math.min(to, Math.max(start, end)));
+        return right > left ? <rect key={phase} x={left} y={0} width={right - left} height={H} fill={COLOR[phase]} opacity={0.25} /> : null;
+      })}
+      <polyline points={points.map(([frame, wrist]) => `${x(frame).toFixed(1)},${y(wrist).toFixed(1)}`).join(" ")} fill="none" className={cn("stroke-fg")} strokeWidth={1.5} strokeLinejoin="round" />
+      <text x={0} y={H + 11} className="fill-fg-subtle text-[8px]">frame {from}</text>
+      <text x={W} y={H + 11} textAnchor="end" className="fill-fg-subtle text-[8px]">frame {to}</text>
     </svg>
   </figure>;
 }

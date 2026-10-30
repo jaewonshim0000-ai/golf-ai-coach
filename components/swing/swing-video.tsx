@@ -5,19 +5,18 @@ import { useRouter } from "next/navigation";
 import { savePoseModelAction, type PoseState } from "@/app/actions";
 import { packFrames, slowMotionOf, unpackFrames, type PoseModel } from "@/lib/golf/pose";
 import { trustworthyFrames } from "@/lib/golf/motion-analysis";
-import { reviewFaceOn } from "@/lib/golf/face-on-review";
-import { reviewSwing } from "@/lib/swing/review";
+import { detectView } from "@/lib/golf/framing";
 import { BodyOverlay } from "@/components/swing/body-overlay";
-import { captureSwing } from "@/lib/pose-runner";
+import { captureGolfPosePro } from "@/lib/golfposepro/capture";
+import { GPP_VERSION, frameTime } from "@/lib/golfposepro/result";
 import { clipWindow, getClip } from "@/lib/video-store";
 import { cn } from "@/lib/utils";
 import { browserClient } from "@/lib/db/supabase";
 import { Button } from "@/components/ui/primitives";
-import { labelize } from "@/types/golf";
 /**
  * Connected clips use expiring signed URLs. Older device-local clips and
- * demo recordings load from IndexedDB. Both honor a saved trim. Camera view,
- * slow-motion speed and swing timing are all detected by the analysis.
+ * demo recordings load from IndexedDB. Both honor a saved trim. The analysis
+ * is GolfPosePro's: every frame read, phases from the wrist height.
  */
 export function SwingVideo({
   id,
@@ -56,18 +55,14 @@ export function SwingVideo({
   const [loop, setLoop] = useState(false);
   const attempted = useRef<string | null>(null);
   const analyseCurrent = useRef<() => Promise<void>>(async () => undefined);
-  const savedModel = model?.motionVersion === 1 && model.imageFrames ? model : null;
+  // A swing read before GolfPosePro, or by an older version of it, is read again.
+  const savedModel = model?.motionVersion === 1 && model.imageFrames && model.golfPosePro?.version === GPP_VERSION ? model : null;
+  const gpp = savedModel?.golfPosePro;
   const view = savedModel?.cameraAngle ?? "other";
-  // Model times are real swing seconds; the video plays them `scale` times slower.
+  // Model times are video seconds for GolfPosePro tracks; `scale` stays for older ones.
   const scale = slowMotionOf(savedModel);
   const tracked = useMemo(() => savedModel ? trustworthyFrames(unpackFrames(savedModel), savedModel.aspect ?? aspect, view) : [], [savedModel, aspect, view]);
-  const review = useMemo(() => savedModel ? reviewFaceOn(unpackFrames(savedModel), savedModel.aspect ?? aspect, view) : null, [savedModel, aspect, view]);
-  const report = useMemo(() => savedModel ? reviewSwing(savedModel).report : null, [savedModel]);
-  const reviewWindow: [number, number] | null = savedModel && report?.phases
-    ? [savedModel.t[report.phases.address]! * scale, Math.min(savedModel.t.at(-1)!, savedModel.t[report.phases.impact]! + 0.25) * scale]
-    : review?.window ? [review.window[0] * scale, review.window[1] * scale] : null;
-  const guide = savedModel?.phasesConfirmed && report?.phases ? tracked[report.phases.address]
-    : review?.guide ?? (report?.phases ? tracked[report.phases.address] : undefined);
+  const reviewWindow: [number, number] | null = gpp ? [frameTime(gpp, gpp.swingStart), frameTime(gpp, gpp.swingEnd)] : null;
   /*
     Reading frames off the canvas needs a cross-origin-enabled element, but a
     host that does not send the matching header will refuse to play at all
@@ -132,7 +127,7 @@ export function SwingVideo({
     setAnalysing(true);
     setAnalysis(null);
     setLoop(false);
-    setProgress("Preparing automatic video review");
+    setProgress("Preparing GolfPosePro");
     // Frame callbacks depend on presenting the video. A button below a tall
     // player can scroll it offscreen, causing the browser to skip callbacks.
     element.scrollIntoView({ block: "center", behavior: "instant" });
@@ -141,26 +136,24 @@ export function SwingVideo({
     try {
       if (!element.videoWidth || !element.videoHeight) throw new Error("The video has not loaded yet.");
       const span: [number, number] = end > start ? [start, end] : [0, element.duration];
-      const captured = await captureSwing(element, span[0], span[1], (done, total, stage) =>
-        setProgress((stage === "scouting" ? "Finding your swing: " : "Tracking visible joints: ") + Math.min(100, Math.round(done / total * 100)) + "%"), undefined, run.signal,
-      );
-      const posed = captured.frames;
+      const { analysed } = await captureGolfPosePro(element, span[0], span[1],
+        (done, total) => setProgress(`GolfPosePro is reading frame ${done} of ${total}`), run.signal);
       run.signal.throwIfAborted();
-      if (posed.length < 8) throw new Error("Too few frames could be tracked. Keep your whole body visible and try a brighter recording.");
+      if (!analysed || analysed.track.length < 8) throw new Error("GolfPosePro could not find a swing in this video. Keep your whole body and hands in view from setup through the finish.");
       setProgress("Saving your video review");
-      const packed = packFrames(posed);
+      const packed = packFrames(analysed.track);
+      const address = analysed.result.keyFrames[0]!.pose?.map(([x, y, visibility]) => ({ x, y, z: 0, visibility }));
       const saved = await savePoseModelAction({
         swing_session_id: id,
         t: packed.t,
         imageFrames: packed.imageFrames,
         aspect: element.videoWidth / element.videoHeight,
-        cameraAngle: captured.view,
+        cameraAngle: (address && detectView([address], element.videoWidth / element.videoHeight)) ?? "face_on",
         clip: span,
-        slowMotion: captured.slowMotion,
         reconstruct: false,
-        capture: captured.capture,
         expectedRevision: model?.revision ?? null,
         sourceVideo: videoUrl,
+        golfPosePro: analysed.result,
       });
       run.signal.throwIfAborted();
       setAnalysis(saved);
@@ -198,7 +191,7 @@ export function SwingVideo({
       element.currentTime = reviewWindow[0];
       element.playbackRate = SLOW_REPLAY(scale);
     }
-  }, [trackedModel, report, review]);
+  }, [trackedModel]); // eslint-disable-line react-hooks/exhaustive-deps -- once per saved analysis
   useEffect(() => {
     const show = () => { setLoop(false); video.current?.scrollIntoView({ block: "center", behavior: "smooth" }); };
     window.addEventListener("swing:review", show);
@@ -269,13 +262,13 @@ export function SwingVideo({
         }}
         onPause={(event) => window.dispatchEvent(new CustomEvent("swing:frame", { detail: { id, time: event.currentTarget.currentTime / scale, paused: true } }))}
       />
-      {trackedModel && tracked.length > 0 && overlay && !analysing ? <BodyOverlay frames={tracked} time={time} guide={guide ?? undefined} view={view} aspect={aspect}
+      {trackedModel && tracked.length > 0 && overlay && !analysing ? <BodyOverlay frames={tracked} time={time} view={view} aspect={aspect}
         plane={view === "down_the_line" ? trackedModel.setup : undefined} /> : null}
       {analysing ? <div role="status" className="pointer-events-none absolute inset-x-3 bottom-3 rounded-lg bg-black/75 px-3 py-2 text-center text-[12px] text-white">{progress}</div> : null}
       </div>
       {trackedModel ? <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-fg-muted">
         <label className="flex min-h-10 cursor-pointer items-center gap-2"><input type="checkbox" checked={overlay} onChange={(event) => setOverlay(event.target.checked)} className="accent-accent" /> Show setup guides</label>
-        <span>Green hips / gold hand trail / faint setup outline{view === "down_the_line" && trackedModel.setup ? " / blue plane line" : ""}</span>
+        <span>Green hips / gold hand trail{view === "down_the_line" && trackedModel.setup ? " / blue plane line" : ""}</span>
       </div> : null}
       {trackedModel && reviewWindow ? <Button type="button" size="sm" variant="secondary" onClick={() => {
         const element = video.current;
@@ -294,8 +287,8 @@ export function SwingVideo({
                 {!crossOrigin
                   ? "This video will play but cannot be read, because its storage does not allow it."
                   : progress ?? (trackedModel
-                    ? `${labelize(view)} · ${scale > 1 ? `${scale}× slow motion` : "real speed"} · timed automatically`
-                    : "Camera view, slow-motion speed and swing timing are detected automatically.")}
+                    ? `GolfPosePro · ${gpp!.wristY.length} frames read · swing ${frameTime(gpp!, gpp!.swingStart).toFixed(2)}–${frameTime(gpp!, gpp!.swingEnd).toFixed(2)}s`
+                    : "GolfPosePro reads every frame and finds your swing phases automatically.")}
               </p>
             </div>
             <Button

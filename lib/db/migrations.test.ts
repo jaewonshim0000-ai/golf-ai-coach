@@ -5,6 +5,7 @@ import { PGlite } from "@electric-sql/pglite";
 import { compactMotionModel, expandMotionModel } from "../golf/motion-storage";
 import { denseMotionModel } from "../golf/__fixtures__/motion";
 import type { PoseModel } from "../golf/pose";
+import { LIMIT_ERROR, LIMITS, limitMessage, type Metered, type Plan } from "../billing/plans";
 
 test("live schema: atomic practice, persistent results, and cross-user isolation", async () => {
   const db = new PGlite();
@@ -20,7 +21,7 @@ test("live schema: atomic practice, persistent results, and cross-user isolation
       create table storage.objects(id text primary key, bucket_id text, name text);
       create function storage.foldername(text) returns text[] language sql as $$ select string_to_array($1, '/') $$;
     `);
-    for (const path of ["supabase/migrations/0001_init.sql", "supabase/migrations/0002_live_practice.sql", "supabase/migrations/0003_swing_vision.sql", "supabase/migrations/0004_swing_clips.sql", "supabase/migrations/0005_delete_account.sql", "supabase/migrations/0006_pose_source.sql", "supabase/migrations/0007_scorecards.sql", "supabase/migrations/0008_swing_model.sql", "supabase/migrations/0009_plans_plots_scorecards.sql", "supabase/migrations/0010_round_type.sql", "supabase/migrations/0011_practice_tests.sql", "supabase/seed/seed.sql"]) {
+    for (const path of ["supabase/migrations/0001_init.sql", "supabase/migrations/0002_live_practice.sql", "supabase/migrations/0003_swing_vision.sql", "supabase/migrations/0004_swing_clips.sql", "supabase/migrations/0005_delete_account.sql", "supabase/migrations/0006_pose_source.sql", "supabase/migrations/0007_scorecards.sql", "supabase/migrations/0008_swing_model.sql", "supabase/migrations/0009_plans_plots_scorecards.sql", "supabase/migrations/0010_round_type.sql", "supabase/migrations/0011_practice_tests.sql", "supabase/migrations/0012_subscriptions.sql", "supabase/seed/seed.sql"]) {
       const sql = (await readFile(path, "utf8")).replace('create extension if not exists "pgcrypto";', "");
       await db.exec(sql);
     }
@@ -124,6 +125,40 @@ test("live schema: atomic practice, persistent results, and cross-user isolation
     await db.exec(`insert into rounds(id,user_id,course_id,course_name,played_on,holes_played,status) values ('round_test', '${user}', 'course_test', 'Test', '2026-09-20', 1, 'in_progress')`);
     await db.exec(`update rounds set hole_stats = jsonb_build_array('{"score":4,"putts":2,"fairway":"hit","penalties":0}'::jsonb, null, null, null, null, null, null, null, null) where id = 'round_test'`);
     await assert.rejects(db.exec(`update rounds set hole_stats = '[null, null]' where id = 'round_test'`));
+
+    // Monthly allowances hold in the database, whatever a client sends. The
+    // player already saved one round and one swing above.
+    const round = (id: string) => db.exec(`insert into rounds(id,user_id,course_id,course_name,played_on,holes_played,status) values ('${id}', '${user}', 'course_test', 'Test', '2026-09-20', 1, 'in_progress')`);
+    const swing = (id: string) => db.exec(`insert into swing_sessions(id,user_id,camera_angle,club,shot_type,swing_pattern,analysis_status) values ('${id}', '${user}', 'face_on', '7_iron', 'full swing', 'unknown', 'manual')`);
+    const limited = (plan: Plan, kind: Metered) => (error: unknown) => {
+      assert.equal((error as { code?: string }).code, LIMIT_ERROR);
+      assert.equal((error as Error).message, limitMessage(plan, kind));
+      return true;
+    };
+    for (let i = 1; i < LIMITS.free.round; i++) await round(`round_${i}`);
+    await assert.rejects(round("round_over"), limited("free", "round"));
+    // Deleting a round does not give it back.
+    await db.exec("delete from rounds where id = 'round_1'");
+    await assert.rejects(round("round_over"), limited("free", "round"));
+    for (let i = 1; i < LIMITS.free.swing; i++) await swing(`swing_${i}`);
+    await assert.rejects(swing("swing_over"), limited("free", "swing"));
+    // Players can read their plan and usage, never write them.
+    await assert.rejects(db.exec(`insert into subscriptions(user_id, stripe_customer_id, status) values ('${user}', 'cus_self', 'active')`));
+    await assert.rejects(db.exec(`insert into usage_events(user_id, kind) values ('${user}', 'swing')`));
+    await db.exec("delete from usage_events");
+    assert.equal((await db.query("select * from usage_events")).rows.length, LIMITS.free.round + LIMITS.free.swing);
+    // The webhook (service role) marks the player Premium.
+    await db.exec(`reset role; insert into subscriptions(user_id, stripe_customer_id, status) values ('${user}', 'cus_test', 'active'); set role authenticated;`);
+    await round("round_premium");
+    for (let i = LIMITS.free.swing; i < LIMITS.premium.swing; i++) await swing(`swing_${i}`);
+    await assert.rejects(swing("swing_over"), limited("premium", "swing"));
+    // A lapsed subscription falls back to Free; last month's use no longer counts.
+    await db.exec(`reset role; update subscriptions set status = 'canceled'; update usage_events set created_at = now() - interval '40 days'; set role authenticated;`);
+    await swing("swing_next_month");
+    await db.exec(`set request.jwt.claim.sub = '${other}'`);
+    assert.equal((await db.query("select * from usage_events")).rows.length, 0);
+    assert.equal((await db.query("select * from subscriptions")).rows.length, 0);
+    await db.exec(`set request.jwt.claim.sub = '${user}'`);
 
     // Leaving takes everything with it, and only ever the caller's own row.
     await db.query("select delete_my_account()");

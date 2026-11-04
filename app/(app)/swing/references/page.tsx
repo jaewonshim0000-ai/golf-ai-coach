@@ -4,6 +4,7 @@ import { AddSwing } from "@/components/swing/add-swing";
 import { ButtonLink, Card, CardContent, EmptyState, PageHero } from "@/components/ui/primitives";
 import { CLUB_LABELS, labelize } from "@/types/golf";
 import * as repo from "@/lib/db/repo";
+import { remaining } from "@/lib/billing/plans";
 
 export const metadata: Metadata = { title: "Swing references" };
 export const dynamic = "force-dynamic";
@@ -11,10 +12,10 @@ export const dynamic = "force-dynamic";
 export default async function SwingReferencesPage() {
   const user = await repo.currentUser();
   if (!user) return null;
-  const [references, sessions] = await Promise.all([repo.getSwingReferences(user.id), repo.getSwingSessions(user.id)]);
+  const [references, sessions, billing] = await Promise.all([repo.getSwingReferences(user.id), repo.getSwingSessions(user.id), repo.getBilling(user.id)]);
   const existing = sessions.filter((session) => !references.some((ref) => ref.session.id === session.id));
   return <div className="space-y-5">
-    <PageHero art="dusk" size="sm" className="mb-0" eyebrow="Swing comparison" title="Reference library" action={<AddSwing reference />}
+    <PageHero art="dusk" size="sm" className="mb-0" eyebrow="Swing comparison" title="Reference library" action={<AddSwing reference left={remaining(billing, "swing")} plan={billing.plan} />}
       topLeft={<ButtonLink href="/swing" variant="onHero" size="sm">Back to swings</ButtonLink>} />
     <p className="text-[13px] leading-relaxed text-fg-muted">Add a professional or coach swing you can use, filmed face on or down the line. We match references by club, camera view and setup proportions, then synchronize setup, top and contact. Your reference videos stay private to your account.</p>
     {references.length ? <div className="grid gap-3 sm:grid-cols-2">{references.map(({ session, metadata }) => <Card key={session.id}><CardContent className="space-y-2 pt-5">

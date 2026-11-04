@@ -6,6 +6,7 @@ import { Suspense } from "react";
 
 import { CountBars, DivergingBars, TrendLine } from "@/components/charts";
 import { BaselinePicker } from "@/components/stats/baseline-picker";
+import { UpgradePrompt } from "@/components/billing/plan";
 import { StatsFilters } from "@/components/stats/filters";
 import { Disclosure } from "@/components/ui/disclosure";
 import {
@@ -80,11 +81,14 @@ function toFilters(search: Search): Filters {
 export default async function RoundsPage({ searchParams }: { searchParams: Promise<Search> }) {
   const user = await repo.currentUser();
   if (!user) return null;
-  const [state, search, courses] = await Promise.all([
+  const [state, search, courses, billing] = await Promise.all([
     loadPlayerState(user.id),
     searchParams,
     repo.getCourses(user.id),
+    repo.getBilling(user.id),
   ]);
+  // Strokes gained is the Premium reading of a round; the classic numbers stay free.
+  const premium = billing.plan === "premium";
 
   // The classic numbers, from every round whichever way it was logged.
   const perRound = state.rounds.map((round) => ({
@@ -193,7 +197,9 @@ export default async function RoundsPage({ searchParams }: { searchParams: Promi
                       </div>
                     </div>
 
-                    {tracked ? (
+                    {tracked && !premium ? (
+                      <p className="mt-3 text-[11px] text-fg-subtle">Shot-tracked round · strokes gained with Premium</p>
+                    ) : tracked ? (
                       <div className="mt-3 grid grid-cols-5 gap-2">
                         <SGCell label="SG" value={stats.sg_total} digits={1} />
                         <SGCell label="Tee" value={stats.sg_by_category.off_the_tee} />
@@ -273,6 +279,8 @@ export default async function RoundsPage({ searchParams }: { searchParams: Promi
             </ChartCard>
           </div>
 
+          {premium ? (
+          <>
           <SectionHeading
             title="Breakdown"
             description={`Every segment of your game, against a ${baseline.label.toLowerCase()}.`}
@@ -339,6 +347,13 @@ export default async function RoundsPage({ searchParams }: { searchParams: Promi
                 </ChartCard>
               </div>
             </>
+          )}
+          </>
+          ) : (
+            <UpgradePrompt
+              title="Strokes-gained breakdown"
+              message="See where you gain and lose shots by category, distance, club and lie, against any handicap level."
+            />
           )}
             </div>
           </Disclosure>

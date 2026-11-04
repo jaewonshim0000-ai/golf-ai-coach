@@ -21,6 +21,7 @@ import type { PoseModel } from "../golf/pose";
 import { compactMotionModel, expandMotionModel } from "../golf/motion-storage";
 import { readSwingReference, swingReferenceSchema, type SwingReference, type SwingReferenceMetadata } from "../golf/swing-reference";
 import { DEMO_USER_ID, newId, store } from "./demo-store";
+import { LIMIT_ERROR, monthStart, planFor, type Billing, type Metered } from "../billing/plans";
 
 /**
  * Single data-access layer.
@@ -107,6 +108,33 @@ export async function currentUser(): Promise<SessionUser | null> {
 export async function signOut(): Promise<void> {
   const sb = await client();
   await sb?.auth.signOut();
+}
+
+// --------------------------------------------------------------- billing
+
+/** The player's plan and this month's metered use. */
+export async function getBilling(userId: string): Promise<Billing> {
+  const sb = await client();
+  // The demo is throwaway sample data; show it with everything unlocked.
+  if (!sb) return { plan: "premium", status: "active", periodEnd: null, cancelAtPeriodEnd: false, used: { swing: 0, round: 0 } };
+  const since = monthStart();
+  const count = (kind: Metered) =>
+    sb.from("usage_events").select("id", { count: "exact", head: true }).eq("user_id", userId).eq("kind", kind).gte("created_at", since);
+  const [sub, swings, rounds] = await Promise.all([
+    sb.from("subscriptions").select("status,current_period_end,cancel_at_period_end").eq("user_id", userId).maybeSingle(),
+    count("swing"),
+    count("round"),
+  ]);
+  const failed = sub.error ?? swings.error ?? rounds.error;
+  if (failed) throw new Error(`getBilling: ${failed.message}`);
+  const row = sub.data as { status: string | null; current_period_end: string | null; cancel_at_period_end: boolean } | null;
+  return {
+    plan: planFor(row?.status),
+    status: row?.status ?? null,
+    periodEnd: row?.current_period_end ?? null,
+    cancelAtPeriodEnd: row?.cancel_at_period_end ?? false,
+    used: { swing: swings.count ?? 0, round: rounds.count ?? 0 },
+  };
 }
 
 // --------------------------------------------------------------- profile
@@ -244,7 +272,7 @@ export async function createRound(round: Omit<Round, "id" | "created_at">): Prom
     return row;
   }
   const { data, error } = await sb.from("rounds").insert(row).select().single();
-  if (error) throw new Error(`createRound: ${error.message}`);
+  if (error) throw new Error(error.code === LIMIT_ERROR ? error.message : `createRound: ${error.message}`);
   return data as Round;
 }
 
@@ -502,7 +530,7 @@ export async function createSwingSession(
     return row;
   }
   const { data, error } = await sb.from("swing_sessions").insert(row).select().single();
-  if (error) throw new Error(`createSwingSession: ${error.message}`);
+  if (error) throw new Error(error.code === LIMIT_ERROR ? error.message : `createSwingSession: ${error.message}`);
   return data as SwingSession;
 }
 

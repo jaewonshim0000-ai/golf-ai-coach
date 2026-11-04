@@ -28,8 +28,9 @@ Public app: [golf-ai-coach-alpha.vercel.app](https://golf-ai-coach-alpha.vercel.
    - `supabase/migrations/0009_plans_plots_scorecards.sql` (new and existing projects; apply once).
    - `supabase/migrations/0010_round_type.sql` (new and existing projects; apply once).
    - `supabase/migrations/0011_practice_tests.sql` (new and existing projects; apply once).
+   - `supabase/migrations/0012_subscriptions.sql` (new and existing projects; apply once, before deploying billing).
    - `supabase/seed/seed.sql` (reference drills and swing bands only; safe to re-run).
-3. Copy `.env.example` to `.env.local` and set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` from the project's connection settings. Use the public anon key, never a service-role key. Keep `ENABLE_DEMO_MODE=false`.
+3. Copy `.env.example` to `.env.local` and set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` from the project's connection settings. Use the public anon key for these; the service-role key only ever goes in the server-only `SUPABASE_SERVICE_ROLE_KEY` (see [Plans and billing](#plans-and-billing)). Keep `ENABLE_DEMO_MODE=false`.
 4. In Supabase Authentication URL Configuration, set the Site URL to `https://golf-ai-coach-alpha.vercel.app` and allow `https://golf-ai-coach-alpha.vercel.app/auth/callback`. Also allow the callback at the local port you use, such as `http://localhost:3001/auth/callback`. Email/password sign-in must be enabled. See [redirect URL configuration](https://supabase.com/docs/guides/auth/redirect-urls).
 5. Configure [custom SMTP](https://supabase.com/docs/guides/auth/auth-smtp) in Supabase before inviting other players. Its default mail service only delivers to project team members, so it does not support general signup confirmations and password recovery. Confirm that both email flows link back to the public app.
 6. Add `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` and `ENABLE_DEMO_MODE=false` to the Vercel Production environment. Optional coaching uses `ANTHROPIC_API_KEY` and `AI_MODEL`. Rebuild after environment changes; public variables must be present at build time. Never put server secrets in `NEXT_PUBLIC_` variables.
@@ -140,6 +141,30 @@ Profile settings are organized into collapsible sections with live summaries and
 **Forgot your password?** on the sign-in page emails a reset link; it needs password recovery enabled in Supabase Authentication. The request step says the same thing whether or not the address is registered.
 
 **Delete account** on the profile screen removes the auth user, which cascades through every table, after deleting that account's folder from the video bucket. It is a typed confirmation and cannot be undone. `0005_delete_account.sql` adds the function; it reads `auth.uid()` from the caller's own token rather than taking an id, so it can only ever delete the caller.
+
+## Plans and billing
+
+| | Free | Premium (monthly) |
+|---|---|---|
+| Swing analyses | 3 a month | 100 a month |
+| Rounds | 4 a month | Unlimited |
+| Strokes-gained breakdowns | No | Yes |
+
+A swing analysis is one new swing recording or upload, references included. Allowances count new rounds and recordings per calendar month (UTC) and reset on the 1st; deleting one does not give it back. Free keeps every other feature, including shot-by-shot logging and the classic numbers (fairways, greens, putts, scrambling); strokes gained on Play and on each round need Premium. Change the numbers in both `lib/billing/plans.ts` and `0012_subscriptions.sql`; `npm test` fails if they disagree.
+
+The database enforces the allowances with an insert trigger, so they hold even for requests that skip the app. Plan status lives in `subscriptions`, which players can read but only the server's service-role key can write. Profile → **Plan** shows usage, **Upgrade to Premium** (Stripe Checkout) and **Manage billing** (the Stripe customer portal: card, invoices, cancel). Cancelling keeps Premium until the paid period ends. Deleting an account deletes its Stripe customer first, which cancels the subscription immediately.
+
+Setup, in Stripe test mode first:
+
+1. Apply `0012_subscriptions.sql`.
+2. In Stripe, create a **Premium** product with a monthly recurring price; copy its `price_…` id to `STRIPE_PRICE_ID`.
+3. Copy the secret key (Developers → API keys) to `STRIPE_SECRET_KEY`.
+4. Add a webhook endpoint at `https://golf-ai-coach-alpha.vercel.app/api/stripe/webhook` for `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated` and `customer.subscription.deleted`; copy its signing secret to `STRIPE_WEBHOOK_SECRET`. Locally, `stripe listen --forward-to localhost:3000/api/stripe/webhook` prints a secret to use instead.
+5. Save the customer portal settings once (Settings → Billing → Customer portal), allowing payment-method updates and cancellation.
+6. Copy the Supabase service-role key (Project Settings → API) to `SUPABASE_SERVICE_ROLE_KEY`. It is server-only: never prefix it with `NEXT_PUBLIC_`.
+7. Add the four variables to Vercel Production and redeploy. Buy Premium with test card `4242 4242 4242 4242`, confirm Profile shows Premium, then cancel from **Manage billing**. Switch to live keys and a live price when ready.
+
+Demo mode shows everything unlocked and has no billing.
 
 ## Coaching
 

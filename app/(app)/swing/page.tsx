@@ -7,6 +7,7 @@ import { Badge, ButtonLink, EmptyState, HeroPill, PageHero } from "@/components/
 import { CLUB_LABELS, labelize } from "@/types/golf";
 import { diagnoseSwing } from "@/lib/golf/swing-metrics";
 import * as repo from "@/lib/db/repo";
+import { remaining } from "@/lib/billing/plans";
 import { loadPlayerState } from "@/lib/player-state";
 import { formatDate } from "@/lib/utils";
 import { Disclosure } from "@/components/ui/disclosure";
@@ -17,7 +18,7 @@ export const dynamic = "force-dynamic";
 export default async function SwingLibraryPage() {
   const user = await repo.currentUser();
   if (!user) return null;
-  const state = await loadPlayerState(user.id);
+  const [state, billing] = await Promise.all([loadPlayerState(user.id), repo.getBilling(user.id)]);
 
   const swings = state.swingSessions.map((session) => {
     const measurements = state.swingMeasurements.filter((m) => m.swing_session_id === session.id && m.source === "manual");
@@ -32,7 +33,7 @@ export default async function SwingLibraryPage() {
         size="sm"
         eyebrow="Your swing"
         title="Swing"
-        action={<AddSwing />}
+        action={<AddSwing left={remaining(billing, "swing")} plan={billing.plan} />}
         pills={
           <>
             <HeroPill tone="solid">{swings.length} videos</HeroPill>

@@ -3,6 +3,7 @@ import { Download } from "lucide-react";
 
 import { saveProfileAction, signOutAction } from "@/app/actions";
 import { DeleteAccountButton } from "@/components/auth/delete-account";
+import { PlanCard } from "@/components/billing/plan";
 import { ProfileForm } from "@/components/forms/profile-form";
 import { TrendLine } from "@/components/charts";
 import { Disclosure } from "@/components/ui/disclosure";
@@ -18,15 +19,36 @@ import {
   Stat,
 } from "@/components/ui/primitives";
 import * as repo from "@/lib/db/repo";
+import { billingConfigured, syncCheckout } from "@/lib/billing/stripe";
 import { loadPlayerState } from "@/lib/player-state";
 
 export const metadata: Metadata = { title: "Profile" };
 export const dynamic = "force-dynamic";
 
-export default async function ProfilePage() {
+const NOTICES = new Map([
+  ["unavailable", "Billing is not set up yet."],
+  ["error", "Could not open Stripe. Please try again."],
+]);
+
+export default async function ProfilePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ checkout?: string; billing?: string }>;
+}) {
   const user = await repo.currentUser();
   if (!user) return null;
-  const state = await loadPlayerState(user.id);
+  const search = await searchParams;
+  const checkout = typeof search.checkout === "string" && /^cs_\w{1,250}$/.test(search.checkout);
+  if (checkout && billingConfigured()) {
+    // The webhook catches up if this fails.
+    await syncCheckout(search.checkout!, user.id).catch((error) => console.error("checkout sync", error));
+  }
+  const [state, billing] = await Promise.all([loadPlayerState(user.id), repo.getBilling(user.id)]);
+  const notice = checkout
+    ? billing.plan === "premium"
+      ? "Welcome to Premium."
+      : "Payment received. Your plan updates in a moment; refresh to check."
+    : (NOTICES.get(search.billing ?? "") ?? null);
 
   const handicapPoints = state.handicapHistory.map((entry) => ({
     date: entry.recorded_on,
@@ -86,6 +108,8 @@ export default async function ProfilePage() {
         </Card>
       ) : null}
       </Disclosure>
+
+      {repo.mode() === "supabase" ? <PlanCard billing={billing} notice={notice} /> : null}
 
       {repo.mode() === "supabase" ? (
         <Card>

@@ -11,9 +11,15 @@ import { validateVideo, VIDEO_ACCEPT } from "@/lib/video-upload";
 import { CLUBS, CLUB_LABELS } from "@/types/golf";
 import { Button, Field, Select } from "@/components/ui/primitives";
 import { canRecordInApp, FilmingGuide, SwingCamera } from "@/components/swing/swing-camera";
+import { UpgradeButton } from "@/components/billing/plan";
+import { limitMessage, type Plan } from "@/lib/billing/plans";
 
-/** Camera view and slow-motion speed are detected when the swing is reviewed. */
-export function AddSwing({ reference = false }: { reference?: boolean }) {
+/**
+ * Camera view and slow-motion speed are detected when the swing is reviewed.
+ * `left` is this month's remaining swing analyses (null: no cap); at zero the
+ * dialog explains the limit before anything is uploaded.
+ */
+export function AddSwing({ reference = false, left = null, plan = "premium" }: { reference?: boolean; left?: number | null; plan?: Plan }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
@@ -86,6 +92,12 @@ export function AddSwing({ reference = false }: { reference?: boolean }) {
         <h2 id="new-swing-title" className="font-semibold">{reference ? "Add a reference recording" : "New swing"}</h2>
         <Button type="button" variant="ghost" size="icon" disabled={pending} onClick={() => setOpen(false)} aria-label="Close"><X className="h-4 w-4" /></Button>
       </div>
+      {left === 0 ? (
+        <div className="space-y-4 p-5">
+          <p className="text-sm leading-relaxed">{limitMessage(plan, "swing")}</p>
+          {plan === "free" ? <UpgradeButton /> : null}
+        </div>
+      ) : (
       <form onSubmit={save} className="space-y-4 p-5">
         <input type="hidden" name="shot_type" value="full swing" />
         <input type="hidden" name="swing_pattern" value="unknown" />
@@ -100,11 +112,13 @@ export function AddSwing({ reference = false }: { reference?: boolean }) {
         {/* Where the browser cannot record, the phone's own camera app does. Its speed is detected like an upload. */}
         <input ref={camera} aria-label="Record swing video" type="file" accept="video/*" capture="environment" hidden onChange={(event) => chooseFile(event.target.files?.[0] ?? null)} />
         {file ? <p className="break-words text-sm">{recorded ? `Recorded in the app${recorded.fps ? ` at ${recorded.fps} fps` : ""}` : file.name} · {(file.size / 1024 / 1024).toFixed(1)} MB</p> : null}
+        {left !== null ? <p className="text-xs font-medium">{left} swing {left === 1 ? "analysis" : "analyses"} left this month.</p> : null}
         <p className="text-xs text-fg-muted">MP4, MOV, or WebM, up to 50 MB. {browserClient() ? "Saved privately to your account." : "Demo clips are saved on this device only."} Camera view, slow-motion speed and swing timing are detected automatically after saving.</p>
         {error ? <p role="alert" className="rounded-lg bg-bad-soft p-3 text-sm text-bad">{error}</p> : null}
         <Button type="submit" disabled={pending || !file}>{pending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}{pending ? "Uploading and saving…" : "Save and review"}</Button>
         <FilmingGuide />
       </form>
+      )}
     </dialog>
     <SwingCamera open={filming} onClose={() => setFilming(false)} onUse={(next, fps) => chooseFile(next, { fps })} />
   </>;

@@ -42,6 +42,7 @@ import { DRILLS_BY_ID } from "@/lib/seed/drills";
 import { loadPlayerState } from "@/lib/player-state";
 import * as repo from "@/lib/db/repo";
 import { resetDemoStore } from "@/lib/db/demo-store";
+import { deleteCustomer } from "@/lib/billing/stripe";
 import type { ActionState } from "@/lib/action-state";
 import {
   drillAttemptSchema,
@@ -1026,6 +1027,8 @@ export async function deleteAccountAction(
     return { ok: false, message: 'Type "delete" to confirm.' };
   }
   try {
+    // Billing stops first: a deleted player must never be charged again.
+    await deleteCustomer(user.id);
     await repo.deleteAccount(user.id);
     await repo.signOut();
   } catch (error) {

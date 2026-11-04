@@ -24,6 +24,7 @@ import { CLUB_LABELS, SG_CATEGORIES, SG_CATEGORY_LABELS, labelize } from "@/type
 import { summarizeRound } from "@/lib/golf/strokes-gained";
 import { baselineForHandicap, getBaseline, rebaseRound } from "@/lib/golf/baselines";
 import { BaselinePicker } from "@/components/stats/baseline-picker";
+import { UpgradePrompt } from "@/components/billing/plan";
 import { buildHoleResults } from "@/lib/golf/strokes-gained";
 import { summarizeRound as narrateRound } from "@/lib/ai/insights";
 import * as repo from "@/lib/db/repo";
@@ -46,11 +47,14 @@ export default async function RoundDetailPage({
   const round = await repo.getRound(user.id, id);
   if (!round) notFound();
 
-  const [shots, courses, profile] = await Promise.all([
+  const [shots, courses, profile, billing] = await Promise.all([
     repo.getShots(user.id, round.id),
     repo.getCourses(user.id),
     repo.getProfile(user.id),
+    repo.getBilling(user.id),
   ]);
+  // Strokes gained is Premium; score, fairways, greens and the read-out stay free.
+  const premium = billing.plan === "premium";
   // Strokes gained against the level the player picks, their own by default.
   const baseline = search.baseline
     ? getBaseline(search.baseline)
@@ -129,6 +133,7 @@ export default async function RoundDetailPage({
         />
       ) : (
         <>
+          {premium ? (
           <Card>
             <CardContent className="space-y-4 p-5">
               <div className="grid grid-cols-2 gap-3">
@@ -156,6 +161,19 @@ export default async function RoundDetailPage({
               </div>
             </CardContent>
           </Card>
+          ) : (
+            <>
+              <Card>
+                <CardContent className="p-5">
+                  <Stat label="Score" value={stats.score ?? "—"} sub={toParLabel(stats.to_par)} />
+                </CardContent>
+              </Card>
+              <UpgradePrompt
+                title="Strokes gained for this round"
+                message="See which shots gained and lost strokes, by category and hole, against any handicap level."
+              />
+            </>
+          )}
 
           <Card>
             <CardContent className="grid grid-cols-2 gap-x-3 gap-y-4 p-5 sm:grid-cols-4">
@@ -170,7 +188,8 @@ export default async function RoundDetailPage({
             </CardContent>
           </Card>
 
-          <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
+          <div className={cn("grid gap-6", premium && "lg:grid-cols-[1fr_1fr]")}>
+            {premium ? (
             <Card>
               <CardHeader>
                 <CardTitle>Strokes gained by category</CardTitle>
@@ -184,6 +203,7 @@ export default async function RoundDetailPage({
                 />
               </CardContent>
             </Card>
+            ) : null}
 
             <Card>
               <CardHeader className="flex-row items-center justify-between gap-3">
@@ -223,10 +243,12 @@ export default async function RoundDetailPage({
             </Card>
           </div>
 
-          <div className="grid gap-6 lg:grid-cols-2">
-            <ShotHighlights title="Biggest losses" shots={biggestLosses} tone="bad" />
-            <ShotHighlights title="Biggest gains" shots={biggestGains} tone="good" />
-          </div>
+          {premium ? (
+            <div className="grid gap-6 lg:grid-cols-2">
+              <ShotHighlights title="Biggest losses" shots={biggestLosses} tone="bad" />
+              <ShotHighlights title="Biggest gains" shots={biggestGains} tone="good" />
+            </div>
+          ) : null}
 
           <Disclosure title="Hole by hole" count={holes.length} description="Open to review each hole and its shots.">
             <div className="space-y-2">
@@ -265,14 +287,16 @@ export default async function RoundDetailPage({
                       {hole.green_in_regulation ? <Badge tone="good">GIR</Badge> : null}
                       {hole.up_and_down ? <Badge tone="accent">U&amp;D</Badge> : null}
                       {hole.penalties > 0 ? <Badge tone="bad">+{hole.penalties}</Badge> : null}
-                      <span
-                        className={cn(
-                          "tabular text-sm font-semibold",
-                          hole.strokes_gained >= 0 ? "text-good" : "text-bad",
-                        )}
-                      >
-                        {signed(hole.strokes_gained)}
-                      </span>
+                      {premium ? (
+                        <span
+                          className={cn(
+                            "tabular text-sm font-semibold",
+                            hole.strokes_gained >= 0 ? "text-good" : "text-bad",
+                          )}
+                        >
+                          {signed(hole.strokes_gained)}
+                        </span>
+                      ) : null}
                     </span>
                   </summary>
 
@@ -286,9 +310,13 @@ export default async function RoundDetailPage({
                           <th className="pb-1.5 pr-3 font-medium">Type</th>
                           <th className="pb-1.5 pr-3 font-medium">To</th>
                           <th className="pb-1.5 pr-3 font-medium">Miss</th>
-                          <th className="pb-1.5 pr-3 text-right font-medium">Before</th>
-                          <th className="pb-1.5 pr-3 text-right font-medium">After</th>
-                          <th className="pb-1.5 text-right font-medium">SG</th>
+                          {premium ? (
+                            <>
+                              <th className="pb-1.5 pr-3 text-right font-medium">Before</th>
+                              <th className="pb-1.5 pr-3 text-right font-medium">After</th>
+                              <th className="pb-1.5 text-right font-medium">SG</th>
+                            </>
+                          ) : null}
                         </tr>
                       </thead>
                       <tbody>
@@ -315,20 +343,24 @@ export default async function RoundDetailPage({
                             <td className="py-1.5 pr-3 text-fg-muted">
                               {shot.miss_direction ? labelize(shot.miss_direction) : "—"}
                             </td>
-                            <td className="tabular py-1.5 pr-3 text-right text-fg-subtle">
-                              {shot.expected_before.toFixed(2)}
-                            </td>
-                            <td className="tabular py-1.5 pr-3 text-right text-fg-subtle">
-                              {shot.expected_after.toFixed(2)}
-                            </td>
-                            <td
-                              className={cn(
-                                "tabular py-1.5 text-right font-medium",
-                                shot.strokes_gained >= 0 ? "text-good" : "text-bad",
-                              )}
-                            >
-                              {signed(shot.strokes_gained)}
-                            </td>
+                            {premium ? (
+                              <>
+                                <td className="tabular py-1.5 pr-3 text-right text-fg-subtle">
+                                  {shot.expected_before.toFixed(2)}
+                                </td>
+                                <td className="tabular py-1.5 pr-3 text-right text-fg-subtle">
+                                  {shot.expected_after.toFixed(2)}
+                                </td>
+                                <td
+                                  className={cn(
+                                    "tabular py-1.5 text-right font-medium",
+                                    shot.strokes_gained >= 0 ? "text-good" : "text-bad",
+                                  )}
+                                >
+                                  {signed(shot.strokes_gained)}
+                                </td>
+                              </>
+                            ) : null}
                           </tr>
                         ))}
                       </tbody>

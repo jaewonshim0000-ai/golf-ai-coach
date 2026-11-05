@@ -66,7 +66,7 @@ export default async function StartPracticePage({
   return (
     <div className="space-y-5">
       <PageHero
-        art="range"
+        art="plain"
         size="sm"
         eyebrow="Build a plan"
         title="Start practice"

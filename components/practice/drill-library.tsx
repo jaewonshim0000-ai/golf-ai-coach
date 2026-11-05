@@ -24,13 +24,13 @@ export function DrillLibrary({ drills }: { drills: Drill[] }) {
   return (
     <div className="space-y-5">
       <div className="relative">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-subtle" />
-        <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search tests or distances" aria-label="Search tests" className="pl-9" />
+        <Search className="pointer-events-none absolute left-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-fg-subtle" />
+        <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search tests or distances" aria-label="Search tests" className="bg-surface pl-11" />
       </div>
       <div className="flex flex-wrap gap-2" aria-label="Practice area">
         {(["", ...TEST_GROUPS] as const).map((group) => (
           <button key={group} type="button" aria-pressed={area === group} onClick={() => setArea(group)}
-            className={cn("min-h-10 rounded-full border px-4 text-xs font-medium", area === group ? "border-accent bg-accent-soft text-accent" : "border-border bg-surface text-fg-muted")}>
+            className={cn("dsp min-h-10 rounded-full border-[1.5px] px-4 text-[11px]", area === group ? "border-transparent bg-accent text-accent-fg" : "border-fg bg-transparent text-fg")}>
             {group ? `${GROUP_LABELS[group]} · 10` : "All 30 tests"}
           </button>
         ))}

@@ -166,12 +166,12 @@ export function HoleEntry({ round, holes, initialShots }: { round: Round; holes:
                 aria-current={active ? "true" : undefined}
                 aria-label={`Hole ${item.hole_number}${done ? ", saved" : ""}`}
                 className={cn(
-                  "tabular dsp flex h-10 w-10 shrink-0 items-center justify-center rounded-full border text-[14px] font-semibold transition-colors",
+                  "tabular font-display flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-[1.5px] text-[17px] transition-colors",
                   active
-                    ? "border-transparent bg-[image:var(--grad-accent)] text-white"
+                    ? "border-transparent bg-accent text-accent-fg"
                     : done
-                      ? "border-transparent bg-[#3c4a3f] text-white"
-                      : "border-border-strong text-fg-muted",
+                      ? "border-transparent bg-ink text-ink-fg"
+                      : "border-fg text-fg",
                 )}
               >
                 {item.hole_number}

@@ -201,7 +201,7 @@ export function SwingVideo({
     return (
       <div
         className={cn(
-          "hero-art-dusk flex items-center justify-center rounded-2xl text-white/70",
+          "flex items-center justify-center rounded-[22px] bg-[#151912] text-white/70",
           className ?? "aspect-[3/4]",
         )}
       >

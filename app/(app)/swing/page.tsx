@@ -29,7 +29,7 @@ export default async function SwingLibraryPage() {
     <div className="space-y-5">
       <PageHero
         className="mb-0"
-        art="dusk"
+        art="plain"
         size="sm"
         eyebrow="Your swing"
         title="Swing"

@@ -58,7 +58,7 @@ export function SessionBuilder({
             </p>
           ) : null}
           <fieldset>
-            <legend className="dsp mb-2 text-[9px] tracking-[0.15em] text-fg-subtle">Goal</legend>
+            <legend className="dsp mb-2 text-[10px] tracking-[0.15em] text-fg-subtle">Goal</legend>
             <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-5">
               {goals.map((id) => (
                 <label key={id} className="relative">
@@ -82,7 +82,7 @@ export function SessionBuilder({
           </fieldset>
 
           <fieldset>
-            <legend className="dsp mb-2 text-[9px] tracking-[0.15em] text-fg-subtle">Time</legend>
+            <legend className="dsp mb-2 text-[10px] tracking-[0.15em] text-fg-subtle">Time</legend>
             <div className="grid grid-cols-3 gap-1.5">
               {PLAN_LENGTHS.map((length) => (
                 <label key={length}>

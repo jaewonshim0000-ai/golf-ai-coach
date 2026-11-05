@@ -1,16 +1,24 @@
 import type { Metadata, Viewport } from "next";
-import { Oswald } from "next/font/google";
+import { Anton, Inter_Tight } from "next/font/google";
 
 import "./globals.css";
 
 /**
- * The condensed display face the whole design is built on. next/font self-hosts
- * it, so there is no render-blocking request to Google and no layout shift.
+ * The two faces the design is built on: Anton for headings, Inter Tight for
+ * everything else. next/font self-hosts both, so there is no render-blocking
+ * request to Google and no layout shift.
  */
-const oswald = Oswald({
+const anton = Anton({
+  subsets: ["latin"],
+  weight: "400",
+  variable: "--font-anton",
+  display: "swap",
+});
+
+const interTight = Inter_Tight({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
-  variable: "--font-oswald",
+  variable: "--font-inter-tight",
   display: "swap",
 });
 
@@ -29,8 +37,8 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f1efe8" },
-    { media: "(prefers-color-scheme: dark)", color: "#0b0f0c" },
+    { media: "(prefers-color-scheme: light)", color: "#ece9e0" },
+    { media: "(prefers-color-scheme: dark)", color: "#12140f" },
   ],
   width: "device-width",
   initialScale: 1,
@@ -39,7 +47,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={oswald.variable}>
+    <html lang="en" className={`${anton.variable} ${interTight.variable}`}>
       <body>{children}</body>
     </html>
   );

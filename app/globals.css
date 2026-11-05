@@ -4,56 +4,56 @@
   Design tokens. Defined as plain custom properties so the light/dark swap is a
   single block, then exposed to Tailwind with `@theme inline`.
 
-  The palette is the warm-paper / moss-green scheme from the mobile design:
-  a paper page, near-white cards with long soft shadows, one deep green accent,
-  and an ink card for the thing that matters most on each screen.
+  The palette is the olive / stone scheme from the redesign: a warm stone page,
+  flat white cards with big radii, one olive accent, a near-black ink for the
+  tab bar and the card that matters most, and a flag-yellow highlight.
 */
 :root {
-  --c-bg: #f1efe8;
-  --c-surface: #fffefb;
-  --c-surface-2: #f7f4ec;
-  --c-track: #e7e3d6;
-  --c-border: #e9e6dc;
-  --c-border-strong: #d8d3c3;
-  --c-fg: #101510;
-  --c-fg-muted: #5b6155;
-  --c-fg-subtle: #8b9083;
+  --c-bg: #ece9e0;
+  --c-surface: #ffffff;
+  --c-surface-2: #ece9e0;
+  --c-track: #dedace;
+  --c-border: #e4e1d7;
+  --c-border-strong: #c9c5b8;
+  --c-fg: #1e211b;
+  --c-fg-muted: #4a4e44;
+  --c-fg-subtle: #5e6157;
 
-  --c-accent: #10733f;
+  --c-accent: #5c7a2a;
   --c-accent-fg: #ffffff;
-  --c-accent-soft: #e6f2ea;
+  --c-accent-soft: #e4ead5;
+  /* Accent text on the soft fill; the fill colour itself is too light for it. */
+  --c-accent-strong: #465e1f;
 
-  /* The primary button is a two-stop gradient in the design, not a flat fill. */
-  --grad-accent: linear-gradient(180deg, #178a4f, #0d6236);
-  --shadow-accent: 0 14px 28px -14px rgb(13 98 54 / 0.75), inset 0 1px 0 rgb(255 255 255 / 0.24);
+  /* Kept as a gradient so `bg-[image:var(--grad-accent)]` still works: flat now. */
+  --grad-accent: linear-gradient(#5c7a2a, #5c7a2a);
+  --shadow-accent: none;
 
-  /* The dark card: current priority, and any hero that carries a headline. */
-  --c-ink: #111a14;
-  --c-ink-fg: #f4f2e9;
-  --c-gold: #a8873f;
+  /* The dark card and the tab bar. */
+  --c-ink: #23271f;
+  --c-ink-fg: #ffffff;
+  --c-gold: #e8c547;
 
-  --c-good: #0f7a4a;
-  --c-good-soft: #e3f3e9;
-  --c-bad: #b3261e;
-  --c-bad-soft: #fbe9e7;
-  --c-warn: #8a5a00;
-  --c-warn-soft: #fdf1dc;
-  --c-info: #1d4ed8;
-  --c-info-soft: #e7edfd;
+  --c-good: #5c7a2a;
+  --c-good-soft: #e4ead5;
+  --c-bad: #b4442a;
+  --c-bad-soft: #f8e3db;
+  --c-warn: #85620a;
+  --c-warn-soft: #f6edcb;
+  --c-info: #2f5e86;
+  --c-info-soft: #e1e9ef;
 
-  --c-chart-1: #10733f;
-  --c-chart-2: #2f7fb8;
-  --c-chart-3: #a8873f;
+  --c-chart-1: #5c7a2a;
+  --c-chart-2: #2f5e86;
+  --c-chart-3: #c9a227;
   --c-chart-4: #8659b5;
-  --c-chart-5: #b3261e;
+  --c-chart-5: #b4442a;
 
-  --shadow-card: 0 1px 2px rgb(58 52 38 / 0.05), 0 12px 28px -14px rgb(58 52 38 / 0.3),
-    0 32px 64px -40px rgb(58 52 38 / 0.45);
-  --shadow-soft: 0 1px 2px rgb(58 52 38 / 0.05), 0 10px 22px -14px rgb(58 52 38 / 0.26);
-  --shadow-raised: 0 1px 0 rgb(255 255 255 / 0.9) inset, 0 18px 40px -16px rgb(16 21 17 / 0.4),
-    0 2px 8px rgb(16 21 17 / 0.08);
-  --shadow-ink: 0 2px 4px rgb(11 22 15 / 0.26), 0 24px 48px -20px rgb(11 22 15 / 0.55),
-    0 48px 96px -56px rgb(11 22 15 / 0.7);
+  /* The redesign is flat: cards sit on the page by colour, not by shadow. */
+  --shadow-card: 0 0 #0000;
+  --shadow-soft: 0 0 #0000;
+  --shadow-raised: 0 18px 40px -18px rgb(30 33 27 / 0.45);
+  --shadow-ink: 0 0 #0000;
 
   /*
     Two curves, no more. The first is critically damped: it covers most of the
@@ -68,49 +68,45 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --c-bg: #0b0f0c;
-    --c-surface: #141a15;
-    --c-surface-2: #1a211b;
-    --c-track: #26301f;
-    --c-border: #232c25;
-    --c-border-strong: #35413a;
-    --c-fg: #f4f2e9;
-    --c-fg-muted: #9aa69d;
-    --c-fg-subtle: #727f76;
+    --c-bg: #12140f;
+    --c-surface: #1c1f18;
+    --c-surface-2: #262a21;
+    --c-track: #30352a;
+    --c-border: #2b2f26;
+    --c-border-strong: #424839;
+    --c-fg: #f2f0e8;
+    --c-fg-muted: #bfc2b6;
+    --c-fg-subtle: #9a9e91;
 
-    --c-accent: #2fbd6f;
-    --c-accent-fg: #04150b;
-    --c-accent-soft: #10291b;
+    --c-accent: #8db04a;
+    --c-accent-fg: #12140f;
+    --c-accent-soft: #2a341a;
+    --c-accent-strong: #b5d27a;
 
-    --grad-accent: linear-gradient(180deg, #2fbd6f, #17864b);
-    --shadow-accent: 0 14px 28px -16px rgb(47 189 111 / 0.5), inset 0 1px 0 rgb(255 255 255 / 0.18);
+    --grad-accent: linear-gradient(#8db04a, #8db04a);
 
     /* Darker than the page is not available here, so the ink card lifts
        off the background instead of sinking into it. */
-    --c-ink: #17211a;
-    --c-ink-fg: #f4f2e9;
-    --c-gold: #d6b169;
+    --c-ink: #2a2e25;
+    --c-ink-fg: #f2f0e8;
+    --c-gold: #e8c547;
 
-    --c-good: #3ecf82;
-    --c-good-soft: #10291b;
-    --c-bad: #f2685c;
-    --c-bad-soft: #2d1614;
-    --c-warn: #e0a23c;
-    --c-warn-soft: #2b2113;
-    --c-info: #6b9cf7;
-    --c-info-soft: #14203a;
+    --c-good: #8db04a;
+    --c-good-soft: #2a341a;
+    --c-bad: #e9876f;
+    --c-bad-soft: #3a1f17;
+    --c-warn: #e0b84a;
+    --c-warn-soft: #332a12;
+    --c-info: #7fb0dc;
+    --c-info-soft: #18232e;
 
-    --c-chart-1: #3ecf82;
-    --c-chart-2: #61a9e0;
-    --c-chart-3: #d6b169;
+    --c-chart-1: #8db04a;
+    --c-chart-2: #7fb0dc;
+    --c-chart-3: #e8c547;
     --c-chart-4: #b18ce0;
-    --c-chart-5: #f2685c;
+    --c-chart-5: #e9876f;
 
-    --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), 0 24px 48px -32px rgb(0 0 0 / 0.8);
-    --shadow-soft: 0 1px 2px rgb(0 0 0 / 0.35), 0 16px 34px -26px rgb(0 0 0 / 0.7);
-    --shadow-raised: 0 1px 0 rgb(255 255 255 / 0.05) inset, 0 18px 40px -16px rgb(0 0 0 / 0.75);
-    --shadow-ink: 0 2px 4px rgb(0 0 0 / 0.4), 0 24px 48px -20px rgb(0 0 0 / 0.7),
-      0 48px 96px -56px rgb(0 0 0 / 0.85);
+    --shadow-raised: 0 18px 40px -16px rgb(0 0 0 / 0.75);
   }
 }
 
@@ -128,6 +124,7 @@
   --color-accent: var(--c-accent);
   --color-accent-fg: var(--c-accent-fg);
   --color-accent-soft: var(--c-accent-soft);
+  --color-accent-strong: var(--c-accent-strong);
 
   --color-ink: var(--c-ink);
   --color-ink-fg: var(--c-ink-fg);
@@ -142,23 +139,26 @@
   --color-info: var(--c-info);
   --color-info-soft: var(--c-info-soft);
 
-  --radius-card: 24px;
-  --radius-soft: 18px;
-  --radius-control: 16px;
+  --radius-card: 28px;
+  --radius-soft: 22px;
+  --radius-control: 999px;
 
   --shadow-card: var(--shadow-card);
   --shadow-soft: var(--shadow-soft);
   --shadow-raised: var(--shadow-raised);
   --shadow-ink: var(--shadow-ink);
 
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
-    Arial, sans-serif;
-  --font-display: var(--font-oswald), "Oswald", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-inter-tight), "Inter Tight", ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, Arial, sans-serif;
+  --font-display: var(--font-anton), "Anton", Impact, ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
 }
 
-* {
-  border-color: var(--c-border);
+/* In the base layer so `border-*` colour utilities can override it. */
+@layer base {
+  * {
+    border-color: var(--c-border);
+  }
 }
 
 html {
@@ -167,9 +167,6 @@ html {
 
 body {
   background: var(--c-bg);
-  /* Paper grain. 3px dots at 3% are invisible as dots and read as texture. */
-  background-image: radial-gradient(color-mix(in oklab, var(--c-fg) 3%, transparent) 0.5px, transparent 0.5px);
-  background-size: 3px 3px;
   color: var(--c-fg);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
@@ -177,14 +174,48 @@ body {
 }
 
 /*
-  Display type. Condensed, uppercase, tight - used for every heading, every
-  eyebrow label and every button. It is the single strongest signal in the
-  design, so it gets one class rather than being re-declared per component.
+  Display type, in two voices. `.dsp` on a heading is Anton: condensed, one
+  weight, uppercase. `.dsp` on anything else - eyebrows, buttons, pills - is the
+  label voice: Inter Tight bold, uppercase, tracked out. One class, so every
+  component gets the right voice without being re-declared.
+
+  Unlayered on purpose: it beats Tailwind's weight and tracking utilities, so a
+  stray `font-semibold` cannot fake-bold Anton.
 */
 .dsp {
-  font-family: var(--font-display);
+  font-family: var(--font-sans);
+  font-weight: 700;
   text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+:is(h1, h2, h3, h4).dsp {
+  font-family: var(--font-display);
   letter-spacing: 0.005em;
+}
+
+/* Anton has one weight; never let the browser fake a bolder one. */
+:is(h1, h2, h3, h4).dsp,
+.font-display {
+  font-weight: 400;
+  font-synthesis: none;
+}
+
+/* The current tab opens out from its icon. */
+@keyframes pill-open {
+  from {
+    opacity: 0;
+    transform: scaleX(0.3);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.nav-pill {
+  transform-origin: 0 50%;
+  animation: pill-open 0.6s cubic-bezier(0.34, 1.45, 0.64, 1) both;
 }
 
 /* Numbers in tables and stat blocks must not jitter between renders. */
@@ -204,120 +235,59 @@ body {
 }
 
 /*
-  Hero artwork. The design puts a course photograph behind every page title.
-  There are no photographs in the repo, so these are layered gradients tuned to
-  read as light falling across turf. Each page picks a variant so the screens
-  do not all open identically.
-
-  ponytail: gradients, not photography. `PageHero` takes an `image` prop -
-  point it at a real photo and the gradient becomes the fallback underneath.
+  Hero artwork: the illustrated fairway from the redesign, one SVG per variant
+  in /public/hero. A background rather than markup, so every surface that opts
+  in with a class - page heroes, the round card, the loading shell - gets it.
 */
-.hero-art {
-  background-color: #111a14;
-  background-image:
-    radial-gradient(120% 64% at 4% 0%, rgb(47 189 111 / 0.24), transparent 56%),
-    radial-gradient(90% 48% at 100% 100%, rgb(168 135 63 / 0.2), transparent 60%);
+.hero-art,
+.hero-art-range,
+.hero-art-green,
+.hero-art-dusk {
+  background: #d9e0cb url("/hero/course.svg") center 62% / cover no-repeat;
 }
 
 .hero-art-range {
-  background-color: #111a14;
-  background-image:
-    radial-gradient(110% 60% at 90% 2%, rgb(47 189 111 / 0.22), transparent 54%),
-    radial-gradient(90% 50% at 0% 100%, rgb(168 135 63 / 0.22), transparent 58%);
+  background-image: url("/hero/range.svg");
 }
 
 .hero-art-green {
-  background-color: #0f1a13;
-  background-image:
-    radial-gradient(100% 60% at 20% 0%, rgb(47 189 111 / 0.28), transparent 54%),
-    radial-gradient(110% 60% at 100% 90%, rgb(47 189 111 / 0.14), transparent 58%);
+  background-image: url("/hero/green.svg");
 }
 
 .hero-art-dusk {
-  background-color: #101a1e;
-  background-image:
-    radial-gradient(110% 62% at 82% 0%, rgb(168 135 63 / 0.26), transparent 54%),
-    radial-gradient(95% 55% at 0% 96%, rgb(47 189 111 / 0.18), transparent 58%);
-}
-
-/*
-  Drawn topography, drifting. Two contour layers at different speeds give the
-  hero depth without a photograph and without a gradient wash; `PageHero` draws
-  them as SVG so the paths stay crisp at any width.
-*/
-@keyframes drift {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(-146px);
-  }
-}
-
-@keyframes drift-back {
-  from {
-    transform: translateX(-146px);
-  }
-  to {
-    transform: translateX(0);
-  }
-}
-
-.contour-near {
-  animation: drift 13s linear infinite;
-}
-
-.contour-far {
-  animation: drift-back 23s linear infinite;
-}
-
-/* The flight line draws itself once and stops. Never the fastest thing on screen. */
-@keyframes trace {
-  to {
-    stroke-dashoffset: 0;
-  }
-}
-
-.trace {
-  stroke-dasharray: 540;
-  stroke-dashoffset: 540;
-  animation: trace 2.4s var(--ease) 0.2s forwards;
-}
-
-@keyframes breathe {
-  0%,
-  100% {
-    opacity: 0.55;
-  }
-  50% {
-    opacity: 0.95;
-  }
-}
-
-.breathe {
-  animation: breathe 4s ease-in-out 2.4s infinite;
+  background-color: #aeb79c;
+  background-image: url("/hero/dusk.svg");
 }
 
 .hero-scrim {
   background-image: linear-gradient(
     to bottom,
-    rgb(17 26 20 / 0.22) 0%,
-    rgb(17 26 20 / 0) 30%,
-    rgb(17 26 20 / 0.42) 72%,
-    rgb(17 26 20 / 0.62) 100%
+    rgb(20 24 15 / 0.32) 0%,
+    rgb(20 24 15 / 0.08) 40%,
+    rgb(20 24 15 / 0.5) 78%,
+    rgb(20 24 15 / 0.68) 100%
   );
 }
 
-/* A restrained wash for the full-page shells: sign-in, onboarding, not-found. */
+/*
+  A page header with no artwork, on the page colour. Hero controls that were
+  written for the dark artwork swap to ink here.
+*/
+.hero-plain .on-hero,
+.hero-plain .hero-pill-outline {
+  color: var(--c-fg);
+  border-color: var(--c-fg);
+}
+
+.hero-plain .on-hero-solid,
+.hero-plain .hero-pill-solid {
+  background: var(--c-surface);
+  color: var(--c-fg);
+}
+
+/* The full-page shells: sign-in, onboarding, not-found. Flat stone, like the app. */
 .hero-grid {
-  background-image:
-    radial-gradient(circle at 15% 12%, color-mix(in oklab, var(--c-accent) 12%, transparent), transparent 46%),
-    radial-gradient(circle at 88% 6%, color-mix(in oklab, var(--c-gold) 10%, transparent), transparent 42%),
-    radial-gradient(color-mix(in oklab, var(--c-fg) 3%, transparent) 0.5px, transparent 0.5px);
-  background-size:
-    auto,
-    auto,
-    3px 3px;
+  background: var(--c-bg);
 }
 
 @keyframes rise-in {

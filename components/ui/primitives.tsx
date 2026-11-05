@@ -9,37 +9,32 @@ import { cn } from "@/lib/utils";
  * tokens in globals.css. No component library dependency - these are the pieces
  * the app actually uses.
  *
- * House style, from the mobile design: condensed uppercase display type for
- * anything structural (headings, eyebrows, buttons), a warm near-white card
- * with a long soft shadow, and one green gradient reserved for the primary
- * action on a screen.
+ * House style, from the redesign: Anton for headings, tracked-out bold caps for
+ * labels and buttons, flat white cards with big radii on a stone page, pill
+ * controls, and one olive fill reserved for the primary action on a screen.
  */
 
 // ------------------------------------------------------------------ button
 
 const buttonStyles = cva(
-  "press dsp inline-flex items-center justify-center gap-2 font-medium transition-[opacity,transform,background-color] disabled:pointer-events-none disabled:opacity-50 whitespace-nowrap",
+  "press dsp inline-flex items-center justify-center gap-2 rounded-full transition-[opacity,transform,background-color,color] disabled:pointer-events-none disabled:opacity-50 whitespace-nowrap",
   {
     variants: {
       variant: {
-        primary:
-          "rounded-[var(--radius-control)] bg-[image:var(--grad-accent)] text-white shadow-[var(--shadow-accent)] hover:opacity-95",
-        secondary:
-          "rounded-full border border-border-strong bg-surface text-fg hover:bg-surface-2",
-        ghost: "rounded-full text-fg-muted hover:bg-surface-2 hover:text-fg",
-        danger: "rounded-[var(--radius-control)] bg-bad text-white hover:opacity-90",
-        subtle: "rounded-full bg-accent-soft text-accent hover:opacity-90",
-        /* For use on top of hero artwork. */
-        onHero:
-          "rounded-full border border-white/45 text-white backdrop-blur-[2px] hover:bg-white/10",
-        onHeroSolid:
-          "rounded-full bg-[rgb(255_254_247_/_0.94)] text-[#101510] shadow-[0_8px_20px_-10px_rgb(0_0_0_/_0.6)] hover:bg-white",
+        primary: "bg-accent text-accent-fg hover:bg-accent-strong dark:hover:opacity-90",
+        secondary: "border-[1.5px] border-fg bg-transparent text-fg hover:bg-fg/5",
+        ghost: "text-fg-muted hover:bg-fg/5 hover:text-fg",
+        danger: "bg-bad text-white hover:opacity-90",
+        subtle: "bg-accent-soft text-accent-strong hover:opacity-90",
+        /* For use on top of hero artwork; `.hero-plain` re-inks them. */
+        onHero: "on-hero border border-white/60 bg-white/20 text-white hover:bg-white/30",
+        onHeroSolid: "on-hero-solid bg-white/90 text-[#1e211b] hover:bg-white",
       },
       size: {
-        sm: "h-8 px-3.5 text-[10px] tracking-[0.17em]",
-        md: "h-11 px-5 text-[11px] tracking-[0.18em]",
-        lg: "h-[52px] w-full px-6 text-[12px] tracking-[0.2em]",
-        icon: "h-9 w-9 rounded-full",
+        sm: "h-9 px-3.5 text-[11px]",
+        md: "h-11 px-5 text-[12px]",
+        lg: "h-14 w-full px-6 text-[13px]",
+        icon: "h-11 w-11",
       },
     },
     defaultVariants: { variant: "primary", size: "md" },
@@ -67,7 +62,7 @@ export function Card({ className, ...props }: ComponentProps<"div">) {
   return (
     <div
       className={cn(
-        "relative rounded-[var(--radius-card)] border border-border bg-surface shadow-[var(--shadow-card)]",
+        "relative rounded-[var(--radius-card)] bg-surface",
         className,
       )}
       {...props}
@@ -75,12 +70,12 @@ export function Card({ className, ...props }: ComponentProps<"div">) {
   );
 }
 
-/** A smaller card for list rows: tighter radius, shallower shadow. */
+/** A smaller card for list rows: tighter radius. */
 export function MiniCard({ className, ...props }: ComponentProps<"div">) {
   return (
     <div
       className={cn(
-        "relative rounded-[var(--radius-soft)] border border-border bg-surface shadow-[var(--shadow-soft)]",
+        "relative rounded-[var(--radius-soft)] bg-surface",
         className,
       )}
       {...props}
@@ -93,7 +88,7 @@ export function InkCard({ className, ...props }: ComponentProps<"div">) {
   return (
     <div
       className={cn(
-        "relative overflow-hidden rounded-[var(--radius-card)] bg-ink text-ink-fg shadow-[var(--shadow-ink)]",
+        "relative overflow-hidden rounded-[var(--radius-card)] bg-ink text-ink-fg",
         className,
       )}
       {...props}
@@ -102,20 +97,20 @@ export function InkCard({ className, ...props }: ComponentProps<"div">) {
 }
 
 export function CardHeader({ className, ...props }: ComponentProps<"div">) {
-  return <div className={cn("flex flex-col gap-1 p-5 pb-3", className)} {...props} />;
+  return <div className={cn("flex flex-col gap-1.5 p-5 pb-3", className)} {...props} />;
 }
 
 export function CardTitle({ className, ...props }: ComponentProps<"h3">) {
   return (
     <h3
-      className={cn("dsp text-[15px] font-semibold leading-tight tracking-[0.02em]", className)}
+      className={cn("dsp text-[22px] leading-none", className)}
       {...props}
     />
   );
 }
 
 export function CardDescription({ className, ...props }: ComponentProps<"p">) {
-  return <p className={cn("text-xs leading-relaxed text-fg-muted", className)} {...props} />;
+  return <p className={cn("text-[13px] leading-relaxed text-fg-muted", className)} {...props} />;
 }
 
 export function CardContent({ className, ...props }: ComponentProps<"div">) {
@@ -131,21 +126,22 @@ export function CardFooter({ className, ...props }: ComponentProps<"div">) {
 // ------------------------------------------------------------------- badge
 
 const badgeStyles = cva(
-  "inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2 text-[10px] font-medium leading-[19px]",
+  "dsp inline-flex h-[26px] shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2.5 text-[10px] tracking-[0.06em]",
   {
     variants: {
       tone: {
-        neutral: "border border-border-strong bg-track text-fg-muted",
-        accent: "bg-accent-soft text-accent",
-        good: "bg-good-soft text-good",
+        neutral: "bg-surface-2 text-fg",
+        accent: "bg-accent-soft text-accent-strong",
+        good: "bg-good-soft text-accent-strong",
         bad: "bg-bad-soft text-bad",
         warn: "bg-warn-soft text-warn",
         info: "bg-info-soft text-info",
-        gold: "border border-gold/40 bg-gold/12 text-gold",
+        /* The AI mark: ink pill, flag-yellow text, like the coach button. */
+        gold: "bg-ink text-gold",
         /* On the ink card the soft fills disappear, so these carry a hairline. */
-        onInk: "border border-white/20 bg-white/8 text-ink-fg/80",
-        onInkBad: "border border-bad/35 bg-bad/15 text-bad",
-        onInkGood: "border border-good/35 bg-good/15 text-good",
+        onInk: "border border-white/25 bg-white/10 text-ink-fg/85",
+        onInkBad: "bg-[#3a3f33] text-[#e9a08e]",
+        onInkGood: "bg-accent text-white",
       },
     },
     defaultVariants: { tone: "neutral" },
@@ -182,7 +178,7 @@ export function Progress({
   }[tone];
   return (
     <div
-      className={cn("h-1.5 w-full overflow-hidden rounded-full bg-track", className)}
+      className={cn("h-2 w-full overflow-hidden rounded-full bg-track", className)}
       role="progressbar"
       aria-valuenow={pct}
       aria-valuemin={0}
@@ -200,7 +196,7 @@ export function Progress({
 export function Eyebrow({ className, ...props }: ComponentProps<"p">) {
   return (
     <p
-      className={cn("dsp text-[9px] font-medium tracking-[0.17em] text-fg-subtle", className)}
+      className={cn("dsp text-[11px] tracking-[0.1em] text-fg-muted", className)}
       {...props}
     />
   );
@@ -221,13 +217,13 @@ export function Stat({
   className?: string;
   size?: "sm" | "md" | "lg";
 }) {
-  const valueSize = { sm: "text-[17px]", md: "text-[21px]", lg: "text-[26px]" }[size];
+  const valueSize = { sm: "text-[19px]", md: "text-[23px]", lg: "text-[30px]" }[size];
   return (
     <div className={cn("flex min-w-0 flex-col", className)}>
-      <Eyebrow className="tracking-[0.15em]">{label}</Eyebrow>
+      <Eyebrow>{label}</Eyebrow>
       <span
         className={cn(
-          "tabular mt-0.5 font-semibold leading-[1.05] tracking-[-0.02em]",
+          "font-display tabular mt-1 leading-[1.05]",
           valueSize,
           tone === "good" && "text-good",
           tone === "bad" && "text-bad",
@@ -235,7 +231,7 @@ export function Stat({
       >
         {value}
       </span>
-      {sub ? <span className="mt-0.5 text-[10.5px] text-fg-subtle">{sub}</span> : null}
+      {sub ? <span className="mt-0.5 text-[12px] text-fg-subtle">{sub}</span> : null}
     </div>
   );
 }
@@ -256,8 +252,8 @@ export function Field({
   className?: string;
 }) {
   return (
-    <label className={cn("flex flex-col gap-1.5", className)}>
-      <Eyebrow className="tracking-[0.15em]">{label}</Eyebrow>
+    <label className={cn("flex flex-col gap-2", className)}>
+      <Eyebrow>{label}</Eyebrow>
       {children}
       {error ? (
         <span className="text-xs text-bad">{error}</span>
@@ -273,7 +269,7 @@ export function Field({
   is under 16px, which on a one-handed shot-entry screen is genuinely disruptive.
 */
 const controlStyles =
-  "h-11 w-full rounded-xl border border-border-strong bg-[color-mix(in_oklab,var(--c-surface)_70%,var(--c-bg))] px-3.5 text-base text-fg shadow-[inset_0_1px_2px_rgb(16_21_17_/_0.05)] placeholder:text-fg-subtle focus:border-accent focus:outline-none";
+  "h-[50px] w-full rounded-full border-[1.5px] border-transparent bg-surface-2 px-[18px] text-base text-fg placeholder:text-fg-subtle focus:border-accent focus:outline-none";
 
 export function Input({ className, ...props }: ComponentProps<"input">) {
   return <input className={cn(controlStyles, "tabular", className)} {...props} />;
@@ -290,7 +286,7 @@ export function Select({ className, children, ...props }: ComponentProps<"select
 export function Textarea({ className, ...props }: ComponentProps<"textarea">) {
   return (
     <textarea
-      className={cn(controlStyles, "h-auto min-h-20 resize-y py-2.5 leading-relaxed", className)}
+      className={cn(controlStyles, "h-auto min-h-20 resize-y rounded-[22px] py-3 leading-relaxed", className)}
       {...props}
     />
   );
@@ -310,10 +306,10 @@ export function EmptyState({
   icon?: ReactNode;
 }) {
   return (
-    <div className="relative flex flex-col items-center gap-3 rounded-[var(--radius-soft)] border border-dashed border-border-strong bg-surface-2/60 px-6 py-10 text-center">
+    <div className="relative flex flex-col items-center gap-3 rounded-[var(--radius-card)] border-[1.5px] border-dashed border-border-strong px-6 py-10 text-center">
       {icon ? <div className="text-fg-subtle">{icon}</div> : null}
-      <h3 className="dsp text-[15px] font-semibold tracking-[0.02em]">{title}</h3>
-      <p className="max-w-sm text-[13px] leading-relaxed text-fg-muted">{message}</p>
+      <h3 className="dsp text-[22px] leading-none">{title}</h3>
+      <p className="max-w-sm text-[14px] leading-relaxed text-fg-muted">{message}</p>
       {action}
     </div>
   );
@@ -321,15 +317,15 @@ export function EmptyState({
 
 export function ErrorState({ title, message }: { title: string; message: string }) {
   return (
-    <div className="rounded-[var(--radius-soft)] border border-bad/30 bg-bad-soft p-5">
-      <h3 className="dsp text-[15px] font-semibold text-bad">{title}</h3>
+    <div className="rounded-[var(--radius-soft)] bg-bad-soft p-5">
+      <h3 className="dsp text-[20px] leading-none text-bad">{title}</h3>
       <p className="mt-1 text-[13px] leading-relaxed text-fg-muted">{message}</p>
     </div>
   );
 }
 
 export function Skeleton({ className }: { className?: string }) {
-  return <div className={cn("skeleton rounded-xl", className)} />;
+  return <div className={cn("skeleton rounded-2xl", className)} />;
 }
 
 /** A heading for a block inside a page. The page title itself is `PageHero`. */
@@ -345,10 +341,9 @@ export function SectionHeading({
   return (
     <div className="flex flex-wrap items-end justify-between gap-3">
       <div className="min-w-0">
-        <div className="mb-2.5 h-px w-full bg-[linear-gradient(to_right,color-mix(in_oklab,var(--c-gold)_60%,transparent),var(--c-border))]" />
-        <h2 className="dsp text-[26px] font-semibold leading-[0.96] tracking-[-0.015em]">{title}</h2>
+        <h2 className="dsp text-[26px] leading-none">{title}</h2>
         {description ? (
-          <p className="mt-1.5 max-w-prose text-[12px] leading-relaxed text-fg-muted">
+          <p className="mt-1.5 max-w-prose text-[13px] leading-relaxed text-fg-muted">
             {description}
           </p>
         ) : null}
@@ -368,84 +363,20 @@ const HERO_ART = {
 } as const;
 
 const HERO_HEIGHT = {
-  sm: "min-h-[210px]",
-  md: "min-h-[264px]",
-  lg: "min-h-[300px]",
+  sm: "min-h-[230px]",
+  md: "min-h-[280px]",
+  lg: "min-h-[320px]",
 } as const;
 
 /**
- * One contour line, repeated far enough to cover a desktop hero while it
- * drifts. The curve repeats every 146px, which is also the drift distance, so
- * the loop is seamless.
- */
-function contour(y: number, amplitude: number, repeats = 12): string {
-  let d = `M0 ${y} c 48 ${-amplitude} 98 ${amplitude} 146 0`;
-  for (let i = 1; i < repeats; i += 1) d += ` s 98 ${-amplitude} 146 0`;
-  return d;
-}
-
-const NEAR = [40, 84, 128, 172, 216].map((y) => contour(y, 26));
-const FAR = [62, 152].map((y) => contour(y, 34));
-
-/**
- * The hero artwork: drawn topography rather than a photograph or a gradient
- * wash, with the shot that costs the most traced across it as a flight line.
- * Two layers drift at different speeds, which is what gives it depth; both are
- * decorative and both stop under `prefers-reduced-motion`.
- */
-function HeroArt() {
-  return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
-      <svg
-        viewBox="0 0 1752 264"
-        width="1752"
-        height="264"
-        className="contour-near absolute left-0 top-0 opacity-90"
-      >
-        <g fill="none" stroke="#2fbd6f" strokeOpacity="0.26" strokeWidth="1.1">
-          {NEAR.map((d) => (
-            <path key={d} d={d} />
-          ))}
-        </g>
-      </svg>
-
-      <svg
-        viewBox="0 0 1752 264"
-        width="1752"
-        height="264"
-        className="contour-far absolute -left-[60px] top-4"
-      >
-        <g fill="none" stroke="var(--c-gold)" strokeOpacity="0.18" strokeWidth="1">
-          {FAR.map((d) => (
-            <path key={d} d={d} />
-          ))}
-        </g>
-      </svg>
-
-      <svg
-        viewBox="0 0 390 264"
-        preserveAspectRatio="xMidYMid slice"
-        className="absolute inset-0 h-full w-full"
-      >
-        <path
-          className="trace"
-          d="M-12 240 C 88 104, 236 70, 402 156"
-          fill="none"
-          stroke="var(--c-gold)"
-          strokeOpacity="0.85"
-          strokeWidth="1.6"
-          strokeLinecap="round"
-        />
-        <circle className="breathe" cx="238" cy="88" r="3.2" fill="#f4f2e9" />
-      </svg>
-    </div>
-  );
-}
-
-/**
- * The full-bleed title block every screen opens with. It cancels the layout
- * padding with a negative margin so the artwork reaches the edges of the
- * content column without the pages having to restructure.
+ * The title block every screen opens with. Two shapes, as in the design:
+ *
+ * - artwork (`course`, `range`, `green`, `dusk`): the illustrated fairway,
+ *   full-bleed. It cancels the layout padding with a negative margin so the
+ *   art reaches the edges of the content column without the pages having to
+ *   restructure.
+ * - `plain`: no artwork, a big Anton title straight on the page - the list
+ *   screens (practice home, drills, swing library, profile).
  */
 export function PageHero({
   eyebrow,
@@ -467,11 +398,39 @@ export function PageHero({
   action?: ReactNode;
   topLeft?: ReactNode;
   topRight?: ReactNode;
-  art?: keyof typeof HERO_ART;
+  art?: keyof typeof HERO_ART | "plain";
   image?: string;
   size?: keyof typeof HERO_HEIGHT;
   className?: string;
 }) {
+  if (art === "plain") {
+    return (
+      <div className={cn("hero-plain relative flex flex-col gap-4 pb-1", className)}>
+        {topLeft || topRight ? (
+          <div className="flex items-center justify-between gap-3">
+            <div>{topLeft}</div>
+            <div>{topRight}</div>
+          </div>
+        ) : null}
+        <div className="flex items-end justify-between gap-3">
+          <div className="min-w-0">
+            {eyebrow ? (
+              <p className="dsp text-[12px] tracking-[0.1em] text-fg-muted">{eyebrow}</p>
+            ) : null}
+            <h1 className="dsp mt-1.5 text-[46px] leading-[0.98]">{title}</h1>
+            {description ? (
+              <p className="mt-2.5 max-w-md text-[14px] font-semibold leading-[1.45] text-fg-muted">
+                {description}
+              </p>
+            ) : null}
+            {pills ? <div className="mt-3 flex flex-wrap gap-2">{pills}</div> : null}
+          </div>
+          {action ? <div className="shrink-0">{action}</div> : null}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className={cn(
@@ -494,9 +453,7 @@ export function PageHero({
       {image ? (
         // eslint-disable-next-line @next/next/no-img-element -- hero art is decorative and unsized
         <img src={image} alt="" aria-hidden className="absolute inset-0 h-full w-full object-cover" />
-      ) : (
-        <HeroArt />
-      )}
+      ) : null}
       <div className="hero-scrim pointer-events-none absolute inset-0" />
 
       <div className="relative z-10 flex items-start justify-between gap-3 p-5 pb-8">
@@ -504,16 +461,14 @@ export function PageHero({
         <div>{topRight}</div>
       </div>
 
-      <div className="relative z-10 flex items-end justify-between gap-3 p-5 pb-11 pt-0">
+      <div className="relative z-10 flex items-end justify-between gap-3 p-5 pb-12 pt-0">
         <div className="min-w-0">
           {eyebrow ? (
-            <p className="dsp text-[11px] font-medium tracking-[0.2em] text-white/80">{eyebrow}</p>
+            <p className="dsp text-[11px] tracking-[0.1em] text-white/85">{eyebrow}</p>
           ) : null}
-          <h1 className="dsp mt-1 text-[38px] font-semibold leading-[0.92] tracking-[-0.02em] text-white">
-            {title}
-          </h1>
+          <h1 className="dsp mt-1.5 text-[44px] leading-[0.98] text-white">{title}</h1>
           {description ? (
-            <p className="mt-2 max-w-[260px] text-[11.5px] leading-[1.45] text-white/80">
+            <p className="mt-2 max-w-[300px] text-[13px] leading-[1.45] text-white/85">
               {description}
             </p>
           ) : null}
@@ -526,12 +481,12 @@ export function PageHero({
 }
 
 const heroPillStyles = cva(
-  "dsp inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-[10px] font-medium tracking-[0.17em]",
+  "dsp inline-flex h-[30px] items-center gap-1.5 rounded-full px-3 text-[11px]",
   {
     variants: {
       tone: {
-        solid: "bg-[rgb(255_254_247_/_0.94)] text-[#101510] shadow-[0_8px_20px_-10px_rgb(0_0_0_/_0.6)]",
-        outline: "border border-white/50 text-white",
+        solid: "hero-pill-solid bg-white/90 text-[#1e211b]",
+        outline: "hero-pill-outline border-[1.5px] border-white/85 text-white",
       },
     },
     defaultVariants: { tone: "outline" },

@@ -42,10 +42,11 @@ const SEVERITY_TONE_INK = {
   watch: "onInk",
 } as const;
 
-const INK_GLOW = {
-  backgroundImage:
-    "radial-gradient(120% 62% at 6% 0%, rgb(47 189 111 / 0.2), transparent 54%), radial-gradient(90% 46% at 100% 100%, rgb(168 135 63 / 0.16), transparent 58%)",
-} as const;
+/* The redesign's dark card is flat ink; the glow is gone. */
+const INK_GLOW = {} as const;
+
+/* Coral reads on ink where the page's red would not. */
+const INK_BAD = "text-[#f2b59b]";
 
 export function SourceBadge({ source, note }: { source: "ai" | "rules"; note?: string }) {
   return (
@@ -117,19 +118,19 @@ export function PriorityCard({ weakness, rank }: { weakness: Weakness | null; ra
   if (rank === 1) {
     return (
       <InkCard>
-        <div className="p-6" style={INK_GLOW}>
-          <div className="flex flex-wrap items-center gap-2">
-            <Eyebrow className="tracking-[0.2em] text-white/60">Priority #1</Eyebrow>
-            {badges}
-          </div>
+        <div className="hero-art-green relative flex min-h-[200px] flex-col justify-between p-4">
+          <div className="hero-scrim absolute inset-0" aria-hidden />
+          <span className="dsp relative inline-flex h-[30px] items-center self-start rounded-full bg-white/90 px-3 text-[11px] text-[#1e211b]">
+            Priority #1
+          </span>
+          <h2 className="dsp relative text-[30px] leading-[1.02] text-white">{weakness.title}</h2>
+        </div>
+        <div className="p-6 pt-5" style={INK_GLOW}>
+          <div className="flex flex-wrap items-center gap-2">{badges}</div>
 
-          <h2 className="dsp mt-3.5 text-[31px] font-semibold leading-[0.98] tracking-[-0.015em]">
-            {weakness.title}
-          </h2>
-
-          <div className="mt-6">
+          <div className="mt-5">
             <div className="flex items-baseline justify-between gap-3">
-              <span className="tabular text-[36px] font-semibold leading-none tracking-[-0.03em] text-bad">
+              <span className={cn("font-display tabular text-[40px] leading-none", INK_BAD)}>
                 -{weakness.strokes_lost_per_round.toFixed(2)}
               </span>
               <span className="text-[11px] text-white/65">
@@ -264,7 +265,7 @@ function CostBar({ value, onInk }: { value: number; onInk?: boolean }) {
         aria-hidden
       />
       <div
-        className="glide absolute inset-y-0 right-1/2 rounded-l-full bg-bad"
+        className={cn("glide absolute inset-y-0 right-1/2 rounded-l-full", onInk ? "bg-[#f2b59b]" : "bg-bad")}
         style={{ width: `${width}%` }}
         aria-hidden
       />
@@ -290,8 +291,8 @@ function InkStat({
       <Eyebrow className="tracking-[0.17em] text-white/50">{label}</Eyebrow>
       <p
         className={cn(
-          "tabular mt-1 text-[26px] font-semibold leading-none tracking-[-0.02em]",
-          tone === "bad" ? "text-bad" : "text-ink-fg",
+          "font-display tabular mt-1 text-[26px] leading-none",
+          tone === "bad" ? INK_BAD : "text-ink-fg",
         )}
       >
         {value}
@@ -313,7 +314,7 @@ function EvidenceLine({ evidence, onInk }: { evidence: Evidence; onInk?: boolean
       <span>
         <span
           className={cn(
-            "dsp text-[9px] tracking-[0.15em]",
+            "dsp text-[10px]",
             onInk ? "text-white/45" : "text-fg-subtle",
           )}
         >
@@ -397,7 +398,7 @@ export function TodaysSession({
           <div className="relative h-[60px] w-[60px] shrink-0">
             {complete ? (
               <span
-                className="absolute -inset-1.5 rounded-full bg-[radial-gradient(circle,rgb(16_115_63_/_0.22),rgb(16_115_63_/_0)_68%)]"
+                className="absolute -inset-1.5 rounded-full bg-[radial-gradient(circle,color-mix(in_oklab,var(--c-accent)_24%,transparent),transparent_68%)]"
                 aria-hidden
               />
             ) : null}

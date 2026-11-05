@@ -410,7 +410,7 @@ function ChartCard({ title, children }: { title: string; children: React.ReactNo
 function SGCell({ label, value, digits = 2 }: { label: string; value: number; digits?: number }) {
   return (
     <div className="min-w-0">
-      <p className="dsp text-[8.5px] tracking-[0.15em] text-fg-subtle">{label}</p>
+      <p className="dsp text-[10px] tracking-[0.15em] text-fg-subtle">{label}</p>
       <p
         className={cn(
           "tabular mt-0.5 text-[12.5px] font-semibold",

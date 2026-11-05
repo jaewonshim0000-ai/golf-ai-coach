@@ -20,11 +20,11 @@ export default async function OnboardingPage() {
     <div className="hero-grid min-h-svh px-4 py-10">
       <div className="mx-auto w-full max-w-2xl space-y-6">
         <header className="space-y-2">
-          <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-accent text-accent-fg">
+          <span className="inline-flex h-11 w-11 items-center justify-center rounded-full border-[3px] border-white bg-accent text-accent-fg">
             <Flag className="h-4 w-4" strokeWidth={2.5} />
           </span>
-          <h1 className="text-2xl font-semibold tracking-tight">Let&apos;s build your player profile</h1>
-          <p className="max-w-lg text-sm text-fg-muted">
+          <h1 className="dsp pt-2 text-[40px] leading-[0.98]">Let&apos;s build your player profile</h1>
+          <p className="max-w-lg text-[14px] leading-relaxed text-fg-muted">
             Four short steps. Everything here feeds the coaching engine, so the more accurate it is,
             the sooner the app can tell you something you didn&apos;t already know. You can change all
             of it later.

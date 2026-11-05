@@ -1,6 +1,5 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { User } from "lucide-react";
 
 import { resetDemoAction } from "@/app/actions";
 import { DemoNotice, PriorityCard, TodaysSession } from "@/components/dashboard/sections";
@@ -20,7 +19,6 @@ import { rankPracticeDrills } from "@/lib/practice/drill-priorities";
 import { practiceTest } from "@/lib/practice/tests";
 import * as repo from "@/lib/db/repo";
 import { loadPlayerState } from "@/lib/player-state";
-import { greeting } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Practice" };
 export const dynamic = "force-dynamic";
@@ -40,19 +38,23 @@ export default async function PracticePage() {
     .filter((drill): drill is NonNullable<typeof drill> => Boolean(drill))
     .map((drill) => benchmarkFor(drill, state.drillAttempts));
 
+  const name = state.profile?.display_name ?? "";
+  const initials = name.split(/\s+/).map((word) => word[0] ?? "").join("").slice(0, 2).toUpperCase();
+  const handicap = state.profile?.handicap_index;
+
   return (
     <div className="space-y-5">
       <PageHero
-        art="range"
-        eyebrow={greeting()}
-        title={state.profile?.display_name ?? "Practice"}
+        art="plain"
+        title={name ? <>Hello<br />{name}!</> : "Practice"}
+        description={handicap !== null && handicap !== undefined ? `HCP ${handicap.toFixed(1)}` : undefined}
         topRight={
           <Link
             href="/profile"
             aria-label="Profile"
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-white/70 text-white md:hidden"
+            className="flex h-11 w-11 items-center justify-center rounded-full border-[3px] border-white bg-accent text-[14px] font-bold text-accent-fg md:hidden"
           >
-            <User className="h-4 w-4" />
+            {initials || "You"}
           </Link>
         }
         pills={

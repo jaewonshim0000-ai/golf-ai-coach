@@ -59,7 +59,7 @@ export default async function ProfilePage({
   return (
     <div className="space-y-5">
       <PageHero
-        art="dusk"
+        art="plain"
         size="sm"
         eyebrow="Your profile"
         title={state.profile?.display_name ?? "Profile"}

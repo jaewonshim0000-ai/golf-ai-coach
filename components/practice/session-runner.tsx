@@ -145,7 +145,7 @@ export function SessionRunner({
       <Card>
         <CardContent className="flex items-center justify-between gap-3 p-4">
           <div className="min-w-0">
-            <p className="dsp text-[9px] tracking-[0.15em] text-fg-subtle">
+            <p className="dsp text-[10px] tracking-[0.15em] text-fg-subtle">
               Block {current + 1} of {items.length} · {item.duration} min
             </p>
             <p
@@ -424,7 +424,7 @@ function Counter({
 }) {
   return (
     <div className="min-w-0 space-y-1.5">
-      <span className="dsp block truncate text-[9px] font-medium tracking-[0.15em] text-fg-subtle">{label}</span>
+      <span className="dsp block truncate text-[10px] font-medium tracking-[0.15em] text-fg-subtle">{label}</span>
       <div className="flex items-center gap-1.5">
         <Button type="button" variant="secondary" size="icon" onClick={() => onChange(value - 1)} disabled={disabled} aria-label={`Decrease ${label}`}>
           <Minus className="h-4 w-4" />

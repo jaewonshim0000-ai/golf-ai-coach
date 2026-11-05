@@ -214,7 +214,7 @@ export default async function RoundDetailPage({
                 <p className="text-sm font-medium">{narrative.data.headline}</p>
                 {narrative.data.what_went_well.length > 0 ? (
                   <div>
-                    <p className="dsp text-[9px] font-medium tracking-[0.17em] text-good">
+                    <p className="dsp text-[10px] font-medium tracking-[0.17em] text-good">
                       What went well
                     </p>
                     <ul className="mt-1 space-y-1 text-sm text-fg-muted">
@@ -226,7 +226,7 @@ export default async function RoundDetailPage({
                 ) : null}
                 {narrative.data.what_cost_you.length > 0 ? (
                   <div>
-                    <p className="dsp text-[9px] font-medium tracking-[0.17em] text-bad">
+                    <p className="dsp text-[10px] font-medium tracking-[0.17em] text-bad">
                       What cost you
                     </p>
                     <ul className="mt-1 space-y-1 text-sm text-fg-muted">

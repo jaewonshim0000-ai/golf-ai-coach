@@ -153,9 +153,9 @@ function MetricRow({ reading }: { reading: MetricReading }) {
         <span className="min-w-0 truncate text-[12.5px]">
           {metric.label}
           {reading.source === "vision" ? (
-            <span className="dsp ml-1.5 text-[9px] tracking-[0.14em] text-fg-subtle">est.</span>
+            <span className="dsp ml-1.5 text-[10px] tracking-[0.14em] text-fg-subtle">est.</span>
           ) : reading.source === "pose" ? (
-            <span className="dsp ml-1.5 text-[9px] tracking-[0.14em] text-fg-subtle">pose</span>
+            <span className="dsp ml-1.5 text-[10px] tracking-[0.14em] text-fg-subtle">pose</span>
           ) : null}
         </span>
         <span

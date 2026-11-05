@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 390 290" preserveAspectRatio="xMidYMid slice">
+<style>.flag{transform-box:fill-box;transform-origin:0 50%;animation:flag 2.6s ease-in-out infinite}@keyframes flag{0%,100%{transform:none}50%{transform:skewY(-9deg) scaleX(.84)}}@media (prefers-reduced-motion:reduce){.flag{animation:none}}</style>
+<rect width="390" height="290" fill="#D4DCC4"/>
+<path d="M0 96 C30 70 50 88 70 74 C92 58 110 84 132 70 C156 54 176 80 200 66 C222 52 244 78 266 64 C290 50 312 76 336 62 C360 50 376 70 390 62 V290 H0Z" fill="#3E5426"/>
+<path d="M0 150 Q120 128 230 140 T390 136 V290 H0Z" fill="#7C9C45"/>
+<path d="M150 150 Q240 140 330 150 Q300 168 200 166 Q150 162 150 150Z" fill="#A6C266"/>
+<ellipse cx="110" cy="170" rx="30" ry="7" fill="#E6DDBF"/>
+<path d="M0 214 Q195 196 390 220 V290 H0Z" fill="#62832F"/>
+<line x1="262" y1="118" x2="262" y2="154" stroke="#F4F1E8" stroke-width="2"/>
+<path class="flag" d="M262 118 l16 5 -16 5z" fill="#E8C547"/>
+</svg>

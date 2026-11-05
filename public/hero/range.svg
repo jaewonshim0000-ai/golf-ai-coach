@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 390 300" preserveAspectRatio="xMidYMid slice">
+<style>.flag{transform-box:fill-box;transform-origin:0 50%;animation:flag 2.6s ease-in-out infinite}@keyframes flag{0%,100%{transform:none}50%{transform:skewY(-9deg) scaleX(.84)}}@media (prefers-reduced-motion:reduce){.flag{animation:none}.ball{display:none}}</style>
+<rect width="390" height="300" fill="#D9E0CB"/>
+<path d="M0 120 Q70 94 140 114 T270 106 T390 114 V300 H0Z" fill="#9AAE74"/>
+<path d="M0 156 C20 134 34 146 48 136 C62 124 76 142 92 132 C110 120 122 140 140 130 C160 118 174 138 192 128 C212 116 226 136 246 126 C266 114 280 134 300 124 C320 114 336 132 354 124 C370 118 382 128 390 124 V300 H0Z" fill="#3E5426"/>
+<path d="M0 200 Q195 172 390 196 V300 H0Z" fill="#7C9C45"/>
+<path d="M0 250 Q195 232 390 254 V300 H0Z" fill="#62832F"/>
+<g fill="#F4F1E8"><circle cx="70" cy="262" r="3"/><circle cx="82" cy="266" r="3"/><circle cx="94" cy="261" r="3"/><circle cx="76" cy="272" r="3"/><circle cx="90" cy="273" r="3"/></g>
+<line x1="300" y1="168" x2="300" y2="204" stroke="#F4F1E8" stroke-width="2"/>
+<path class="flag" d="M300 168 l16 5 -16 5z" fill="#E8C547"/>
+<circle class="ball" r="3.5" fill="#FFFFFF"><animateMotion dur="2.8s" repeatCount="indefinite" path="M84 262 Q190 40 300 200" calcMode="spline" keyTimes="0;1" keySplines=".25 .6 .4 1"/><animate attributeName="opacity" values="0;1;1;0" keyTimes="0;.08;.85;1" dur="2.8s" repeatCount="indefinite"/></circle>
+</svg>

@@ -12,7 +12,7 @@ export default function DrillLibraryPage() {
   return (
     <div className="space-y-5">
       <PageHero
-        art="range"
+        art="plain"
         size="sm"
         eyebrow="30 tests · 3 practice areas"
         title={<>Practice<br />tests</>}

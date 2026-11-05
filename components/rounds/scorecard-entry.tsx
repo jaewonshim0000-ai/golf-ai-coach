@@ -178,7 +178,7 @@ export function ScorecardEntry({ round, holes }: { round: Round; holes: HoleSpec
 
           {hole.par >= 4 ? (
             <div>
-              <p className="dsp mb-1.5 text-[9px] tracking-[0.15em] text-fg-subtle">Tee shot</p>
+              <p className="dsp mb-1.5 text-[10px] tracking-[0.15em] text-fg-subtle">Tee shot</p>
               <div className="grid grid-cols-3 gap-1.5" role="group" aria-label="Fairway">
                 {(["left", "hit", "right"] as const).map((side) => (
                   <Button
@@ -307,7 +307,7 @@ function Stepper({
 }) {
   return (
     <div className={cn("space-y-1.5", big && "mx-auto max-w-[240px]")}>
-      <span className="dsp block text-[9px] tracking-[0.15em] text-fg-subtle">{label}</span>
+      <span className="dsp block text-[10px] tracking-[0.15em] text-fg-subtle">{label}</span>
       <div className="flex items-center justify-between gap-2">
         <Button type="button" variant="secondary" size="icon" onClick={() => onChange(value - 1)} disabled={value <= min} aria-label={`Fewer ${label.toLowerCase()}`}>
           <Minus className="h-4 w-4" />

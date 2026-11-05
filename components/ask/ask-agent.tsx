@@ -63,10 +63,12 @@ export function AskAgent() {
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Ask about your game"
-        className="dsp fixed right-3.5 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-30 flex h-12 items-center gap-2 rounded-full bg-[image:var(--grad-accent)] px-4 text-[11px] font-medium tracking-[0.18em] text-white shadow-[var(--shadow-accent)] transition-transform active:scale-95 md:right-6 md:bottom-6"
+        className="dsp fixed right-5 bottom-[calc(6.25rem+env(safe-area-inset-bottom))] z-30 flex h-11 items-center gap-2 rounded-full bg-ink pl-1.5 pr-3.5 text-[11px] text-white shadow-[var(--shadow-raised)] transition-transform active:scale-95 md:right-6 md:bottom-6"
       >
-        <Sparkles className="h-4 w-4" />
-        Ask
+        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#3a3f33] text-gold">
+          <Sparkles className="h-3.5 w-3.5" fill="currentColor" />
+        </span>
+        Ask coach
       </button>
 
       <dialog
@@ -76,20 +78,25 @@ export function AskAgent() {
         onClick={(event) => {
           if (event.target === dialog.current) setOpen(false);
         }}
-        className="m-0 mt-auto max-h-[86svh] w-full max-w-none overflow-y-auto rounded-t-[22px] border border-border bg-surface p-0 text-fg shadow-[var(--shadow-card)] backdrop:bg-[rgb(9_14_10_/_0.5)] sm:m-auto sm:max-w-[540px] sm:rounded-[22px]"
+        className="m-0 mt-auto max-h-[86svh] w-full max-w-none overflow-y-auto rounded-t-[28px] bg-bg p-0 text-fg backdrop:bg-[rgb(20_24_15_/_0.55)] sm:m-auto sm:max-w-[540px] sm:rounded-[28px]"
       >
-        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-border bg-surface px-5 py-4">
-          <div>
-            <h2 className="dsp text-[15px] font-semibold tracking-[0.02em]">Ask your data</h2>
-            <p className="mt-0.5 text-[11px] text-fg-muted">
+        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 bg-bg px-5 py-4">
+          <div className="flex items-center gap-3">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-ink text-gold" aria-hidden>
+              <Sparkles className="h-4 w-4" fill="currentColor" />
+            </span>
+            <div>
+            <h2 className="dsp text-[26px] leading-none">Ask your coach</h2>
+            <p className="mt-1 text-[12px] text-fg-muted">
               Searches what the app has actually computed for you.
             </p>
+            </div>
           </div>
           <button
             type="button"
             onClick={() => setOpen(false)}
             aria-label="Close"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border-strong text-fg-muted"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-surface text-fg"
           >
             <X className="h-4 w-4" />
           </button>
@@ -107,12 +114,12 @@ export function AskAgent() {
               autoComplete="off"
               placeholder="Ask about a club, a distance, a drill…"
               aria-label="Ask about your game"
-              className="h-11 w-full rounded-full border border-border-strong bg-surface-2 pl-10 pr-24 text-base text-fg placeholder:text-fg-subtle focus:border-accent focus:outline-none"
+              className="h-14 w-full rounded-full border-[1.5px] border-transparent bg-surface pl-10 pr-24 text-base text-fg placeholder:text-fg-subtle focus:border-accent focus:outline-none"
             />
             <button
               type="submit"
               disabled={pending}
-              className="dsp absolute right-1.5 top-1.5 flex h-8 items-center gap-1.5 rounded-full bg-[image:var(--grad-accent)] px-3.5 text-[10px] font-medium tracking-[0.17em] text-white disabled:opacity-60"
+              className="dsp absolute right-1.5 top-1.5 flex h-11 items-center gap-1.5 rounded-full bg-accent px-4 text-[11px] text-accent-fg disabled:opacity-60"
             >
               {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
               Ask

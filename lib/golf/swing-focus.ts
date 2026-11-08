@@ -1,5 +1,5 @@
 import type { MotionReport } from "./motion-analysis";
-import { swingScoreChecks } from "./swing-score";
+import { rankPriorities, swingScoreChecks, type SwingScoreComponent } from "./swing-score";
 
 export type SwingFocusId = "head" | "height" | "posture" | "hip_depth" | "tempo";
 export type SwingProcedure = "rehearsal" | "half_shots";
@@ -88,23 +88,26 @@ function recordAgain(issue: string): SwingFocus {
 
 /** A full-swing score has stricter requirements than an individual visible
  * position. Missing checks or a gap elsewhere must not erase usable evidence. */
+/** The weakness a check below 85 shows, in the player's words. */
+export function focusIssue(check: SwingScoreComponent, report: MotionReport): string {
+  const id = check.id as SwingFocusId;
+  if (id === "height") return (report.readings.find((row) => row.id === "lift_top")?.value ?? 0) < 0
+    ? "Your hips dip during the backswing." : "Your hips rise during the backswing.";
+  if (id === "tempo") return check.value < 2
+    ? "Your backswing is rushed compared with your downswing." : "Your downswing is rushed compared with your backswing.";
+  return {
+    head: "Your head shifts sideways through contact.",
+    posture: "Your upper body appears to straighten before contact.",
+    hip_depth: "Your hips appear to move toward the ball through contact.",
+  }[id];
+}
+
 export function getSwingFocus(report: MotionReport, ballSide?: "left" | "right"): SwingFocus {
   const { components } = swingScoreChecks(report, ballSide);
-  const main = components.filter((item) => (item.scoreRange?.[1] ?? item.score) < 85)
-    .sort((a, b) => (100 - (b.scoreRange?.[1] ?? b.score)) * b.weight - (100 - (a.scoreRange?.[1] ?? a.score)) * a.weight)[0];
+  const main = rankPriorities(components)[0];
   if (main && Object.hasOwn(procedures, main.id)) {
     const id = main.id as SwingFocusId;
-    const lift = report.readings.find((row) => row.id === "lift_top");
-    const issues: Record<SwingFocusId, string> = {
-      head: "Your head shifts sideways through contact.",
-      height: (lift?.value ?? 0) < 0 ? "Your hips dip during the backswing." : "Your hips rise during the backswing.",
-      posture: "Your upper body appears to straighten before contact.",
-      hip_depth: "Your hips appear to move toward the ball through contact.",
-      tempo: main.value < 2
-        ? "Your backswing is rushed compared with your downswing."
-        : "Your downswing is rushed compared with your backswing.",
-    };
-    return { status: "issue", id, issue: issues[id], steps: swingFocusProcedure(id, "rehearsal") };
+    return { status: "issue", id, issue: focusIssue(main, report), steps: swingFocusProcedure(id, "rehearsal") };
   }
 
   const uncertain = components.find((item) => item.scoreRange && item.scoreRange[0] < 85 && item.scoreRange[1] >= 85 &&

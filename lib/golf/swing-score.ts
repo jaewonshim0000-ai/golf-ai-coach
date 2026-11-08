@@ -33,18 +33,24 @@ export function scoreSwing(report: MotionReport, ballSide?: "left" | "right"): S
 
   Object.assign(result, swingScoreChecks(report, ballSide));
   const weight = result.components.reduce((sum, item) => sum + item.weight, 0);
-  if (result.components.length >= 2 && weight >= 70) {
+  // Any two of the three checks cover at least 60% of the weight.
+  if (result.components.length >= 2) {
     result.total = Math.round(result.components.reduce((sum, item) => sum + item.score * item.weight, 0) / weight);
     if (result.components.some((item) => item.scoreRange)) {
       result.totalRange = [result.total, Math.round(result.components.reduce((sum, item) => sum + (item.scoreRange?.[1] ?? item.score) * item.weight, 0) / weight)];
     }
-  } else result.reason = `Movement analysis is complete, but only ${result.components.length} of 3 checks could be scored. An overall score needs at least two checks covering 70% of the planned weight. Review the available results below; repeating this recording will not reveal hidden positions.`;
+  } else result.reason = `Movement analysis is complete, but only ${result.components.length} of 3 checks could be scored. An overall score needs at least two.`;
   // Keep supported improvement cues even when an overall score is unavailable.
   // A ranged reading is a priority only if all observed positions score below 85.
-  result.priorities = [...result.components].filter((item) => (item.scoreRange?.[1] ?? item.score) < 85)
-    .sort((a, b) => (100 - (b.scoreRange?.[1] ?? b.score)) * b.weight - (100 - (a.scoreRange?.[1] ?? a.score)) * a.weight).slice(0, 3);
+  result.priorities = rankPriorities(result.components);
   result.reviews = result.components.filter((item) => item.scoreRange && item.scoreRange[0] < 85 && item.scoreRange[1] >= 85);
   return result;
+}
+
+/** Checks below 85 across their whole range, largest weighted deduction first. */
+export function rankPriorities(components: SwingScoreComponent[]): SwingScoreComponent[] {
+  return components.filter((item) => (item.scoreRange?.[1] ?? item.score) < 85)
+    .sort((a, b) => (100 - (b.scoreRange?.[1] ?? b.score)) * b.weight - (100 - (a.scoreRange?.[1] ?? a.score)) * a.weight).slice(0, 3);
 }
 
 /** Individual checks use the supported readings and timing supplied by the

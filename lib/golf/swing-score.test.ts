@@ -95,7 +95,8 @@ describe("visible swing coaching score", () => {
     assert.equal(scoreSwing(motion, "left").total, 65); // away from the ball is not penalized
     motion.readings.find((row) => row.id === "hips_impact")!.value = -12;
     assert.equal(scoreSwing(motion, "left").total, right.total);
-    assert.equal(scoreSwing(motion).total, null); // no guessing the ball side
+    assert.equal(scoreSwing(motion).components.some((item) => item.id === "hip_depth"), false); // no guessing the ball side
+    assert.equal(scoreSwing(motion).total, 46); // (0*35 + 100*30) / 65: posture and rhythm still score
   });
   it("uses view-specific checks and continuous bounded deductions", () => {
     assert.equal(scoreSwing(report()).total, 100);
@@ -107,7 +108,7 @@ describe("visible swing coaching score", () => {
       assert.ok(score <= previous && score >= 0 && score <= 100); previous = score;
     }
     motion.readings.find((row) => row.id === "head_impact")!.unit = "% body height";
-    assert.equal(scoreSwing(motion).total, null); // never substitute the wrong scale
+    assert.equal(scoreSwing(motion).components.some((item) => item.id === "head"), false); // never substitute the wrong scale
   });
 
   it("requires a contact correction to hold across the observed head, posture and hip intervals", () => {

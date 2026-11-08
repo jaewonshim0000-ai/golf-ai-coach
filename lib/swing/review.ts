@@ -31,7 +31,8 @@ export function reviewSwing(model: PoseModel) {
   const frames = valid ? trustworthyFrames(unpackFrames(model), model.aspect!, model.cameraAngle ?? "other") : [];
   const candidates = valid ? swingCandidates(frames, model.aspect!, model.cameraAngle) : [];
   if (candidates.length > 1) blocks.push("More than one possible swing appears in this recording. Record one swing per video.");
-  if (model.capture?.timestampSource !== "decoded") {
+  // GolfPosePro reads every frame at its own frame time; a ratio of durations survives a misread frame rate.
+  if (!model.golfPosePro && model.capture?.timestampSource !== "decoded") {
     report.tempo = null;
     report.warnings.push("Decoded-frame timestamps are unavailable for these tracks. Rhythm is withheld; visible body positions can still be reviewed.");
   }

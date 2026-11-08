@@ -287,8 +287,8 @@ export function SwingVideo({
                 {!crossOrigin
                   ? "This video will play but cannot be read, because its storage does not allow it."
                   : progress ?? (trackedModel
-                    ? `GolfPosePro · ${gpp!.wristY.length} frames read · swing ${frameTime(gpp!, gpp!.swingStart).toFixed(2)}–${frameTime(gpp!, gpp!.swingEnd).toFixed(2)}s`
-                    : "GolfPosePro reads every frame and finds your swing phases automatically.")}
+                    ? `${gpp!.wristY.length} frames read`
+                    : "Every frame is read and scored automatically.")}
               </p>
             </div>
             <Button

@@ -717,9 +717,7 @@ export type PoseModel = {
   clip?: [number, number];
   /** Belongs to these tracks: a new review or a trim change starts without it. */
   setup?: SetupMarks;
-  /** Written coaching for these tracks; `key` says which tracks, club and model it was written for. */
-  feedback?: { key: string; data: unknown };
-  /** GolfPosePro's analysis of every frame; the swing report is built from this. */
+  /** GolfPosePro's analysis of every frame. */
   golfPosePro?: GolfPoseProResult;
   /**
    * The frames were rebuilt from the picture (`liftFrames`): they move with

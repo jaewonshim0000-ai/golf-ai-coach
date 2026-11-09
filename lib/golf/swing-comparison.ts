@@ -9,7 +9,7 @@ import { getSwingFocus, swingFocusProcedure, type SwingFocus, type SwingFocusId,
 import type { SwingReference } from "./swing-reference";
 
 export type SwingAnchors = [number, number, number, number];
-export type SwingDifference = { id: SwingFocusId; user: number; reference: number; excess: number; tolerance: number };
+export type SwingDifference = { id: SwingFocusId; label: string; unit: string; cue: string; concern: boolean; user: number; reference: number; excess: number; tolerance: number };
 export type SwingComparison = {
   status: "ready" | "limited" | "incompatible";
   message: string;
@@ -79,6 +79,14 @@ export function comparisonProcedure(id: SwingFocusId, procedure: SwingProcedure,
   return swingFocusProcedure(id, procedure);
 }
 
+export const DIFFERENCE_LABELS: Record<SwingFocusId, string> = {
+  head: "your head moves farther sideways through contact",
+  height: "your hip height changes more during the backswing",
+  posture: "your upper body appears to straighten more before contact",
+  hip_depth: "your hips appear to move farther toward the ball through contact",
+  tempo: "your backswing-to-downswing rhythm differs noticeably",
+};
+
 export function compareSwingToReference(model: PoseModel, club: Club, reference: SwingReference): SwingComparison {
   const userReview = reviewSwing(model), referenceReview = reviewSwing(reference.model);
   const userReport = userReview.report, referenceReport = referenceReview.report;
@@ -122,25 +130,19 @@ export function compareSwingToReference(model: PoseModel, club: Club, reference:
       return bound === "min" && range[0] <= 0 && range[1] >= 0 ? 0 : Math[bound](Math.abs(range[0]), Math.abs(range[1]));
     };
     const user = amount(userReport, check.value, "min"), ref = amount(referenceReport, other.value, "max");
-    result.differences.push({ id, user, reference: ref, excess: id === "tempo" ? Math.abs(user - ref) : user - ref, tolerance: tolerances[id] });
+    result.differences.push({ id, label: check.label, unit: check.unit, cue: check.cue,
+      concern: (check.scoreRange?.[1] ?? check.score) < 85, user, reference: ref,
+      excess: id === "tempo" ? Math.abs(user - ref) : user - ref, tolerance: tolerances[id] });
   }
   if (!result.differences.length) return { ...result, message: "The videos can be synchronized, but the same body positions could not be read in both. Check the tracking or adjust the timing." };
   result.status = "ready";
   result.message = `Matched to ${reference.metadata.name} by camera view, club and setup proportions. Positions are synchronized, with movement scaled to each golfer's own stance or body height.`;
-  const candidates = result.differences.filter((difference) => difference.excess > difference.tolerance &&
-    userChecks.some((check) => check.id === difference.id && (check.scoreRange?.[1] ?? check.score) < 85));
+  const candidates = result.differences.filter((difference) => difference.excess > difference.tolerance && difference.concern);
   candidates.sort((a, b) => b.excess / b.tolerance - a.excess / a.tolerance);
   const main = candidates[0];
   if (main) {
     const base = getSwingFocus(userReport, model.ballSide);
-    const labels: Record<SwingFocusId, string> = {
-      head: "your head moves farther sideways through contact",
-      height: "your hip height changes more during the backswing",
-      posture: "your upper body appears to straighten more before contact",
-      hip_depth: "your hips appear to move farther toward the ball through contact",
-      tempo: "your backswing-to-downswing rhythm differs noticeably",
-    };
-    result.focus = { ...base, status: "issue", id: main.id, issue: `Compared with ${reference.metadata.name}, ${labels[main.id]}.`,
+    result.focus = { ...base, status: "issue", id: main.id, issue: `Compared with ${reference.metadata.name}, ${DIFFERENCE_LABELS[main.id]}.`,
       steps: comparisonProcedure(main.id, "rehearsal", reference.metadata.name) };
   } else {
     const fallback = getSwingFocus(userReport, model.ballSide);

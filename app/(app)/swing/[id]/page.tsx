@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { ArrowLeft } from "lucide-react";
@@ -12,6 +13,7 @@ import { currentSwingModel } from "@/lib/golf/swing-reference";
 import { loadSwingComparison } from "@/lib/swing-comparison";
 import { SwingReferenceEditor } from "@/components/swing/reference-editor";
 import { SwingComparisonPanel } from "@/components/swing/swing-comparison";
+import { ComparisonAdvice } from "@/components/swing/comparison-advice";
 import { CLUB_LABELS } from "@/types/golf";
 import * as repo from "@/lib/db/repo";
 import { loadPlayerState } from "@/lib/player-state";
@@ -57,6 +59,8 @@ export default async function SwingPage({ params, searchParams }: {
       user={{ id, videoUrl: session.video_url, slowMotion: slowMotionOf(current) }}
       reference={selected ? { id: selected.session.id, videoUrl: selected.session.video_url, slowMotion: slowMotionOf(selected.model) } : null}
       comparison={context.comparison} requested={requestedReference} message={context.message}
+      advice={context.comparison ? <Suspense fallback={<p role="status" className="text-[12px] text-fg-muted">Writing advice from the comparison…</p>}>
+        <ComparisonAdvice owner={user.id} comparison={context.comparison} club={session.club} /></Suspense> : null}
       options={context.references.map((ref) => ({ id: ref.session.id, label: `${ref.metadata.name} · ${CLUB_LABELS[ref.session.club]} · ${ref.session.camera_angle.replaceAll("_", " ")}` }))} /> : null}
     {current && !editingReference ? <SwingReferenceEditor sessionId={id} saved={current.reference} handedness={current.handedness} /> : null}
     <div className="flex justify-end pt-2"><DeleteSwingButton swingSessionId={id} /></div>

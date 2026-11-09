@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Button, ButtonLink, Select } from "@/components/ui/primitives";
 import { browserClient } from "@/lib/db/supabase";
@@ -131,9 +131,9 @@ function SynchronizedVideos({ user, reference, comparison }: { user: ComparisonC
   </div>;
 }
 
-export function SwingComparisonPanel({ user, reference, comparison, options, requested, message }: {
+export function SwingComparisonPanel({ user, reference, comparison, options, requested, message, advice }: {
   user: ComparisonClip; reference: ComparisonClip | null; comparison: SwingComparison | null;
-  options: ReferenceOption[]; requested?: string; message?: string | null;
+  options: ReferenceOption[]; requested?: string; message?: string | null; advice?: ReactNode;
 }) {
   const canReplay = comparison && reference && comparison.userAnchors && comparison.referenceAnchors && comparison.status !== "incompatible";
   return <details open={comparison?.status === "ready" || undefined} className="rounded-2xl border border-border bg-surface p-5">
@@ -142,6 +142,7 @@ export function SwingComparisonPanel({ user, reference, comparison, options, req
       <ReferencePicker options={options} requested={requested} />
       <p className="text-[12px] leading-relaxed text-fg-muted">{message ?? comparison?.message}</p>
       {canReplay ? <SynchronizedVideos key={`${user.id}:${reference.id}`} user={user} reference={reference} comparison={comparison} /> : null}
+      {comparison?.status === "ready" ? advice : null}
       {comparison && !canReplay ? <div className="flex flex-wrap gap-2"><ButtonLink href={`/swing/${comparison.referenceId}?reference=new`} variant="secondary" size="sm">Review reference timing</ButtonLink></div> : null}
       <ButtonLink href="/swing/references" variant="secondary" size="sm">Reference library</ButtonLink>
       {comparison?.status === "ready" ? <p className="text-[11px] text-fg-subtle">Differences describe this camera view. They do not by themselves establish a swing fault.</p> : null}

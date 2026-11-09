@@ -94,11 +94,11 @@ export function coachingFingerprint(model: PoseModel, club: string, aiModel: str
 
 /** Bounded, per-process cache. Coalesce simultaneous requests and retry failed
  * AI calls after a short cooldown. Keys include the authenticated owner. */
-const cache = new Map<string, { expires: number; promise: Promise<AIResult<ReconstructionCoaching>> }>();
-export async function cachedReconstructionCoach(owner: string, fingerprint: string, run: () => Promise<AIResult<ReconstructionCoaching>>) {
+const cache = new Map<string, { expires: number; promise: Promise<AIResult<unknown>> }>();
+export async function cachedCoach<T>(owner: string, fingerprint: string, run: () => Promise<AIResult<T>>): Promise<AIResult<T>> {
   const key = `${owner}:${fingerprint}`;
   const previous = cache.get(key);
-  if (previous && previous.expires > Date.now()) return previous.promise;
+  if (previous && previous.expires > Date.now()) return previous.promise as Promise<AIResult<T>>;
   if (cache.size >= 64) cache.delete(cache.keys().next().value!);
   const entry = { expires: Date.now() + 30000, promise: Promise.resolve().then(run) };
   cache.set(key, entry);

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, it } from "node:test";
-import { cachedReconstructionCoach, coachReconstruction, coachingFingerprint } from "./reconstruction-coach";
+import { cachedCoach, coachReconstruction, coachingFingerprint } from "./reconstruction-coach";
 import { RulesProvider, setProvider, type AIProvider } from "./provider";
 import type { SwingScore } from "../golf/swing-score";
 import type { PoseModel } from "../golf/pose";
@@ -61,8 +61,8 @@ it("coalesces identical requests and isolates coaching by owner", async () => {
   setProvider(new RulesProvider());
   let calls = 0;
   const run = async () => { calls++; return coachReconstruction(score, "7_iron"); };
-  await Promise.all([cachedReconstructionCoach("player-a", "fixture", run), cachedReconstructionCoach("player-a", "fixture", run)]);
+  await Promise.all([cachedCoach("player-a", "fixture", run), cachedCoach("player-a", "fixture", run)]);
   assert.equal(calls, 1);
-  await cachedReconstructionCoach("player-b", "fixture", run);
+  await cachedCoach("player-b", "fixture", run);
   assert.equal(calls, 2);
 });

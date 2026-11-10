@@ -12,10 +12,12 @@ export default async function PlayRoundPage({ params }: { params: Promise<{ id: 
   const user = await repo.currentUser();
   if (!user) return null;
 
-  const round = await repo.getRound(user.id, id);
+  const [round, shots, courses] = await Promise.all([
+    repo.getRound(user.id, id),
+    repo.getShots(user.id, id),
+    repo.getCourses(user.id),
+  ]);
   if (!round) notFound();
-
-  const [shots, courses] = await Promise.all([repo.getShots(user.id, round.id), repo.getCourses(user.id)]);
 
   const course = courses.find((c) => c.id === round.course_id);
   const holes =

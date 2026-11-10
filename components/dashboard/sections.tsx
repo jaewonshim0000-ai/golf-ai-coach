@@ -24,6 +24,7 @@ import {
   InkCard,
   MiniCard,
   SectionHeading,
+  Skeleton,
   Stat,
 } from "@/components/ui/primitives";
 import { DivergingBars } from "@/components/charts";
@@ -56,6 +57,22 @@ export function SourceBadge({ source, note }: { source: "ai" | "rules"; note?: s
         {source === "ai" ? "AI" : "Rules"}
       </Badge>
     </span>
+  );
+}
+
+/** Holds an AI read-out's place while it streams in, so the page never waits for Claude. */
+export function ReadoutSkeleton({ title }: { title: string }) {
+  return (
+    <Card aria-busy="true">
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <Skeleton className="h-4 w-3/4" />
+        <Skeleton className="h-3 w-full" />
+        <Skeleton className="h-3 w-5/6" />
+      </CardContent>
+    </Card>
   );
 }
 

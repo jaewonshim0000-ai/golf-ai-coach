@@ -65,6 +65,9 @@ const PAGE = 1000;
  * Every row a query matches. Supabase silently stops a response at its row
  * limit, so a whole-history read pages until it has the count it was promised.
  * `shape` adds the filters and order; `id` breaks ties so no row changes page.
+ *
+ * The first response gives the count and the real page size, so the rest are
+ * asked for at once: a long history costs one more round trip, not one per page.
  */
 export async function selectAll<T>(
   sb: SupabaseClient,
@@ -73,16 +76,26 @@ export async function selectAll<T>(
   what: string,
   shape: (query: Query) => Query,
 ): Promise<T[]> {
-  const rows: T[] = [];
-  for (;;) {
-    // ponytail: offset paging; a row saved mid-read can shift one row between pages.
-    const result = await shape(sb.from(table).select(columns, { count: "exact" }))
-      .order("id")
-      .range(rows.length, rows.length + PAGE - 1);
-    const page = unwrap(result, what) as T[];
-    rows.push(...page);
-    if (page.length === 0 || rows.length >= (result.count ?? Infinity)) return rows;
+  // ponytail: offset paging; a row saved mid-read can shift one row between pages.
+  const read = async (from: number, size: number, count?: "exact") => {
+    const result = await shape(sb.from(table).select(columns, count && { count })).order("id").range(from, from + size - 1);
+    return { page: unwrap(result, what) as T[], count: result.count };
+  };
+  const first = await read(0, PAGE, "exact");
+  const rows = first.page;
+  const total = first.count ?? Infinity;
+  const step = rows.length;
+  if (step > 0 && Number.isFinite(total)) {
+    const offsets = [];
+    for (let at = step; at < total; at += step) offsets.push(at);
+    for (const { page } of await Promise.all(offsets.map((at) => read(at, step)))) rows.push(...page);
   }
+  // Whatever the count did not cover: no count at all, or rows removed mid-read.
+  for (let page = rows; page.length > 0 && rows.length < total; ) {
+    page = (await read(rows.length, PAGE)).page;
+    rows.push(...page);
+  }
+  return rows;
 }
 
 // ------------------------------------------------------------------- auth
@@ -380,22 +393,16 @@ export async function getPracticeSession(
       attempts: s.drillAttempts.filter((a) => a.session_id === sessionId),
     };
   }
-  const { data: session, error } = await sb
-    .from("practice_sessions")
-    .select("*")
-    .eq("id", sessionId)
-    .eq("user_id", userId)
-    .maybeSingle();
+  // All three at once; the blocks and results are kept only when the session is this player's.
+  const [{ data: session, error }, itemRows, attemptRows] = await Promise.all([
+    sb.from("practice_sessions").select("*").eq("id", sessionId).eq("user_id", userId).maybeSingle(),
+    sb.from("practice_items").select("*").eq("session_id", sessionId).order("order_index"),
+    sb.from("drill_attempts").select("*").eq("session_id", sessionId),
+  ]);
   if (error) throw new Error(`getPracticeSession: ${error.message}`);
   if (!session) return null;
-  const items = unwrap(
-    await sb.from("practice_items").select("*").eq("session_id", sessionId).order("order_index"),
-    "getPracticeSession.items",
-  ) as PracticeItem[];
-  const attempts = unwrap(
-    await sb.from("drill_attempts").select("*").eq("session_id", sessionId),
-    "getPracticeSession.attempts",
-  ) as DrillAttempt[];
+  const items = unwrap(itemRows, "getPracticeSession.items") as PracticeItem[];
+  const attempts = unwrap(attemptRows, "getPracticeSession.attempts") as DrillAttempt[];
   return { session: session as PracticeSession, items, attempts };
 }
 
@@ -748,11 +755,13 @@ export { DEMO_USER_ID };
 export async function getSwingMeasurements(userId: string): Promise<SwingMeasurement[]> {
   const sb = await client();
   if (!sb) return [...store().swingMeasurements];
-  const sessions = await getSwingSessions(userId);
-  if (sessions.length === 0) return [];
-  return selectAll<SwingMeasurement>(sb, "swing_measurements", "*", "getSwingMeasurements", (q) =>
-    q.in("swing_session_id", sessions.map((session) => session.id)),
+  // Filtered through the swing's owner in the same request, so it no longer
+  // waits for the swings to be read first.
+  const rows = await selectAll<SwingMeasurement & { swing_sessions?: unknown }>(
+    sb, "swing_measurements", "*,swing_sessions!inner(user_id)", "getSwingMeasurements",
+    (q) => q.eq("swing_sessions.user_id", userId),
   );
+  return rows.map(({ swing_sessions: _owner, ...row }) => row);
 }
 
 /** Remove a previous automated reading before writing the new supported set. */

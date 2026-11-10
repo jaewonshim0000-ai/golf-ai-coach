@@ -1,8 +1,10 @@
+import { createHash } from "node:crypto";
+import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { ArrowLeft, Pencil } from "lucide-react";
 
-import { SourceBadge } from "@/components/dashboard/sections";
+import { ReadoutSkeleton, SourceBadge } from "@/components/dashboard/sections";
 import { DeleteRoundButton } from "@/components/rounds/delete-round";
 import { DivergingBars } from "@/components/charts";
 import { ScorecardSummary } from "@/components/rounds/scorecard-summary";
@@ -27,6 +29,8 @@ import { BaselinePicker } from "@/components/stats/baseline-picker";
 import { UpgradePrompt } from "@/components/billing/plan";
 import { buildHoleResults } from "@/lib/golf/strokes-gained";
 import { summarizeRound as narrateRound } from "@/lib/ai/insights";
+import { getProvider } from "@/lib/ai/provider";
+import { cachedCoach } from "@/lib/ai/reconstruction-coach";
 import * as repo from "@/lib/db/repo";
 import { cn, formatDate, signed, toParLabel } from "@/lib/utils";
 
@@ -44,15 +48,14 @@ export default async function RoundDetailPage({
   const user = await repo.currentUser();
   if (!user) return null;
 
-  const round = await repo.getRound(user.id, id);
-  if (!round) notFound();
-
-  const [shots, courses, profile, billing] = await Promise.all([
-    repo.getShots(user.id, round.id),
+  const [round, shots, courses, profile, billing] = await Promise.all([
+    repo.getRound(user.id, id),
+    repo.getShots(user.id, id),
     repo.getCourses(user.id),
     repo.getProfile(user.id),
     repo.getBilling(user.id),
   ]);
+  if (!round) notFound();
   // Strokes gained is Premium; score, fairways, greens and the read-out stay free.
   const premium = billing.plan === "premium";
   // Strokes gained against the level the player picks, their own by default.
@@ -66,7 +69,6 @@ export default async function RoundDetailPage({
   const holes = buildHoleResults(shots);
   const tourStats = summarizeRound(round, shots);
   const stats = rebaseRound(tourStats, baseline);
-  const narrative = await narrateRound(tourStats, holes);
 
   const scored = holes.flatMap((h) => h.shots);
   const biggestLosses = [...scored].sort((a, b) => a.strokes_gained - b.strokes_gained).slice(0, 3);
@@ -205,42 +207,9 @@ export default async function RoundDetailPage({
             </Card>
             ) : null}
 
-            <Card>
-              <CardHeader className="flex-row items-center justify-between gap-3">
-                <CardTitle>Round read-out</CardTitle>
-                <SourceBadge source={narrative.source} note={narrative.note} />
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <p className="text-sm font-medium">{narrative.data.headline}</p>
-                {narrative.data.what_went_well.length > 0 ? (
-                  <div>
-                    <p className="dsp text-[10px] font-medium tracking-[0.17em] text-good">
-                      What went well
-                    </p>
-                    <ul className="mt-1 space-y-1 text-sm text-fg-muted">
-                      {narrative.data.what_went_well.map((line, index) => (
-                        <li key={index}>{line}</li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-                {narrative.data.what_cost_you.length > 0 ? (
-                  <div>
-                    <p className="dsp text-[10px] font-medium tracking-[0.17em] text-bad">
-                      What cost you
-                    </p>
-                    <ul className="mt-1 space-y-1 text-sm text-fg-muted">
-                      {narrative.data.what_cost_you.map((line, index) => (
-                        <li key={index}>{line}</li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-                <p className="border-t border-border pt-3 text-sm leading-relaxed text-fg-muted">
-                  {narrative.data.takeaway}
-                </p>
-              </CardContent>
-            </Card>
+            <Suspense fallback={<ReadoutSkeleton title="Round read-out" />}>
+              <RoundReadout owner={user.id} stats={tourStats} holes={holes} />
+            </Suspense>
           </div>
 
           {premium ? (
@@ -384,6 +353,54 @@ export default async function RoundDetailPage({
         </Card>
       ) : null}
     </div>
+  );
+}
+
+/** Streamed, so the round's numbers never wait for Claude; the same round reads the same until it changes. */
+async function RoundReadout({ owner, stats, holes }: {
+  owner: string;
+  stats: Parameters<typeof narrateRound>[0];
+  holes: Parameters<typeof narrateRound>[1];
+}) {
+  const fingerprint = createHash("sha256").update(JSON.stringify(["round_summary", getProvider().model, stats, holes])).digest("hex");
+  const narrative = await cachedCoach(owner, fingerprint, () => narrateRound(stats, holes));
+  return (
+    <Card>
+      <CardHeader className="flex-row items-center justify-between gap-3">
+        <CardTitle>Round read-out</CardTitle>
+        <SourceBadge source={narrative.source} note={narrative.note} />
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-sm font-medium">{narrative.data.headline}</p>
+        {narrative.data.what_went_well.length > 0 ? (
+          <div>
+            <p className="dsp text-[10px] font-medium tracking-[0.17em] text-good">
+              What went well
+            </p>
+            <ul className="mt-1 space-y-1 text-sm text-fg-muted">
+              {narrative.data.what_went_well.map((line, index) => (
+                <li key={index}>{line}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+        {narrative.data.what_cost_you.length > 0 ? (
+          <div>
+            <p className="dsp text-[10px] font-medium tracking-[0.17em] text-bad">
+              What cost you
+            </p>
+            <ul className="mt-1 space-y-1 text-sm text-fg-muted">
+              {narrative.data.what_cost_you.map((line, index) => (
+                <li key={index}>{line}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+        <p className="border-t border-border pt-3 text-sm leading-relaxed text-fg-muted">
+          {narrative.data.takeaway}
+        </p>
+      </CardContent>
+    </Card>
   );
 }
 

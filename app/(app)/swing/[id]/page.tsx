@@ -29,10 +29,9 @@ export default async function SwingPage({ params, searchParams }: {
   const [{ id }, search] = await Promise.all([params, searchParams]);
   const user = await repo.currentUser();
   if (!user) return null;
-  const state = await loadPlayerState(user.id);
+  const [state, model] = await Promise.all([loadPlayerState(user.id), repo.getSwingModel(user.id, id)]);
   const session = state.swingSessions.find((s) => s.id === id);
   if (!session) notFound();
-  const model = await repo.getSwingModel(user.id, id);
   const view = session.camera_angle === "face_on" || session.camera_angle === "down_the_line" ? session.camera_angle : "other";
   const current = currentSwingModel(model, session)
     ? { ...model, cameraAngle: model.cameraAngle ?? view } : null;

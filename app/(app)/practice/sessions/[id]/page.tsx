@@ -1,8 +1,10 @@
+import { createHash } from "node:crypto";
+import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { ArrowLeft } from "lucide-react";
 
-import { SourceBadge } from "@/components/dashboard/sections";
+import { ReadoutSkeleton, SourceBadge } from "@/components/dashboard/sections";
 import { SessionRunner } from "@/components/practice/session-runner";
 import { DeletePracticeSessionButton } from "@/components/practice/delete-session";
 import {
@@ -16,6 +18,8 @@ import {
   PageHero,
 } from "@/components/ui/primitives";
 import { summarizePracticeSession } from "@/lib/ai/insights";
+import { getProvider } from "@/lib/ai/provider";
+import { cachedCoach } from "@/lib/ai/reconstruction-coach";
 import * as repo from "@/lib/db/repo";
 import { loadPlayerState } from "@/lib/player-state";
 import { formatDate } from "@/lib/utils";
@@ -32,16 +36,8 @@ export default async function PracticeSessionPage({
   const user = await repo.currentUser();
   if (!user) return null;
 
-  const bundle = await repo.getPracticeSession(user.id, id);
+  const [bundle, state] = await Promise.all([repo.getPracticeSession(user.id, id), loadPlayerState(user.id)]);
   if (!bundle) notFound();
-
-  const state = await loadPlayerState(user.id);
-  const summary = await summarizePracticeSession({
-    session: bundle.session,
-    attempts: bundle.attempts,
-    drills: state.drills,
-    trends: state.practiceTrends,
-  });
 
   return (
     <div className="space-y-5">
@@ -70,41 +66,17 @@ export default async function PracticeSessionPage({
         <DeletePracticeSessionButton sessionId={bundle.session.id} />
       </div>
 
-      <Card>
-        <CardHeader className="flex-row items-center justify-between gap-3">
-          <CardTitle>Session read-out</CardTitle>
-          <SourceBadge source={summary.source} note={summary.note} />
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="text-sm font-medium">{summary.data.headline}</p>
-          {summary.data.results.length > 0 ? (
-            <details>
-              <summary className="min-h-10 cursor-pointer py-2 text-sm font-medium text-accent">Session results ({summary.data.results.length})</summary>
-            <ul className="space-y-1 text-sm text-fg-muted">
-              {summary.data.results.map((line, index) => (
-                <li key={index}>{line}</li>
-              ))}
-            </ul>
-            </details>
-          ) : null}
-          <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
-            <Badge
-              tone={
-                summary.data.verdict === "improving"
-                  ? "good"
-                  : summary.data.verdict === "not_transferring"
-                    ? "bad"
-                    : summary.data.verdict === "holding"
-                      ? "warn"
-                      : "neutral"
-              }
-            >
-              {summary.data.verdict.replace(/_/g, " ")}
-            </Badge>
-            <p className="text-sm text-fg-muted">{summary.data.next_step}</p>
-          </div>
-        </CardContent>
-      </Card>
+      <Suspense fallback={<ReadoutSkeleton title="Session read-out" />}>
+        <SessionReadout
+          owner={user.id}
+          input={{
+            session: bundle.session,
+            attempts: bundle.attempts,
+            drills: state.drills,
+            trends: state.practiceTrends,
+          }}
+        />
+      </Suspense>
 
       <SessionRunner
         session={bundle.session}
@@ -126,5 +98,54 @@ export default async function PracticeSessionPage({
         </Card>
       ) : null}
     </div>
+  );
+}
+
+/** Streamed, so the drills never wait for Claude; the same session reads the same until it changes. */
+async function SessionReadout({ owner, input }: {
+  owner: string;
+  input: Parameters<typeof summarizePracticeSession>[0];
+}) {
+  // Drills are reference data shipped with the app, so they stay out of the key.
+  const fingerprint = createHash("sha256")
+    .update(JSON.stringify(["practice_summary", getProvider().model, input.session, input.attempts, input.trends]))
+    .digest("hex");
+  const summary = await cachedCoach(owner, fingerprint, () => summarizePracticeSession(input));
+  return (
+    <Card>
+      <CardHeader className="flex-row items-center justify-between gap-3">
+        <CardTitle>Session read-out</CardTitle>
+        <SourceBadge source={summary.source} note={summary.note} />
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-sm font-medium">{summary.data.headline}</p>
+        {summary.data.results.length > 0 ? (
+          <details>
+            <summary className="min-h-10 cursor-pointer py-2 text-sm font-medium text-accent">Session results ({summary.data.results.length})</summary>
+          <ul className="space-y-1 text-sm text-fg-muted">
+            {summary.data.results.map((line, index) => (
+              <li key={index}>{line}</li>
+            ))}
+          </ul>
+          </details>
+        ) : null}
+        <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
+          <Badge
+            tone={
+              summary.data.verdict === "improving"
+                ? "good"
+                : summary.data.verdict === "not_transferring"
+                  ? "bad"
+                  : summary.data.verdict === "holding"
+                    ? "warn"
+                    : "neutral"
+            }
+          >
+            {summary.data.verdict.replace(/_/g, " ")}
+          </Badge>
+          <p className="text-sm text-fg-muted">{summary.data.next_step}</p>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

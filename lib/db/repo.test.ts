@@ -186,6 +186,9 @@ describe("practice storage", () => {
 function cappedClient(total: number, cap: number) {
   const rows = Array.from({ length: total }, (_, n) => ({ id: `row_${String(n).padStart(5, "0")}` }));
   const ordered: string[] = [];
+  // Requests sent together, in order: [1, 4] is one request, then four at once.
+  const sent: number[] = [];
+  let tick = 0;
   const sb = {
     from: () => {
       let from = 0, to = total;
@@ -194,13 +197,19 @@ function cappedClient(total: number, cap: number) {
         eq: () => query,
         order: (column: string) => (ordered.push(column), query),
         range: (start: number, end: number) => ((from = start), (to = end), query),
-        then: (resolve: (value: unknown) => void) =>
-          resolve({ data: rows.slice(from, Math.min(to + 1, from + cap)), error: null, count: total }),
+        then: (resolve: (value: unknown) => void) => {
+          sent.push(tick);
+          setTimeout(() => {
+            tick = Math.max(tick, sent.at(-1)! + 1);
+            resolve({ data: rows.slice(from, Math.min(to + 1, from + cap)), error: null, count: total });
+          });
+        },
       };
       return query;
     },
   } as unknown as SupabaseClient;
-  return { sb, ids: rows.map((row) => row.id), ordered };
+  const waves = () => sent.reduce<number[]>((count, wave) => ((count[wave] = (count[wave] ?? 0) + 1), count), []);
+  return { sb, ids: rows.map((row) => row.id), ordered, waves };
 }
 
 describe("whole-history reads", () => {
@@ -215,5 +224,12 @@ describe("whole-history reads", () => {
     const { sb, ids } = cappedClient(1001, 300);
     const rows = await selectAll<{ id: string }>(sb, "shots", "*", "getShots", (q) => q);
     assert.deepEqual(rows.map((row) => row.id), ids);
+  });
+
+  it("asks for every page after the first at once", async () => {
+    const { sb, ids, waves } = cappedClient(4500, 1000);
+    const rows = await selectAll<{ id: string }>(sb, "shots", "*", "getShots", (q) => q);
+    assert.deepEqual(rows.map((row) => row.id), ids);
+    assert.deepEqual(waves(), [1, 4]);
   });
 });

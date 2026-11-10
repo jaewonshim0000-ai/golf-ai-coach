@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Brain, Check, ChevronDown, TrendingDown, TrendingUp } from "lucide-react";
+import { Brain, Check, TrendingDown, TrendingUp } from "lucide-react";
 
 import type { Evidence, Weakness } from "@/types/analytics";
 import type { DrillAttempt } from "@/types/practice";
@@ -246,17 +246,16 @@ export function PriorityCard({ weakness, rank }: { weakness: Weakness | null; ra
         </p>
 
         {weakness.evidence.length > 0 ? (
-          <details className="group mt-4 border-t border-border pt-3.5">
-            <summary className="dsp flex cursor-pointer list-none items-center gap-1.5 text-[10px] font-medium tracking-[0.17em] text-fg-subtle marker:hidden">
+          <div className="mt-4 border-t border-border pt-3.5">
+            <p className="dsp text-[10px] font-medium tracking-[0.17em] text-fg-subtle">
               Evidence ({weakness.evidence.length})
-              <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" />
-            </summary>
+            </p>
             <ul className="mt-3 flex flex-col gap-2.5">
               {weakness.evidence.map((item, index) => (
                 <EvidenceLine key={index} evidence={item} />
               ))}
             </ul>
-          </details>
+          </div>
         ) : null}
       </CardContent>
     </Card>

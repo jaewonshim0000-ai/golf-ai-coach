@@ -8,8 +8,8 @@ import { IDLE } from "@/lib/action-state";
 import { formatDate, relativeDays } from "@/lib/utils";
 import { SWIPE_REVEAL, swipeIntent, swipeOffset } from "@/lib/practice/swipe";
 import type { PracticeSession } from "@/types/practice";
-import { Badge, Button, EmptyState } from "@/components/ui/primitives";
-import { Disclosure } from "@/components/ui/disclosure";
+import { Badge, Button, Card, EmptyState, SectionHeading } from "@/components/ui/primitives";
+import { ShowMore } from "@/components/ui/show-more";
 
 export function PracticeHistory({ sessions }: { sessions: PracticeSession[] }) {
   const [removed, setRemoved] = useState<string[]>([]);
@@ -21,14 +21,16 @@ export function PracticeHistory({ sessions }: { sessions: PracticeSession[] }) {
   const visible = sessions.filter((session) => !removed.includes(session.id));
   const active = visible.filter((session) => session.status !== "complete");
   const completed = visible.filter((session) => session.status === "complete");
-  return <div className="space-y-3">
+  return <div className="space-y-5">
     <p role="status" className={message ? "text-[12px] text-good" : "sr-only"}>{message}</p>
     {[{ title: "Saved practices", rows: active, empty: "No practices in progress" },
       { title: "Recent sessions", rows: completed, empty: "No completed sessions yet" }].map(({ title, rows, empty }) =>
-      <Disclosure key={title} title={title} count={rows.length} description={rows.length ? "Swipe right for Delete, or use the row’s action button." : undefined}>
-        {rows.length ? <ul className="space-y-2">{rows.map((session) => <SwipePracticeRow key={session.id} session={session} onDeleted={onDeleted} />)}</ul>
-          : <EmptyState title={empty} message="Your saved sessions will appear here." />}
-      </Disclosure>)}
+      <section key={title} className="space-y-3">
+        <SectionHeading title={title} count={rows.length} description={rows.length ? "Swipe right for Delete, or use the row’s action button." : undefined} />
+        {rows.length ? <Card className="space-y-3 p-3.5">
+          <ShowMore as="ul" limit={5} className="space-y-2">{rows.map((session) => <SwipePracticeRow key={session.id} session={session} onDeleted={onDeleted} />)}</ShowMore>
+        </Card> : <EmptyState title={empty} message="Your saved sessions will appear here." />}
+      </section>)}
   </div>;
 }
 

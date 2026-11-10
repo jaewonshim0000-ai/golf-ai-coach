@@ -17,8 +17,8 @@ it("scores the swing checks, keeping rhythm for GolfPosePro tracks, and gives dr
   const { report } = reviewSwing(model);
   assert.equal(report.tempo?.ratio, 3.4);
   const result = swingResult(model);
-  assert.equal(result.score, scoreSwing(report).total);
-  assert.ok(result.score! >= 85 && result.score! <= 100);
+  assert.equal(result.score, scoreSwing(report).total! / 10);
+  assert.ok(result.score! >= 8.5 && result.score! <= 10);
   assert.equal(result.reason, null);
   assert.equal(result.checks.length, 3);
   assert.deepEqual(result.weaknesses, []);
@@ -33,7 +33,7 @@ it("names the weakest check in plain words and picks its library drills", () => 
     return { ...frame, imageLandmarks: points };
   });
   const result = swingResult({ ...buildVideoModel(frames, options), golfPosePro });
-  assert.ok(result.score !== null && result.score < 85);
+  assert.ok(result.score !== null && result.score < 8.5);
   assert.equal(result.weaknesses[0]?.id, "head");
   assert.equal(result.weaknesses[0]?.issue, "Your head shifts sideways through contact.");
   assert.match(result.weaknesses[0]!.evidence, /stance width/);

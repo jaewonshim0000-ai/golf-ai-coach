@@ -12,6 +12,7 @@
     "test": "node --import tsx --test \"lib/**/*.test.ts\"",
     "benchmark:swing": "tsx scripts/benchmark-swing.ts",
     "evaluate:swing": "tsx scripts/evaluate-swing.ts",
+    "calibrate:swing": "tsx scripts/calibrate-swing.ts",
     "seed:sql": "tsx scripts/generate-seed-sql.ts"
   },
   "dependencies": {

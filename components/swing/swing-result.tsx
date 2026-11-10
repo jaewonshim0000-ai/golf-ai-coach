@@ -10,7 +10,7 @@ export function SwingResultCard({ result }: { result: SwingResult }) {
     <InkCard className="p-5">
       <Eyebrow className="text-ink-fg/70">Swing score</Eyebrow>
       {score !== null
-        ? <p className="font-display tabular mt-2 text-[56px] leading-none">{score}<span className="text-[20px] text-ink-fg/60"> / 100</span></p>
+        ? <p className="font-display tabular mt-2 text-[56px] leading-none">{score.toFixed(1)}<span className="text-[20px] text-ink-fg/60"> / 10</span></p>
         : <p className="mt-2 text-[18px] font-semibold">No score for this video</p>}
       <p className="mt-3 text-[12px] leading-relaxed text-ink-fg/70">{reason ?? `From ${list.format(checks.map((check) => check.toLowerCase()))}.`}</p>
     </InkCard>

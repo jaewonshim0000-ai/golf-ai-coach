@@ -51,7 +51,7 @@ export default async function SwingPage({ params, searchParams }: {
         analysable model={model} /></div>
       {editingReference && current ? <SwingReferenceEditor sessionId={id} saved={current.reference} handedness={current.handedness} initiallyOpen /> : result ? <SwingResultCard result={result} /> : <div className="rounded-2xl border border-border bg-surface p-5">
         <h2 className="text-[18px] font-semibold">Analyze your swing video</h2>
-        <p className="mt-3 text-[13px] leading-relaxed text-fg-muted">We read every frame of your video, then give your swing a score out of 100, your main weakness and drills to fix it.</p>
+        <p className="mt-3 text-[13px] leading-relaxed text-fg-muted">We read every frame of your video, then give your swing a score out of 10, your main weakness and drills to fix it.</p>
         <p className="mt-3 text-[12px] leading-relaxed text-fg-muted">The review starts as soon as the video loads.</p>
       </div>}
     </div>

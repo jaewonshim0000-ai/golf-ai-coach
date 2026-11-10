@@ -22,7 +22,7 @@ export async function saveCalibrationSwingAction(input: {
 }): Promise<{ ok: boolean; message: string }> {
   if (!(await allowed())) return { ok: false, message: "Calibration runs only on a local development server (npm run dev)." };
   const label = calibrationLabelSchema.safeParse(input);
-  if (!label.success) return { ok: false, message: "Enter a whole-number score from 0 to 100." };
+  if (!label.success) return { ok: false, message: "Enter a score from 0 to 10 with at most one decimal, like 9.8." };
   const handedness = z.enum(["right", "left"]).safeParse(input.handedness);
   const tracks = poseModelSchema.safeParse({ swing_session_id: "calibration", t: input.t, frames: input.imageFrames,
     imageFrames: input.imageFrames, aspect: input.aspect, cameraAngle: input.cameraAngle, clip: input.clip });
@@ -37,7 +37,7 @@ export async function saveCalibrationSwingAction(input: {
   catch (error) { return { ok: false, message: error instanceof Error ? error.message : "Could not save this clip." }; }
   revalidatePath("/swing/calibrate");
   const { score, reason } = swingResult(model);
-  return { ok: true, message: score === null ? `Saved. The app gives no score: ${reason}` : `Saved. You ${label.data.score}, app ${score}.` };
+  return { ok: true, message: score === null ? `Saved. The app gives no score: ${reason}` : `Saved. You ${label.data.score.toFixed(1)}, app ${score.toFixed(1)}.` };
 }
 
 export async function deleteCalibrationSwingAction(file: string): Promise<void> {

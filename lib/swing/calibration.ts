@@ -12,7 +12,8 @@ export const CALIBRATION_DIR = path.join("calibration", "swings");
 
 export const calibrationLabelSchema = z.object({
   name: z.string().trim().min(1).max(160),
-  score: z.number().int().min(0).max(100),
+  /** Out of 10 with at most one decimal, as the player sees scores. */
+  score: z.number().min(0).max(10).refine((score) => Math.abs(score * 10 - Math.round(score * 10)) < 1e-9, "Use at most one decimal."),
   note: z.string().trim().max(1000).optional(),
 });
 const fileSchema = calibrationLabelSchema.extend({
@@ -51,7 +52,9 @@ export function deleteCalibrationSwing(file: string, dir = CALIBRATION_DIR) {
 
 /** A clip read once by the current analysis, ready to score under any rubric. */
 export type CalibrationSample = {
-  file: string; name: string; coach: number; note?: string;
+  file: string; name: string; note?: string;
+  /** The coach's score in the app's internal points of 100 (9.8 is 98). */
+  coach: number;
   /** Null when the swing page would block the review. */
   report: MotionReport | null; ballSide?: "left" | "right";
   /** Why the app gives no score, as the swing page says it. */
@@ -61,7 +64,7 @@ export type CalibrationSample = {
 export function calibrationSamples(swings: CalibrationSwing[]): CalibrationSample[] {
   return swings.map(({ file, name, score, note, model }) => {
     const { report, blocks } = reviewSwing(model);
-    return { file, name, coach: score, note, report: blocks.length ? null : report, ballSide: model.ballSide,
+    return { file, name, coach: Math.round(score * 10), note, report: blocks.length ? null : report, ballSide: model.ballSide,
       reason: blocks[0] ?? scoreSwing(report, model.ballSide).reason };
   });
 }
@@ -72,7 +75,7 @@ export const appScore = (sample: CalibrationSample, rubric: ScoreRubric = SCORE_
 
 const mean = (values: number[]) => values.reduce((sum, value) => sum + value, 0) / values.length;
 
-/** Mean |app − coach| in points over the clips the app can score; null when it can score none. */
+/** Mean |app − coach| in points of 100 (tenths of the 10-point score) over the clips the app can score; null when it can score none. */
 export function meanError(samples: CalibrationSample[], rubric: ScoreRubric = SCORE_RUBRIC): number | null {
   const errors = samples.flatMap((sample) => {
     const app = appScore(sample, rubric);

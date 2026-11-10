@@ -15,7 +15,7 @@ const DRILLS_FOR: Record<SwingFocusId, string[]> = {
 };
 
 export type SwingResult = {
-  /** Out of 100: the weighted swing checks. Null with a reason when too little was measured. */
+  /** Out of 10 with one decimal: the weighted swing checks. Null with a reason when too little was measured. */
   score: number | null;
   reason: string | null;
   /** The checks the score is made of. */
@@ -36,7 +36,7 @@ export function swingResult(model: PoseModel): SwingResult {
   const targets = weak.length ? weak : [...checks].sort((a, b) => a.score - b.score).slice(0, 1);
   const ids = [0, 1, 2].flatMap((rank) => targets.map((check) => DRILLS_FOR[check.id as SwingFocusId]?.[rank]));
   return {
-    score: blocks.length ? null : score.total,
+    score: blocks.length || score.total === null ? null : score.total / 10,
     reason: blocks[0] ?? score.reason,
     checks: checks.map((check) => check.label),
     weaknesses: weak.map((check) => ({ id: check.id, issue: focusIssue(check, report), evidence: check.evidence })),

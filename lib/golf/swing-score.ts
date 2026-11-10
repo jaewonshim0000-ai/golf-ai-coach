@@ -20,6 +20,9 @@ export type SwingScore = {
   reason: string | null;
 };
 
+/** Players see scores out of 10 with one decimal; the checks score in whole points of 100, which are tenths. */
+export const tenPoint = (points: number) => (points / 10).toFixed(1);
+
 /** v1 coaching heuristic, not population norms or a prediction of ball flight.
  * Scores describe three visible control checks. Missing evidence is never 100.
  * Use only comparable full-swing recordings from the same camera position.

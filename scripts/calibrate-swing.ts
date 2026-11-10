@@ -1,9 +1,10 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { SCORE_RUBRIC, type ScoreCheckId, type ScoreRubric } from "../lib/golf/score-rubric";
+import { tenPoint } from "../lib/golf/swing-score";
 import { CALIBRATION_DIR, appScore, calibrationSamples, crossValidate, fitRubric, loadCalibrationSwings, meanError } from "../lib/swing/calibration";
 
 // npm run calibrate:swing -- [folder] [--write]
-// Compares the app's 100-point score with coach scores from /swing/calibrate, fits the
+// Compares the app's 10-point score with coach scores from /swing/calibrate, fits the
 // rubric to them, and with --write adopts the fit when it beats the current rubric on held-out clips.
 const dir = process.argv.slice(2).find((arg) => !arg.startsWith("--")) ?? CALIBRATION_DIR;
 const { swings, skipped } = loadCalibrationSwings(dir);
@@ -15,16 +16,18 @@ if (!swings.length) {
 const samples = calibrationSamples(swings);
 const fitted = fitRubric(samples);
 const [now, after, heldOut] = [meanError(samples), meanError(samples, fitted), crossValidate(samples)];
-const points = (value: number | null) => value === null ? "n/a" : `${value.toFixed(1)} points`;
+// Errors are in internal points of 100; players see tenths of them.
+const points = (value: number | null) => value === null ? "n/a" : (value / 10).toFixed(2);
+const shown = (value: number | null) => (value === null ? "none" : tenPoint(value)).padStart(4);
 const scored = samples.filter((sample) => appScore(sample) !== null);
 
 console.log(`\n${swings.length} clips, ${scored.length} scored by the app. Largest disagreements first (coach / app now / app fitted):\n`);
 for (const sample of [...scored].sort((a, b) => Math.abs(appScore(b)! - b.coach) - Math.abs(appScore(a)! - a.coach)))
-  console.log(`${String(sample.coach).padStart(3)} / ${String(appScore(sample)).padStart(3)} / ${String(appScore(sample, fitted)).padStart(3)}  ${sample.name}${sample.note ? ` - ${sample.note}` : ""}`);
+  console.log(`${shown(sample.coach)} / ${shown(appScore(sample))} / ${shown(appScore(sample, fitted))}  ${sample.name}${sample.note ? ` - ${sample.note}` : ""}`);
 for (const sample of samples.filter((item) => appScore(item) === null))
-  console.log(`${String(sample.coach).padStart(3)} / no score  ${sample.name}: ${sample.reason}${sample.note ? ` - ${sample.note}` : ""}`);
+  console.log(`${shown(sample.coach)} / no score  ${sample.name}: ${sample.reason}${sample.note ? ` - ${sample.note}` : ""}`);
 
-console.log(`\nAverage difference: now ${points(now)}, fitted ${points(after)} on these clips, ${points(heldOut)} on held-out clips (5-fold).`);
+console.log(`\nAverage difference: now ${points(now)}, fitted ${points(after)} on these clips, ${points(heldOut)} on held-out clips (5-fold), out of 10.`);
 for (const id of Object.keys(fitted) as ScoreCheckId[]) {
   const [a, b] = [SCORE_RUBRIC[id], fitted[id]];
   if (JSON.stringify(a) !== JSON.stringify(b))

@@ -6,7 +6,7 @@ import { describe, it } from "node:test";
 import type { MotionReading, MotionReport } from "../golf/motion-analysis";
 import type { PoseModel } from "../golf/pose";
 import { SCORE_RUBRIC } from "../golf/score-rubric";
-import { appScore, calibrationFile, crossValidate, deleteCalibrationSwing, fitRubric, loadCalibrationSwings, meanError,
+import { appScore, calibrationFile, calibrationLabelSchema, calibrationSamples, crossValidate, deleteCalibrationSwing, fitRubric, loadCalibrationSwings, meanError,
   saveCalibrationSwing, type CalibrationSample } from "./calibration";
 
 function faceOn(head: number, lift: number, ratio: number): MotionReport {
@@ -40,14 +40,17 @@ describe("score calibration", () => {
     const dir = mkdtempSync(path.join(tmpdir(), "calibration-"));
     assert.equal(calibrationFile("../../Adam Scott DTL.MOV"), "adam-scott-dtl-mov.json");
     const model = { v: 1 } as unknown as PoseModel;
-    saveCalibrationSwing({ name: "../../Adam Scott DTL.MOV", score: 70, savedAt: "2026-11-09", model }, dir);
-    saveCalibrationSwing({ name: "../../Adam Scott DTL.MOV", score: 92, note: "Great", savedAt: "2026-11-09", model }, dir);
+    saveCalibrationSwing({ name: "../../Adam Scott DTL.MOV", score: 7, savedAt: "2026-11-09", model }, dir);
+    saveCalibrationSwing({ name: "../../Adam Scott DTL.MOV", score: 9.2, note: "Great", savedAt: "2026-11-09", model }, dir);
     const { swings, skipped } = loadCalibrationSwings(dir);
-    assert.deepEqual(swings.map(({ file, score, note }) => ({ file, score, note })), [{ file: "adam-scott-dtl-mov.json", score: 92, note: "Great" }]);
+    assert.deepEqual(swings.map(({ file, score, note }) => ({ file, score, note })), [{ file: "adam-scott-dtl-mov.json", score: 9.2, note: "Great" }]);
+    assert.equal(calibrationSamples(swings)[0]!.coach, 92); // tenths, the app's internal points
     assert.deepEqual(skipped, []);
     assert.throws(() => deleteCalibrationSwing("../package.json", dir));
     deleteCalibrationSwing("adam-scott-dtl-mov.json", dir);
     assert.equal(loadCalibrationSwings(dir).swings.length, 0);
     assert.deepEqual(loadCalibrationSwings(path.join(dir, "missing")), { swings: [], skipped: [] });
+    for (const score of [0, 4.6, 9.8, 10]) assert.ok(calibrationLabelSchema.safeParse({ name: "a", score }).success, `${score}`);
+    for (const score of [-0.1, 9.85, 10.1, 98]) assert.equal(calibrationLabelSchema.safeParse({ name: "a", score }).success, false, `${score}`);
   });
 });

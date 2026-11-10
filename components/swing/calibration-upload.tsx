@@ -13,7 +13,7 @@ import { Button, Input, Select } from "@/components/ui/primitives";
 
 type Row = { id: string; file: File; score: string; note: string; handedness: "right" | "left"; status: string | null; saved: boolean };
 
-/** Pick many clips, score each out of 100, then read and save them one by one
+/** Pick many clips, score each out of 10 (like 9.8), then read and save them one by one
  * with the same GolfPosePro analysis a swing upload gets. */
 export function CalibrationUpload() {
   const router = useRouter();
@@ -78,7 +78,7 @@ export function CalibrationUpload() {
     }} />
     {rows.length ? <ul className="divide-y divide-border">{rows.map((row) => <li key={row.id} className="grid gap-2 py-3 sm:grid-cols-[minmax(0,1fr)_96px_140px_36px] sm:items-center">
       <p className="break-words text-[13px] font-medium">{row.file.name}</p>
-      <Input type="number" inputMode="numeric" min={0} max={100} step={1} required placeholder="Score" aria-label={`Your score for ${row.file.name}`}
+      <Input type="number" inputMode="decimal" min={0} max={10} step={0.1} required placeholder="0–10" aria-label={`Your score for ${row.file.name}`}
         value={row.score} disabled={running || row.saved} onChange={(event) => update(row.id, { score: event.target.value })} />
       <Select aria-label={`Golfer's hand in ${row.file.name}`} value={row.handedness} disabled={running || row.saved}
         onChange={(event) => update(row.id, { handedness: event.target.value as Row["handedness"] })}>

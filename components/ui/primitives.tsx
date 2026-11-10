@@ -333,15 +333,24 @@ export function SectionHeading({
   title,
   description,
   action,
+  count,
 }: {
   title: string;
   description?: string;
   action?: ReactNode;
+  count?: number;
 }) {
   return (
     <div className="flex flex-wrap items-end justify-between gap-3">
       <div className="min-w-0">
-        <h2 className="dsp text-[26px] leading-none">{title}</h2>
+        <h2 className="dsp flex items-center gap-2 text-[26px] leading-none">
+          {title}
+          {count !== undefined ? (
+            <span className="tabular flex h-[26px] min-w-[26px] items-center justify-center rounded-full bg-surface px-2 font-sans text-[12px] font-bold text-fg">
+              {count}
+            </span>
+          ) : null}
+        </h2>
         {description ? (
           <p className="mt-1.5 max-w-prose text-[13px] leading-relaxed text-fg-muted">
             {description}

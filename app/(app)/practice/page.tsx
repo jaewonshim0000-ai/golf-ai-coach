@@ -5,7 +5,6 @@ import { resetDemoAction } from "@/app/actions";
 import { DemoNotice, PriorityCard, TodaysSession } from "@/components/dashboard/sections";
 import { PracticeDrillPriorities } from "@/components/practice/drill-priorities";
 import { PracticeHistory } from "@/components/practice/practice-history";
-import { Disclosure } from "@/components/ui/disclosure";
 import {
   Badge,
   ButtonLink,
@@ -13,6 +12,7 @@ import {
   HeroPill,
   MiniCard,
   PageHero,
+  SectionHeading,
 } from "@/components/ui/primitives";
 import { benchmarkFor, benchmarkNote } from "@/lib/practice/benchmark";
 import { rankPracticeDrills } from "@/lib/practice/drill-priorities";
@@ -67,13 +67,15 @@ export default async function PracticePage() {
 
       {repo.mode() === "demo" ? <DemoNotice onReset={resetDemoAction} /> : null}
 
-      {state.weaknesses.length ? <Disclosure title="Recommendations from your rounds" count={Math.min(2, state.weaknesses.length)}>
-        <div className="space-y-3">{state.weaknesses.slice(0, 2).map((weakness, index) => <PriorityCard key={weakness.key} weakness={weakness} rank={index === 0 ? 1 : 2} />)}</div>
-      </Disclosure> : null}
+      {state.weaknesses.length ? <section className="space-y-3">
+        <SectionHeading title="Recommendations from your rounds" count={Math.min(2, state.weaknesses.length)} />
+        <div className="grid gap-3 lg:grid-cols-2">{state.weaknesses.slice(0, 2).map((weakness, index) => <PriorityCard key={weakness.key} weakness={weakness} rank={index === 0 ? 1 : 2} />)}</div>
+      </section> : null}
 
       <TodaysSession session={state.session} attempts={state.drillAttempts} />
 
-      <Disclosure title="Your benchmarks" count={benchmarks.length} description="Open to see the numbers you are working to beat.">
+      <section className="space-y-3">
+        <SectionHeading title="Your benchmarks" count={benchmarks.length} description="The numbers you are working to beat." />
         {benchmarks.length === 0 ? (
           <EmptyState
             title="No drills tracked yet"
@@ -107,7 +109,7 @@ export default async function PracticePage() {
             })}
           </div>
         )}
-      </Disclosure>
+      </section>
 
       <PracticeDrillPriorities
         drills={rankPracticeDrills(state.drills, state)}

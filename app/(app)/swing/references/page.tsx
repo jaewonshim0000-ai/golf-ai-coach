@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { AddSwing } from "@/components/swing/add-swing";
 import { ButtonLink, Card, CardContent, EmptyState, PageHero } from "@/components/ui/primitives";
+import { ShowMore } from "@/components/ui/show-more";
 import { CLUB_LABELS, labelize } from "@/types/golf";
 import * as repo from "@/lib/db/repo";
 import { remaining } from "@/lib/billing/plans";
@@ -24,8 +25,8 @@ export default async function SwingReferencesPage() {
       {metadata.source ? <p className="break-words text-[11px] text-fg-subtle">Credit: {metadata.source}</p> : null}
       <ButtonLink href={`/swing/${session.id}?reference=new`} variant="secondary" size="sm">Review or edit reference</ButtonLink>
     </CardContent></Card>)}</div> : <EmptyState title="Add your first reference" message="Upload one professional or coach clip, let the app review it, then save the golfer’s name. Matching user swings can use it automatically." />}
-    {existing.length ? <details className="rounded-2xl border border-border bg-surface p-5"><summary className="min-h-9 cursor-pointer text-[14px] font-semibold">Use a saved recording</summary>
-      <ul className="mt-3 space-y-2">{existing.map((session) => <li key={session.id}><Link className="inline-block min-h-9 text-[13px] text-accent" href={`/swing/${session.id}?reference=new`}>{CLUB_LABELS[session.club]} · {labelize(session.camera_angle)} · {session.created_at.slice(0, 10)}</Link></li>)}</ul>
-    </details> : null}
+    {existing.length ? <section className="space-y-3 rounded-2xl border border-border bg-surface p-5"><h2 className="text-[14px] font-semibold">Use a saved recording</h2>
+      <ShowMore as="ul" limit={5} className="space-y-2">{existing.map((session) => <li key={session.id}><Link className="inline-block min-h-9 text-[13px] text-accent" href={`/swing/${session.id}?reference=new`}>{CLUB_LABELS[session.club]} · {labelize(session.camera_angle)} · {session.created_at.slice(0, 10)}</Link></li>)}</ShowMore>
+    </section> : null}
   </div>;
 }

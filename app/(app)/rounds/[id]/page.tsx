@@ -2,13 +2,12 @@ import { createHash } from "node:crypto";
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { ArrowLeft, Pencil } from "lucide-react";
+import { ArrowLeft, ChevronDown, Pencil } from "lucide-react";
 
 import { ReadoutSkeleton, SourceBadge } from "@/components/dashboard/sections";
 import { DeleteRoundButton } from "@/components/rounds/delete-round";
 import { DivergingBars } from "@/components/charts";
 import { ScorecardSummary } from "@/components/rounds/scorecard-summary";
-import { Disclosure } from "@/components/ui/disclosure";
 import { classicStats, holeLines } from "@/lib/analytics/classic";
 import {
   Badge,
@@ -20,6 +19,7 @@ import {
   EmptyState,
   HeroPill,
   PageHero,
+  SectionHeading,
   Stat,
 } from "@/components/ui/primitives";
 import { CLUB_LABELS, SG_CATEGORIES, SG_CATEGORY_LABELS, labelize } from "@/types/golf";
@@ -219,7 +219,8 @@ export default async function RoundDetailPage({
             </div>
           ) : null}
 
-          <Disclosure title="Hole by hole" count={holes.length} description="Open to review each hole and its shots.">
+          <section className="space-y-3">
+            <SectionHeading title="Hole by hole" count={holes.length} description="Tap a hole to see its shots." />
             <div className="space-y-2">
               {holes.map((hole) => (
                 <details
@@ -266,6 +267,7 @@ export default async function RoundDetailPage({
                           {signed(hole.strokes_gained)}
                         </span>
                       ) : null}
+                      <ChevronDown aria-hidden className="h-4 w-4 text-fg-subtle transition-transform group-open:rotate-180" />
                     </span>
                   </summary>
 
@@ -338,7 +340,7 @@ export default async function RoundDetailPage({
                 </details>
               ))}
             </div>
-          </Disclosure>
+          </section>
         </>
       )}
 

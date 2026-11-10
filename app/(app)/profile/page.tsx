@@ -6,12 +6,12 @@ import { DeleteAccountButton } from "@/components/auth/delete-account";
 import { PlanCard } from "@/components/billing/plan";
 import { ProfileForm } from "@/components/forms/profile-form";
 import { TrendLine } from "@/components/charts";
-import { Disclosure } from "@/components/ui/disclosure";
 import {
   Button,
   ButtonLink,
   Card,
   CardContent,
+  CardDescription,
   CardHeader,
   CardTitle,
   HeroPill,
@@ -78,7 +78,12 @@ export default async function ProfilePage({
 
       <ProfileForm profile={state.profile} action={saveProfileAction} />
 
-      <Disclosure title="Your progress" description={`${state.rounds.length} rounds · ${state.volume.sessions_completed} completed practices`}>
+      <Card>
+        <CardHeader>
+          <CardTitle>Your progress</CardTitle>
+          <CardDescription>{state.rounds.length} rounds · {state.volume.sessions_completed} completed practices</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
         <div className="grid grid-cols-3 gap-3 rounded-xl bg-surface-2 p-4">
           <Stat
             label="Handicap"
@@ -98,16 +103,13 @@ export default async function ProfilePage({
         </div>
 
       {handicapPoints.length > 1 ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Handicap trend</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <TrendLine points={handicapPoints} height={170} invert />
-          </CardContent>
-        </Card>
+        <div>
+          <p className="mb-2 text-xs font-medium text-fg-muted">Handicap trend</p>
+          <TrendLine points={handicapPoints} height={170} invert />
+        </div>
       ) : null}
-      </Disclosure>
+        </CardContent>
+      </Card>
 
       {repo.mode() === "supabase" ? <PlanCard billing={billing} notice={notice} /> : null}
 

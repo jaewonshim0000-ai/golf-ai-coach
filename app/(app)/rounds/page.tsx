@@ -8,7 +8,7 @@ import { CountBars, DivergingBars, TrendLine } from "@/components/charts";
 import { BaselinePicker } from "@/components/stats/baseline-picker";
 import { UpgradePrompt } from "@/components/billing/plan";
 import { StatsFilters } from "@/components/stats/filters";
-import { Disclosure } from "@/components/ui/disclosure";
+import { ShowMore } from "@/components/ui/show-more";
 import {
   Badge,
   ButtonLink,
@@ -152,9 +152,9 @@ export default async function RoundsPage({ searchParams }: { searchParams: Promi
       ) : (
         <>
           {/* The hero overlaps whatever comes first; a heading has to clear it. */}
-          <div className="pt-12">
-            <Disclosure title="Last rounds" count={state.rounds.length} description="Open to view your scorecards and tracked rounds.">
-          <div className="grid gap-2.5 md:grid-cols-2">
+          <section className="space-y-3 pt-12">
+            <SectionHeading title="Last rounds" count={state.rounds.length} description="Your scorecards and tracked rounds." />
+          <ShowMore limit={6} className="grid gap-2.5 md:grid-cols-2">
             {state.rounds.map((round) => {
               const stats = rebaseRound(
                 summarizeRound(round, state.shotsByRound.get(round.id) ?? []),
@@ -226,12 +226,10 @@ export default async function RoundsPage({ searchParams }: { searchParams: Promi
                 </MiniCard>
               );
             })}
-          </div>
-            </Disclosure>
-          </div>
+          </ShowMore>
+          </section>
 
-          <Disclosure title="Round statistics" description="Open your scoring trends and performance numbers.">
-            <div className="space-y-5">
+          <SectionHeading title="Round statistics" description="Your scoring trends and performance numbers." />
           <Card>
             <CardHeader>
               <CardTitle>Scoring</CardTitle>
@@ -355,8 +353,6 @@ export default async function RoundsPage({ searchParams }: { searchParams: Promi
               message="See where you gain and lose shots by category, distance, club and lie, against any handicap level."
             />
           )}
-            </div>
-          </Disclosure>
         </>
       )}
     </div>

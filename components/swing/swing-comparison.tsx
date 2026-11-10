@@ -136,8 +136,8 @@ export function SwingComparisonPanel({ user, reference, comparison, options, req
   options: ReferenceOption[]; requested?: string; message?: string | null; advice?: ReactNode;
 }) {
   const canReplay = comparison && reference && comparison.userAnchors && comparison.referenceAnchors && comparison.status !== "incompatible";
-  return <details open={comparison?.status === "ready" || undefined} className="rounded-2xl border border-border bg-surface p-5">
-    <summary className="min-h-10 cursor-pointer text-[15px] font-semibold">{comparison ? `Compare with ${comparison.referenceName}` : "Compare with a reference"}</summary>
+  return <section className="rounded-2xl border border-border bg-surface p-5">
+    <h2 className="text-[15px] font-semibold">{comparison ? `Compare with ${comparison.referenceName}` : "Compare with a reference"}</h2>
     <div className="mt-3 space-y-4">
       <ReferencePicker options={options} requested={requested} />
       <p className="text-[12px] leading-relaxed text-fg-muted">{message ?? comparison?.message}</p>
@@ -147,5 +147,5 @@ export function SwingComparisonPanel({ user, reference, comparison, options, req
       <ButtonLink href="/swing/references" variant="secondary" size="sm">Reference library</ButtonLink>
       {comparison?.status === "ready" ? <p className="text-[11px] text-fg-subtle">Differences describe this camera view. They do not by themselves establish a swing fault.</p> : null}
     </div>
-  </details>;
+  </section>;
 }

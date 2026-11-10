@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { captureManifestSchema } from "../swing/contracts";
-import { GPP_PHASES } from "../golfposepro/phases";
-import { MAX_FRAMES } from "../golfposepro/result";
+import { GPP_PHASES, detectSwingPhases } from "../golfposepro/phases";
+import { MAX_FRAMES, type GolfPoseProResult } from "../golfposepro/result";
 
 import {
   CLUBS,
@@ -288,3 +288,15 @@ export const golfPoseProSchema = z.object({
   wristY: z.array(z.number().finite().min(-100_000).max(100_000).nullable()).min(10).max(MAX_FRAMES),
   keyFrames: z.array(z.object({ phase: z.enum(GPP_PHASES), frame: z.number().int().min(0).max(MAX_FRAMES), pose: z.array(keyPoint).length(33).nullable() })).length(GPP_PHASES.length),
 });
+
+/** A browser's GolfPosePro result with its phases recomputed from its own wrist
+ * series, or why it was refused. */
+export function parseGolfPosePro(input: unknown): GolfPoseProResult | string {
+  const sent = golfPoseProSchema.safeParse(input);
+  const segmentation = sent.success ? detectSwingPhases(sent.data.wristY) : null;
+  if (!sent.success || !segmentation) return "GolfPosePro could not find a swing in this video.";
+  // Key frames must be the middles of the phases recomputed from the same wrist series.
+  if (sent.data.keyFrames.some(({ phase, frame }) => frame !== Math.floor((segmentation.phases[phase][0] + segmentation.phases[phase][1]) / 2)))
+    return "GolfPosePro's results did not match their wrist series. Review the video again.";
+  return { ...sent.data, phases: segmentation.phases, swingStart: segmentation.swingStart, swingEnd: segmentation.swingEnd };
+}

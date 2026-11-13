@@ -446,3 +446,34 @@ body {
 .hero-art-dusk :focus-visible {
   outline-color: #ffffff;
 }
+
+/* ---------------------------------------------------------- landing page */
+
+/* Sections rise in as they scroll into view; browsers without scroll
+   timelines just show them. */
+@supports (animation-timeline: view()) {
+  .reveal {
+    animation: rise-in linear both;
+    animation-timeline: view();
+    animation-range: entry 0px entry 160px;
+  }
+}
+
+@keyframes ticker {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.ticker {
+  animation: ticker 44s linear infinite;
+}
+
+.outline-text {
+  color: transparent;
+  -webkit-text-stroke: 1.5px var(--c-fg);
+}
+
+.outline-text.text-accent {
+  -webkit-text-stroke-color: var(--c-accent);
+}

@@ -56,7 +56,9 @@ export function resilientDetector(variant: PoseVariant = "heavy") {
 /**
  * GolfPosePro's model: MediaPipe Pose "Full" tracking from frame to frame, as
  * `mp.solutions.pose.Pose(static_image_mode=False)` with its 0.5 defaults.
- * Frames must be passed in order with increasing timestamps.
+ * Frames must be passed in order with increasing timestamps. Unlike the
+ * notebook it reports two people, so capture can keep the golfer when a
+ * bystander is in the picture.
  */
 export async function createVideoPoseLandmarker(delegate: "GPU" | "CPU") {
   const { FilesetResolver, PoseLandmarker } = await import("@mediapipe/tasks-vision");
@@ -64,7 +66,7 @@ export async function createVideoPoseLandmarker(delegate: "GPU" | "CPU") {
   return PoseLandmarker.createFromOptions(fileset, {
     baseOptions: { modelAssetPath: modelUrl("full"), delegate },
     runningMode: "VIDEO",
-    numPoses: 1,
+    numPoses: 2,
     minPoseDetectionConfidence: 0.5,
     minPosePresenceConfidence: 0.5,
     minTrackingConfidence: 0.5,

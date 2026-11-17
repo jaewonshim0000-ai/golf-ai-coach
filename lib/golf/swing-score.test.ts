@@ -25,13 +25,23 @@ describe("visible swing coaching score", () => {
   it("does not turn good visibility, missing measurements or a moved camera into a swing score", () => {
     const empty = report(); empty.readings = []; empty.tempo = null;
     assert.equal(scoreSwing(empty).total, null);
-    for (const change of [{ cameraStable: false }, { coverage: 0.84 }, { largestGap: 0.15 }]) {
+    for (const change of [{ coverage: 0.84 }, { largestGap: 0.15 }]) {
       const motion = report(); Object.assign(motion.quality, change);
       assert.equal(scoreSwing(motion).total, null);
     }
     assert.equal(scoreSwing(report("other")).total, null);
     const unresolved = report(); unresolved.phases = null;
     assert.equal(scoreSwing(unresolved).total, null);
+  });
+  it("scores a hand-held clip on the checks that need no fixed camera", () => {
+    const behind = report("down_the_line"); behind.quality.cameraStable = false;
+    const score = scoreSwing(behind, "right");
+    assert.deepEqual(score.components.map((item) => item.id), ["posture", "tempo"]); // hip space is a displacement
+    assert.equal(score.total, 100);
+    // Face on, head and height are displacements; rhythm alone is not a score.
+    const faceOn = report(); faceOn.quality.cameraStable = false;
+    assert.equal(scoreSwing(faceOn).total, null);
+    assert.match(scoreSwing(faceOn).reason!, /1 of 3/);
   });
   it("uses observed height bounds, shows partial coverage, and never treats omissions as perfect", () => {
     const motion = report(); motion.tempo = null;

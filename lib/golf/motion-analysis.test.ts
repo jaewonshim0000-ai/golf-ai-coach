@@ -44,6 +44,19 @@ describe("projected swing movement", () => {
     assert.equal(findMotionPhases(swing().map((frame) => ({ ...frame, imageLandmarks: frame.imageLandmarks?.map((point, index) => index === 15 || index === 16 ? { ...point, y: 0.65 } : point) })), 1), null);
   });
 
+  it("keeps the wrist that continues the hand path when the other is misplaced at the top", () => {
+    // The detector leaves one wrist by the chest for two frames; both stay "visible".
+    const frames = swing().map((frame, index) => index === 5 || index === 6 ? { ...frame, imageLandmarks: frame.imageLandmarks!.map((point, joint) => joint === 15 ? { ...point, x: 0.75, y: 0.45 } : point) } : frame);
+    assert.equal(visibleHands(frames[5]!, 9 / 16), null, "the two wrists disagree");
+    assert.equal(findMotionPhases(frames, 9 / 16), null);
+    const clean = trustworthyFrames(frames, 9 / 16, "face_on");
+    assert.equal(clean[5]!.imageLandmarks![15]!.visibility, 0);
+    assert.deepEqual(visibleHands(clean[5]!), { x: 0.52, y: 0.25 });
+    assert.deepEqual(findMotionPhases(clean, 9 / 16), phases);
+    // With no hand position just before, neither wrist can be preferred.
+    assert.equal(visibleHands(trustworthyFrames(frames.slice(5), 9 / 16, "face_on")[0]!, 9 / 16), null);
+  });
+
   it("analyzes the criteria appropriate to the selected camera view", () => {
     for (const view of ["face_on", "down_the_line", "other"] as const) {
       const report = analyseMotion(swing(), 9 / 16, view);

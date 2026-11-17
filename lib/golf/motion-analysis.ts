@@ -68,6 +68,22 @@ export function motionGeometry(frames: PoseFrame[], aspect: number, view: Motion
 /** Reject isolated body jumps rather than smooth them into plausible movement. */
 export function trustworthyFrames(frames: PoseFrame[], aspect: number, view: MotionView = "other"): PoseFrame[] {
   const { hips, shoulders } = motionGeometry(frames, aspect, view);
+  // A wrist the detector leaves behind stays "visible", and visibleHands then
+  // rejects both. Keep the wrist that clearly continues the hand path of the
+  // sample just before; with no such sample, or no clear winner, keep neither.
+  let last: { t: number; point: Point } | null = null;
+  const oneGrip = (frame: PoseFrame): PoseFrame => {
+    const left = at(frame, LM.leftWrist, aspect), right = at(frame, LM.rightWrist, aspect);
+    let out = frame;
+    if (left && right && !visibleHands(frame, aspect) && last && frame.t - last.t <= 0.101) {
+      const l = distance(left, last.point), r = distance(right, last.point);
+      const stray = l < r * 0.5 ? LM.rightWrist : r < l * 0.5 ? LM.leftWrist : -1;
+      if (stray >= 0) out = { ...frame, imageLandmarks: frame.imageLandmarks!.map((point, joint) => joint === stray ? { ...point, visibility: 0 } : point) };
+    }
+    const hand = visibleHands(out, aspect);
+    if (hand) last = { t: frame.t, point: hand };
+    return out;
+  };
   return frames.map((frame, index) => {
     const before = frames[index - 1], after = frames[index + 1];
     const current = hips(frame, aspect);
@@ -92,7 +108,7 @@ export function trustworthyFrames(frames: PoseFrame[], aspect: number, view: Mot
         Math.min(distance(c, p), distance(c, n)) > threshold ? { ...point, visibility: 0 } : point;
     });
     return { ...frame, imageLandmarks };
-  });
+  }).map(oneGrip);
 }
 
 /** A planted ankle is a reference for image displacement. Knee flexion and

@@ -2,7 +2,7 @@
 
 import { createVideoPoseLandmarker } from "../pose-detector";
 import type { GppLandmark } from "./phases";
-import { MAX_FRAMES, golfPoseProResult } from "./result";
+import { MAX_FRAMES, followGolfer, golfPoseProResult } from "./result";
 const DEADLINE_MS = 6 * 60 * 1000;
 
 type FrameVideo = HTMLVideoElement & {
@@ -59,7 +59,7 @@ export async function captureGolfPosePro(video: HTMLVideoElement, from: number, 
   if (count > MAX_FRAMES) throw new Error(`This clip has ${count} frames; up to ${MAX_FRAMES} (about a minute) can be read. Record one swing and try again.`);
   let delegate: "GPU" | "CPU" = "GPU";
   let landmarker = await createVideoPoseLandmarker("GPU").catch(() => { delegate = "CPU"; return createVideoPoseLandmarker("CPU"); });
-  const poses: (GppLandmark[] | null)[] = [];
+  const people: GppLandmark[][][] = [];
   video.pause();
   try {
     for (let frame = 0; frame < count; frame++) {
@@ -77,12 +77,13 @@ export async function captureGolfPosePro(video: HTMLVideoElement, from: number, 
         landmarker = await createVideoPoseLandmarker("CPU");
         detection = landmarker.detectForVideo(video, timestamp);
       }
-      poses.push(detection.landmarks[0]?.map(({ x, y, visibility }) => ({ x, y, visibility: visibility ?? 0 })) ?? null);
+      people.push(detection.landmarks.map((pose) => pose.map(({ x, y, visibility }) => ({ x, y, visibility: visibility ?? 0 }))));
       onProgress?.(frame + 1, count);
     }
   } finally {
     landmarker.close();
     video.currentTime = wasTime;
   }
+  const poses = followGolfer(people, video.videoWidth / video.videoHeight);
   return { fps, analysed: golfPoseProResult(poses, fps, video.videoWidth, video.videoHeight, first) };
 }

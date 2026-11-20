@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import type { Segment, Weakness } from "../../types/analytics";
 import type { Round } from "../../types/rounds";
 import type { PlayerState } from "../player-state";
+import { TOUR } from "../golf/baselines";
 import { askCoach, buildAskIndex, ruleBasedAnswer, searchIndex } from "./ask";
 import type { PlayerProfile } from "../../types/player";
 import type { SwingFinding, SwingSession } from "../../types/practice";
@@ -196,6 +197,7 @@ function askState(): PlayerState {
     rounds: [round],
     shots: [],
     shotsByRound: new Map(),
+    baseline: TOUR,
     summary: {
       total: 0,
       per_round: 0,

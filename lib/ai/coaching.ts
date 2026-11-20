@@ -163,13 +163,13 @@ function playerMessage(primary: Weakness, context: CoachingContext): string {
     ? `You are giving away ${primary.strokes_lost_per_round.toFixed(1)} strokes a round from ${primary.title.toLowerCase()}. That is the single biggest thing standing between you and a lower score.`
     : `${primary.title} looks like it might be costing you shots, but with ${primary.sample_size} shots on file I would call that a signal rather than a verdict.`;
 
-  // Against a Tour baseline a good amateur category can still be negative, so
-  // only call something a strength when it actually is one.
+  // A player's best category can still trail the baseline, so only call
+  // something a strength when it actually is one.
   const strength = !strongest
     ? ""
     : strongest.perRound >= 0
       ? ` ${strongest.category} is a genuine strength (+${strongest.perRound.toFixed(2)} per round), so leave it alone.`
-      : ` ${strongest.category} is your strongest category (${strongest.perRound.toFixed(2)} per round against Tour), so it is not where the work belongs right now.`;
+      : ` ${strongest.category} is your strongest category (${strongest.perRound.toFixed(2)} per round against the ${context.dataCoverage.baseline} baseline), so it is not where the work belongs right now.`;
 
   const overall =
     context.dataCoverage.rounds > 0

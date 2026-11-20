@@ -8,6 +8,8 @@ import { summarizeStrokesGained } from "../analytics/aggregate";
 import { improvementSummary, practiceVolume } from "../analytics/practice-progress";
 import { MIN_SAMPLE } from "../analytics/weaknesses";
 import { BASELINE_NAME } from "../golf/expected-strokes";
+import { TOUR, rebaseRound, rebaseSummary, type Baseline } from "../golf/baselines";
+import { summarizeRound } from "../golf/strokes-gained";
 
 /**
  * The AI never sees the database. It sees this: a small, already-computed
@@ -101,6 +103,8 @@ export type ContextInput = {
   profile: PlayerProfile;
   rounds: Round[];
   shots: ScoredShot[];
+  /** The level the weaknesses were ranked against; the summary is rebased to match. */
+  baseline?: Baseline;
   weaknesses: Weakness[];
   practiceSessions: PracticeSession[];
   practiceTrends: PracticeMetricTrend[];
@@ -113,7 +117,8 @@ export type ContextInput = {
 };
 
 export function buildCoachingContext(input: ContextInput): CoachingContext {
-  const sg: SGSummary = summarizeStrokesGained(input.shots);
+  const baseline = input.baseline ?? TOUR;
+  const sg: SGSummary = rebaseSummary(summarizeStrokesGained(input.shots), baseline);
   const improvement = improvementSummary(input.practiceTrends);
   const volume = practiceVolume(input.practiceSessions, input.now ?? new Date());
 
@@ -143,7 +148,7 @@ export function buildCoachingContext(input: ContextInput): CoachingContext {
       practiceSessions: input.practiceSessions.filter((s) => s.status === "complete").length,
       drillAttempts: input.drillAttemptCount,
       swingSessions: input.swingSessions.length,
-      baseline: BASELINE_NAME,
+      baseline: baseline.id === "tour" ? BASELINE_NAME : baseline.label,
     },
     strokesGainedSummary: {
       perRound: sg.per_round,
@@ -160,12 +165,7 @@ export function buildCoachingContext(input: ContextInput): CoachingContext {
         date: r.played_on,
         course: r.course_name,
         score: r.score,
-        sgTotal:
-          Math.round(
-            input.shots
-              .filter((s) => s.round_id === r.id)
-              .reduce((sum, s) => sum + s.strokes_gained, 0) * 100,
-          ) / 100,
+        sgTotal: rebaseRound(summarizeRound(r, input.shots.filter((s) => s.round_id === r.id)), baseline).sg_total,
       })),
     distancePerformance: input.weaknesses
       .filter((w) => w.kind === "approach_distance")

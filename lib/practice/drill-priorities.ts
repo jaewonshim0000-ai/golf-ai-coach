@@ -3,6 +3,7 @@ import type { Drill, PracticeBlock } from "../../types/practice";
 import type { Round, ScoredShot } from "../../types/rounds";
 import { buildSegments } from "../analytics/aggregate";
 import { identifyWeaknesses } from "../analytics/weaknesses";
+import { baselineForHandicap, rebaseSegment } from "../golf/baselines";
 import { goalForWeakness, practiceGoal, type GoalId } from "./goals";
 import { PRACTICE_TEST_IDS, practiceTest } from "./tests";
 
@@ -73,8 +74,10 @@ export function rankPracticeDrills(
     .slice(0, 10);
   const ids = new Set(recentRounds.map((round) => round.id));
   const recentShots = shots.filter((shot) => ids.has(shot.round_id));
+  // Against the player's own level, like the Practice recommendations and Play.
+  const baseline = baselineForHandicap(profile?.handicap_index ?? null);
   const weaknesses = identifyWeaknesses({
-    segments: buildSegments(recentShots),
+    segments: buildSegments(recentShots).map((segment) => rebaseSegment(segment, baseline)),
     profile,
     totalRounds: new Set(recentShots.map((shot) => shot.round_id)).size,
   });

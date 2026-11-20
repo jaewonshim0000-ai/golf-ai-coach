@@ -68,7 +68,8 @@ export default async function PracticePage() {
       {repo.mode() === "demo" ? <DemoNotice onReset={resetDemoAction} /> : null}
 
       {state.weaknesses.length ? <section className="space-y-3">
-        <SectionHeading title="Recommendations from your rounds" count={Math.min(2, state.weaknesses.length)} />
+        <SectionHeading title="Recommendations from your rounds" count={Math.min(2, state.weaknesses.length)}
+          description={`Where you lose the most strokes against a ${state.baseline.label.toLowerCase()}.`} />
         <div className="grid gap-3 lg:grid-cols-2">{state.weaknesses.slice(0, 2).map((weakness, index) => <PriorityCard key={weakness.key} weakness={weakness} rank={index === 0 ? 1 : 2} />)}</div>
       </section> : null}
 

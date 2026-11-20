@@ -33,7 +33,6 @@ import {
   summarizeStrokesGained,
 } from "@/lib/analytics/aggregate";
 import {
-  baselineForHandicap,
   getBaseline,
   rebaseRound,
   rebaseSegment,
@@ -103,9 +102,7 @@ export default async function RoundsPage({ searchParams }: { searchParams: Promi
   const trends = classicTrends(perRound);
   const linesFor = new Map(perRound.map(({ round, lines }) => [round.id, lines]));
 
-  const baseline = search.baseline
-    ? getBaseline(search.baseline)
-    : baselineForHandicap(state.profile?.handicap_index ?? null);
+  const baseline = search.baseline ? getBaseline(search.baseline) : state.baseline;
 
   const shots = applyFilters(state.shots, toFilters(search), state.rounds);
   const summary = rebaseSummary(summarizeStrokesGained(shots), baseline);

@@ -7,6 +7,7 @@ import { askAnswerSchema } from "./schemas";
 import { CLUB_LABELS, SG_CATEGORY_LABELS, labelize } from "../../types/golf";
 import { formatDate, percent, signed, toParLabel } from "../utils";
 import { summarizeRound } from "../golf/strokes-gained";
+import { rebaseRound } from "../golf/baselines";
 
 /**
  * The find-it agent.
@@ -183,7 +184,7 @@ export function buildAskIndex(state: PlayerState): AskEntry[] {
       id: `weakness:${weakness.id}`,
       kind: "weakness",
       title: weakness.title,
-      detail: `Costing ${weakness.strokes_lost_per_round.toFixed(2)} strokes a round · ${weakness.sample_size} shots · ${percent(weakness.confidence)} confidence · ${weakness.severity}`,
+      detail: `Costing ${weakness.strokes_lost_per_round.toFixed(2)} strokes a round vs ${state.baseline.short} · ${weakness.sample_size} shots · ${percent(weakness.confidence)} confidence · ${weakness.severity}`,
       href: segmentHref(weakness.kind, weakness.key),
       keywords: [
         "weakness",
@@ -223,7 +224,7 @@ export function buildAskIndex(state: PlayerState): AskEntry[] {
   }
 
   for (const round of state.rounds) {
-    const stats = summarizeRound(round, state.shotsByRound.get(round.id) ?? []);
+    const stats = rebaseRound(summarizeRound(round, state.shotsByRound.get(round.id) ?? []), state.baseline);
     entries.push({
       id: `round:${round.id}`,
       kind: "round",

@@ -120,7 +120,8 @@ export function rebaseSummary(summary: SGSummary, baseline: Baseline): SGSummary
   let total = 0;
   for (const category of SG_CATEGORIES) {
     const source = summary.by_category[category];
-    const perRound = round2(source.per_round - baseline.gap[category]);
+    // No shots, no comparison: an empty category must not inherit the gap.
+    const perRound = source.shots > 0 ? round2(source.per_round - baseline.gap[category]) : 0;
     by_category[category] = {
       category,
       per_round: perRound,

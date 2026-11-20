@@ -14,6 +14,7 @@ import { buildSegments, scoringTrend, sgTrend, summarizeStrokesGained } from "./
 import { improvementSummary, practiceTrends, practiceVolume, type ImprovementSummary, type PracticeVolume } from "./analytics/practice-progress";
 import { identifyWeaknesses } from "./analytics/weaknesses";
 import { scoreShots } from "./golf/strokes-gained";
+import { baselineForHandicap, rebaseSegment, rebaseSummary, type Baseline } from "./golf/baselines";
 import { suggestSession, type SuggestedSession } from "./practice/session";
 import { buildCoachingContext, type CoachingContext } from "./ai/context";
 import * as repo from "./db/repo";
@@ -33,6 +34,8 @@ export type PlayerState = {
   rounds: Round[];
   shots: ScoredShot[];
   shotsByRound: Map<string, ScoredShot[]>;
+  /** The level every strokes-gained figure below is measured against: the one nearest the player's handicap. */
+  baseline: Baseline;
   summary: SGSummary;
   segments: Segment[];
   weaknesses: Weakness[];
@@ -91,7 +94,10 @@ export async function loadPlayerState(userId: string): Promise<PlayerState> {
     shotsByRound.set(shot.round_id, list);
   }
 
-  const segments = buildSegments(shots);
+  // Shots are scored against the Tour; rank and report them against the
+  // player's own level, the default Play shows, so every screen agrees.
+  const baseline = baselineForHandicap(profile?.handicap_index ?? null);
+  const segments = buildSegments(shots).map((segment) => rebaseSegment(segment, baseline));
   const trends = practiceTrends(drillAttempts, drills);
   const weaknesses = profile
     ? identifyWeaknesses({
@@ -121,6 +127,7 @@ export async function loadPlayerState(userId: string): Promise<PlayerState> {
           profile,
           rounds,
           shots,
+          baseline,
           weaknesses,
           practiceSessions,
           practiceTrends: trends,
@@ -140,7 +147,8 @@ export async function loadPlayerState(userId: string): Promise<PlayerState> {
     rounds,
     shots,
     shotsByRound,
-    summary: summarizeStrokesGained(shots),
+    baseline,
+    summary: rebaseSummary(summarizeStrokesGained(shots), baseline),
     segments,
     weaknesses,
     practiceSessions,

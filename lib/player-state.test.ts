@@ -6,6 +6,8 @@ process.env.ENABLE_DEMO_MODE = "true";
 import { resetDemoStore, store } from "./db/demo-store";
 import { DEMO_USER_ID } from "./db/repo";
 import { loadPlayerState } from "./player-state";
+import { buildSegments } from "./analytics/aggregate";
+import { baselineForHandicap, rebaseSegment } from "./golf/baselines";
 
 /**
  * The first five minutes of a real account: a profile and nothing else.
@@ -71,5 +73,26 @@ describe("a brand new account", () => {
   it("keeps the drill library, which is reference data rather than player data", async () => {
     const state = await loadPlayerState(DEMO_USER_ID);
     assert.ok(state.drills.length > 0);
+  });
+});
+
+describe("the demo player", () => {
+  beforeEach(resetDemoStore);
+
+  it("ranks weaknesses against their own level, the same numbers Play shows", async () => {
+    const state = await loadPlayerState(DEMO_USER_ID);
+    const level = baselineForHandicap(state.profile!.handicap_index);
+    assert.notEqual(level.id, "tour", "the demo player has a handicap, so Tour is the wrong yardstick");
+    assert.equal(state.baseline.id, level.id);
+
+    // Play's default breakdown: the Tour-scored segments, rebased to the player's level.
+    const play = new Map(buildSegments(state.shots).map((s) => [`${s.kind}:${s.key}`, rebaseSegment(s, level)]));
+    assert.ok(state.weaknesses.length > 0);
+    for (const weakness of state.weaknesses) {
+      const segment = play.get(weakness.id);
+      assert.ok(segment, `${weakness.id} has no segment on Play`);
+      assert.ok(segment.sg_per_round < 0, `${weakness.title} is a weakness here but a gain on Play`);
+      assert.equal(weakness.strokes_lost_per_round, -segment.sg_per_round, weakness.title);
+    }
   });
 });

@@ -32,7 +32,7 @@ export type GenerateRequest<T> = {
   schema: ZodType<T, ZodTypeDef, unknown>;
   fallback: () => T;
   maxTokens?: number;
-  /** Bound optional interactive coaching without lengthy automatic retries. */
+  /** How long to wait before showing the fallback; 20 s when omitted. */
   timeoutMs?: number;
   /** Base64 JPEG frames, sent before the prompt so the model reads them first. */
   images?: string[];
@@ -106,7 +106,7 @@ export class AnthropicProvider implements AIProvider {
             ],
           },
         ],
-      }, request.timeoutMs ? { timeout: request.timeoutMs, maxRetries: 0 } : undefined);
+      }, requestOptions(request));
 
       const text = message.content
         .map((block) => (block.type === "text" ? block.text : ""))
@@ -133,6 +133,15 @@ export class AnthropicProvider implements AIProvider {
       };
     }
   }
+}
+
+/**
+ * Every call has a fallback, so none waits long for the model. Without this the
+ * SDK waits up to 10 minutes and retries twice, which held Ask Coach and the
+ * round and practice read-outs on a spinner whenever the API was slow.
+ */
+export function requestOptions(request: { timeoutMs?: number }) {
+  return { timeout: request.timeoutMs ?? 20_000, maxRetries: 0 };
 }
 
 /** Tolerates a stray fence or trailing prose without a parsing library. */

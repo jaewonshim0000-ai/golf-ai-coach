@@ -137,7 +137,7 @@ export function PriorityCard({ weakness, rank }: { weakness: Weakness | null; ra
       <InkCard>
         <div className="hero-art-green relative flex min-h-[200px] flex-col justify-between p-4">
           <div className="hero-scrim absolute inset-0" aria-hidden />
-          <span className="dsp relative inline-flex h-[30px] items-center self-start rounded-full bg-white px-3 text-[11px] text-[#0f1a14] shadow-[0_6px_16px_-8px_rgb(0_0_0_/_0.5)]">
+          <span className="dsp relative inline-flex h-[30px] items-center self-start rounded-full bg-white/90 px-3 text-[11px] text-[#1e211b]">
             Priority #1
           </span>
           <h2 className="dsp relative text-[30px] leading-[1.02] text-white">{weakness.title}</h2>
@@ -168,7 +168,7 @@ export function PriorityCard({ weakness, rank }: { weakness: Weakness | null; ra
             />
             <input type="radio" id="priority-evidence" name="priority-panel" className="sr-only" />
 
-            <div className="relative flex rounded-full border border-white/10 bg-white/[0.07] p-1">
+            <div className="relative flex rounded-full bg-white/[0.09] p-1">
               <span
                 className="tab-pill pointer-events-none absolute inset-y-1 left-1 w-[calc(50%-0.25rem)] rounded-full bg-ink-fg shadow-[0_2px_8px_-4px_rgb(0_0_0_/_0.6)] transition-transform duration-[420ms] [transition-timing-function:var(--ease)]"
                 aria-hidden

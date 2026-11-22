@@ -42,6 +42,18 @@ it("names the weakest check in plain words and picks its library drills", () => 
   assert.ok(result.drills.every((drill) => DRILLS_BY_ID.get(drill.id) === drill));
 });
 
+it("scores a swing whose own timing fails, using GolfPosePro's key frames", () => {
+  // Hidden hands defeat the automatic swing timing; the body is still visible.
+  const frames = faceOnSwing().map((frame) => ({ ...frame, imageLandmarks: frame.imageLandmarks!.map((point, i) => i >= 15 && i <= 22 ? { ...point, visibility: 0 } : point) }));
+  const model = buildVideoModel(frames, options);
+  assert.equal(reviewSwing(model).report.phases, null);
+  // The fixture's address, top and impact samples, as GolfPosePro frames at 25 fps.
+  const keyFrames = (["Address", "Top", "Impact"] as const).map((phase, i) => ({ phase, frame: [9, 36, 44][i]!, pose: null }));
+  const result = swingResult({ ...model, golfPosePro: { ...golfPosePro, fps: 25, startFrame: 0, keyFrames } });
+  assert.ok(result.score !== null && result.score >= 8.5);
+  assert.deepEqual(result.checks, ["Head control at impact", "Height control in the backswing"]); // no rhythm from GolfPosePro phases
+});
+
 it("gives no score or drills when the recording cannot be reviewed", () => {
   const model = { ...buildVideoModel(faceOnSwing(), options), golfPosePro };
   model.imageFrames![3] = null as never;

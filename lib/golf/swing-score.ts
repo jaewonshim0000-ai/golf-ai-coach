@@ -31,23 +31,20 @@ export function scoreSwing(report: MotionReport, ballSide?: "left" | "right", ru
   const result: SwingScore = { total: null, components: [], priorities: [], reviews: [], missing: [], reason: null };
   if (!report.usable || !report.phases) result.reason = "Analyze one complete swing before scoring.";
   else if (report.view === "other") result.reason = "Choose Face on or Down the line and analyze again to use the appropriate scoring checks.";
-  // A moved camera withholds only the displacement checks, inside swingScoreChecks;
-  // posture angle and rhythm do not need a fixed camera.
-  else if (report.quality.coverage < 0.85 || report.quality.largestGap > 0.12)
-    result.reason = "A score needs at least 85% visible body tracking and no sample gaps over 0.12 seconds. Re-record with your whole body visible.";
   if (result.reason) return result;
 
+  // Patchy tracking or a moved camera withholds only the checks it affects, inside
+  // swingScoreChecks; every swing with at least one measured check gets a score.
   Object.assign(result, swingScoreChecks(report, ballSide, rubric));
   const weight = result.components.reduce((sum, item) => sum + item.weight, 0);
-  // Any two of the three checks make an overall score; weights come from the calibrated rubric.
-  if (result.components.length >= 2) {
+  // Weights come from the calibrated rubric.
+  if (result.components.length) {
     result.total = Math.round(result.components.reduce((sum, item) => sum + item.score * item.weight, 0) / weight);
     if (result.components.some((item) => item.scoreRange)) {
       result.totalRange = [result.total, Math.round(result.components.reduce((sum, item) => sum + (item.scoreRange?.[1] ?? item.score) * item.weight, 0) / weight)];
     }
-  } else result.reason = `Movement analysis is complete, but only ${result.components.length} of 3 checks could be scored. An overall score needs at least two.${
-    report.quality.cameraStable ? "" : " The camera moved, so body movement could not be measured; rest the phone on a stand."}`;
-  // Keep supported improvement cues even when an overall score is unavailable.
+  } else result.reason = `None of the swing checks could be measured in this video.${
+    report.quality.cameraStable ? " Re-record with your whole body and hands visible." : " The camera moved, so body movement could not be measured; rest the phone on a stand."}`;
   // A ranged reading is a priority only if all observed positions score below 85.
   result.priorities = rankPriorities(result.components);
   result.reviews = result.components.filter((item) => item.scoreRange && item.scoreRange[0] < 85 && item.scoreRange[1] >= 85);

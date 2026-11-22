@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useState, useTransition } from "react";
-import { CheckCircle2, ChevronLeft, ChevronRight, Loader2, Minus, Plus } from "lucide-react";
+import { ChevronLeft, Loader2, Minus, Plus } from "lucide-react";
 
 import { finishScorecardAction, saveHoleAction } from "@/app/actions";
 import { IDLE } from "@/lib/action-state";
@@ -9,15 +9,15 @@ import { lineFromStat } from "@/lib/analytics/classic";
 import type { HoleSpec, HoleStat, Round } from "@/types/rounds";
 import { cn, signed } from "@/lib/utils";
 import {
+  ActionBar,
   Button,
   ButtonLink,
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  HeroPill,
-  PageHero,
-  Stat,
+  RoundButton,
+  StepDot,
+  StepStrip,
+  TopBar,
+  barButton,
+  chip,
 } from "@/components/ui/primitives";
 
 /**
@@ -30,13 +30,6 @@ const NAMES: Record<number, string> = { [-3]: "Albatross", [-2]: "Eagle", [-1]: 
 
 function scoreName(toPar: number): string {
   return NAMES[toPar] ?? (toPar < 0 ? `${-toPar} under` : `${toPar} over`);
-}
-
-function toParTone(toPar: number): string {
-  if (toPar < 0) return "bg-good text-white";
-  if (toPar === 1) return "bg-warn-soft text-warn";
-  if (toPar >= 2) return "bg-bad-soft text-bad";
-  return "text-fg";
 }
 
 type Draft = { score: number; putts: number; fairway: HoleStat["fairway"]; penalties: number };
@@ -115,104 +108,178 @@ export function ScorecardEntry({ round, holes }: { round: Round; holes: HoleSpec
     hole.hole_number,
   );
 
+  const stripStart = Math.max(0, Math.min(index - 2, holes.length - 5));
+  const strip = holes.slice(stripStart, stripStart + 5);
+  const toParText = played.length ? (toPar === 0 ? "E" : signed(toPar, 0)) : "E";
+  const putts = [0, 1, 2, 3, 4];
+  const finishable = complete && round.status !== "complete";
+  const current = stats[index];
+
   return (
-    <div className="space-y-5">
-      <PageHero
-        art="course"
-        size="sm"
-        eyebrow={`${holes.length} holes · ${round.tees ? `${round.tees} tees` : "Scorecard"}`}
-        title={
-          <>
-            Live
-            <br />
-            scorecard
-          </>
+    <div className="flex flex-col gap-4">
+      <TopBar
+        left={
+          <RoundButton href={`/rounds/${round.id}`} label="Back to the round">
+            <ChevronLeft className="h-[18px] w-[18px]" strokeWidth={2.2} />
+          </RoundButton>
         }
-        pills={<HeroPill tone="solid">{round.course_name}</HeroPill>}
-        topLeft={
-          <ButtonLink href={`/rounds/${round.id}`} variant="onHero" size="sm">
-            Round
-          </ButtonLink>
+        center={<span className="text-[13px] normal-case tracking-normal text-fg">{round.course_name}</span>}
+        right={
+          <span className="dsp inline-flex h-9 items-center rounded-full bg-ink px-3.5 text-[11px] tracking-[0.1em] text-white">
+            Thru {played.length} ·&nbsp;
+            <span className={toPar > 0 ? "text-[#f2b59b]" : toPar < 0 ? "text-[#b5d27a]" : undefined}>{toParText}</span>
+          </span>
         }
       />
 
-      <Card>
-        <CardContent className="grid grid-cols-3 gap-4 p-5">
-          <Stat label="Thru" value={played.length} sub={`of ${holes.length}`} />
-          <Stat label="Score" value={total || "—"} sub={complete ? "final" : "so far"} />
-          <Stat
-            label="To par"
-            value={played.length ? (toPar === 0 ? "E" : signed(toPar, 0)) : "—"}
-            tone={toPar > 0 ? "bad" : toPar < 0 ? "good" : "neutral"}
-          />
-        </CardContent>
-      </Card>
+      <StepStrip columns={5} role="navigation" aria-label="Holes" className="gap-2 p-2.5">
+        {strip.map((item) => {
+          const i = holes.indexOf(item);
+          const stat = stats[i];
+          const here = i === index;
+          return (
+            <button
+              key={item.hole_number}
+              type="button"
+              onClick={() => go(i)}
+              aria-current={here ? "step" : undefined}
+              aria-label={`Hole ${item.hole_number}${here ? ", playing" : stat ? `, scored ${stat.score}` : ""}`}
+              className="press min-w-0"
+            >
+              <StepDot
+                tone={here ? "good" : stat ? "done" : "next"}
+                value={item.hole_number}
+                label={here ? "Hole" : stat ? `Score ${stat.score}` : "Hole"}
+                className={here ? "step-now" : undefined}
+              />
+            </button>
+          );
+        })}
+      </StepStrip>
 
-      <Card>
-        <CardHeader className="flex-row items-center justify-between gap-3">
-          <Button type="button" variant="secondary" size="icon" onClick={() => go(index - 1)} disabled={index === 0} aria-label="Previous hole">
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <div className="text-center">
-            <CardTitle className="text-[22px]">Hole {hole.hole_number}</CardTitle>
-            <p className="tabular text-[12px] text-fg-muted">
-              Par {hole.par} · {hole.yards} yd{stats[index] ? " · saved" : ""}
-            </p>
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="dsp text-[44px] leading-none">Hole {hole.hole_number}</h1>
+        <span className="dsp inline-flex h-10 items-center rounded-full border-[1.5px] border-fg px-3.5 text-[11px]">
+          Par {hole.par} · {hole.yards} yds
+        </span>
+      </div>
+
+      <section aria-label="Score" className="flex flex-col items-center gap-3 rounded-[28px] bg-surface px-4 pb-5 pt-4">
+        <div className="flex w-full items-center justify-between">
+          <button
+            type="button"
+            onClick={() => set({ score: draft.score - 1 })}
+            disabled={draft.score <= 1}
+            aria-label="One fewer stroke"
+            className="press flex h-[60px] w-[60px] items-center justify-center rounded-full bg-surface-2 disabled:opacity-40"
+          >
+            <Minus className="h-6 w-6" strokeWidth={2.2} />
+          </button>
+          <output aria-live="polite" aria-label="Strokes" className="font-display tabular text-[96px] leading-none">
+            {draft.score}
+          </output>
+          <button
+            type="button"
+            onClick={() => set({ score: draft.score + 1 })}
+            disabled={draft.score >= 20}
+            aria-label="One more stroke"
+            className="press flex h-[60px] w-[60px] items-center justify-center rounded-full bg-accent text-white disabled:opacity-40"
+          >
+            <Plus className="h-6 w-6" strokeWidth={2.2} />
+          </button>
+        </div>
+        <span className={cn("dsp inline-flex h-[30px] items-center rounded-full px-3.5 text-[11px]", scoreTone(draft.score - hole.par))}>
+          {scoreName(draft.score - hole.par)}
+        </span>
+      </section>
+
+      <fieldset>
+        <legend className="dsp pb-2 text-[12px] tracking-[0.1em] text-fg-muted">Putts</legend>
+        <div role="radiogroup" aria-label="Putts" className="grid grid-cols-5 gap-2">
+          {putts.map((count) => {
+            const active = count === 4 ? draft.putts >= 4 : draft.putts === count;
+            const allowed = count <= draft.score - draft.penalties;
+            return (
+              <button
+                key={count}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                disabled={!allowed}
+                onClick={() => set({ putts: count === 4 && active ? draft.putts + 1 : count })}
+                className={cn(
+                  "press font-display flex h-11 items-center justify-center rounded-full text-[16px] disabled:opacity-30",
+                  active ? "bg-accent text-white" : "border-[1.5px] border-fg",
+                )}
+              >
+                {count === 4 ? (draft.putts > 4 ? draft.putts : "4+") : count}
+              </button>
+            );
+          })}
+        </div>
+      </fieldset>
+
+      {hole.par >= 4 ? (
+        <fieldset>
+          <legend className="dsp pb-2 text-[12px] tracking-[0.1em] text-fg-muted">Tee shot</legend>
+          <div role="radiogroup" aria-label="Tee shot" className="grid grid-cols-[1fr_1.2fr_1fr] gap-2">
+            {(["left", "hit", "right"] as const).map((side) => (
+              <button
+                key={side}
+                type="button"
+                role="radio"
+                aria-checked={draft.fairway === side}
+                onClick={() => set({ fairway: draft.fairway === side ? null : side })}
+                className={chip(draft.fairway === side, "h-11 px-2")}
+              >
+                {side === "hit" ? "Fairway" : side === "left" ? "← Left" : "Right →"}
+              </button>
+            ))}
           </div>
-          <Button type="button" variant="secondary" size="icon" onClick={() => go(index + 1)} disabled={index === holes.length - 1} aria-label="Next hole">
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          <div className="text-center">
-            <Stepper label="Strokes" value={draft.score} min={1} max={20} onChange={(score) => set({ score })} big />
-            <p className={cn("mt-2 text-[13px] font-medium", draft.score < hole.par ? "text-good" : draft.score > hole.par ? "text-bad" : "text-fg-muted")}>
-              {scoreName(draft.score - hole.par)}
-            </p>
-          </div>
+        </fieldset>
+      ) : null}
 
-          <div className="grid grid-cols-2 gap-4">
-            <Stepper label="Putts" value={draft.putts} min={0} max={draft.score - draft.penalties} onChange={(putts) => set({ putts })} />
-            <Stepper label="Penalties" value={draft.penalties} min={0} max={draft.score - 1} onChange={(penalties) => set({ penalties })} />
-          </div>
+      <div className="flex items-center justify-between rounded-[22px] bg-surface py-2.5 pl-4 pr-2.5">
+        <span className="text-[15px] font-semibold">Penalties</span>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => set({ penalties: draft.penalties - 1 })}
+            disabled={draft.penalties <= 0}
+            aria-label="Fewer penalties"
+            className="press flex h-10 w-10 items-center justify-center rounded-full bg-surface-2 disabled:opacity-40"
+          >
+            <Minus className="h-4 w-4" strokeWidth={2.4} />
+          </button>
+          <output aria-live="polite" aria-label="Penalties" className="font-display tabular w-5 text-center text-[22px]">
+            {draft.penalties}
+          </output>
+          <button
+            type="button"
+            onClick={() => set({ penalties: draft.penalties + 1 })}
+            disabled={draft.penalties >= draft.score - 1}
+            aria-label="More penalties"
+            className="press flex h-10 w-10 items-center justify-center rounded-full bg-surface-2 disabled:opacity-40"
+          >
+            <Plus className="h-4 w-4" strokeWidth={2.4} />
+          </button>
+        </div>
+      </div>
 
-          {hole.par >= 4 ? (
-            <div>
-              <p className="dsp mb-1.5 text-[10px] tracking-[0.15em] text-fg-subtle">Tee shot</p>
-              <div className="grid grid-cols-3 gap-1.5" role="group" aria-label="Fairway">
-                {(["left", "hit", "right"] as const).map((side) => (
-                  <Button
-                    key={side}
-                    type="button"
-                    variant={draft.fairway === side ? "primary" : "secondary"}
-                    aria-pressed={draft.fairway === side}
-                    onClick={() => set({ fairway: draft.fairway === side ? null : side })}
-                  >
-                    {side === "hit" ? "Fairway" : side === "left" ? "Left" : "Right"}
-                  </Button>
-                ))}
-              </div>
-            </div>
-          ) : null}
+      <p className="text-[12.5px] text-fg-subtle" aria-live="polite">
+        {live.gir ? "Green in regulation." : `Missed the green in regulation${draft.score <= hole.par ? " — but scrambled for par or better." : "."}`}
+        {current ? " · Saved" : ""}
+      </p>
 
-          <p className="rounded-xl bg-surface-2 px-3.5 py-2.5 text-[12.5px] text-fg-muted" aria-live="polite">
-            {live.gir ? "Green in regulation." : `Missed the green in regulation${draft.score <= hole.par ? " — but scrambled for par or better." : "."}`}
-          </p>
+      {error ? (
+        <p role="alert" className="rounded-2xl bg-bad-soft px-3.5 py-2.5 text-[13px] text-bad">
+          {error}
+        </p>
+      ) : null}
 
-          {error ? <p role="alert" className="rounded-xl bg-bad-soft px-3 py-2 text-sm text-bad">{error}</p> : null}
-
-          <Button type="button" className="w-full" onClick={save} disabled={saving}>
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-            {stats[index] ? `Update hole ${hole.hole_number}` : `Save hole ${hole.hole_number}`}
-          </Button>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Scorecard</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
+      <section className="mt-4 flex flex-col gap-3">
+        <h2 className="dsp text-[24px] leading-none">Scorecard</h2>
+        <div className="flex flex-col gap-3 rounded-[22px] bg-ink p-3 text-white">
           {[holes.slice(0, 9), holes.slice(9)]
             .filter((side) => side.length > 0)
             .map((side, sideIndex) => {
@@ -223,10 +290,12 @@ export function ScorecardEntry({ round, holes }: { round: Round; holes: HoleSpec
                   <table className="tabular w-full text-center text-[12px]">
                     <caption className="sr-only">{sideIndex === 0 ? "Front nine" : "Back nine"}</caption>
                     <thead>
-                      <tr className="text-fg-subtle">
-                        <th scope="row" className="w-10 text-left font-normal">Hole</th>
+                      <tr className="text-[#a9ad9f]">
+                        <th scope="row" className="dsp w-10 text-left text-[10px] font-bold">
+                          Hole
+                        </th>
                         {side.map((h) => (
-                          <th key={h.hole_number} scope="col" className="font-normal">
+                          <th key={h.hole_number} scope="col" className="font-bold">
                             <button
                               type="button"
                               onClick={() => go(h.hole_number - 1)}
@@ -237,28 +306,30 @@ export function ScorecardEntry({ round, holes }: { round: Round; holes: HoleSpec
                             </button>
                           </th>
                         ))}
-                        <th scope="col" className="font-normal">{sideIndex === 0 ? "Out" : "In"}</th>
+                        <th scope="col" className="dsp text-[10px] font-bold">
+                          {sideIndex === 0 ? "Out" : "In"}
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
-                      <tr className="text-fg-subtle">
-                        <th scope="row" className="text-left font-normal">Par</th>
-                        {side.map((h) => <td key={h.hole_number}>{h.par}</td>)}
+                      <tr className="text-[#a9ad9f]">
+                        <th scope="row" className="dsp text-left text-[10px] font-bold">
+                          Par
+                        </th>
+                        {side.map((h) => (
+                          <td key={h.hole_number}>{h.par}</td>
+                        ))}
                         <td>{side.reduce((sum, h) => sum + h.par, 0)}</td>
                       </tr>
-                      <tr className="font-semibold">
-                        <th scope="row" className="text-left font-normal text-fg-subtle">Score</th>
+                      <tr className="font-display text-[15px]">
+                        <th scope="row" className="dsp text-left font-sans text-[10px] font-bold text-[#a9ad9f]">
+                          You
+                        </th>
                         {side.map((h, i) => {
                           const stat = sideStats[i];
                           return (
                             <td key={h.hole_number} className="py-1">
-                              {stat ? (
-                                <span className={cn("inline-flex h-6 w-6 items-center justify-center rounded-full", toParTone(stat.score - h.par))}>
-                                  {stat.score}
-                                </span>
-                              ) : (
-                                <span className="text-fg-subtle">·</span>
-                              )}
+                              {stat ? <ScoreMark score={stat.score} par={h.par} /> : <span className="text-[#6a6f60]">·</span>}
                             </td>
                           );
                         })}
@@ -269,56 +340,83 @@ export function ScorecardEntry({ round, holes }: { round: Round; holes: HoleSpec
                 </div>
               );
             })}
-        </CardContent>
-      </Card>
+        </div>
+        <p className="tabular text-[13px] text-fg-muted">
+          {played.length} of {holes.length} holes · {total || "—"} strokes
+        </p>
+        {round.status === "complete" ? (
+          <ButtonLink href={`/rounds/${round.id}`} variant="secondary" className="self-start">
+            View round summary
+          </ButtonLink>
+        ) : null}
+      </section>
 
-      {round.status === "complete" ? (
-        <ButtonLink href={`/rounds/${round.id}`} className="w-full">
-          View round summary
-        </ButtonLink>
-      ) : (
-        <form action={finishAction} className="space-y-2">
-          <input type="hidden" name="round_id" value={round.id} />
-          {finishState.message ? <p role="alert" className="text-sm text-bad">{finishState.message}</p> : null}
-          <Button type="submit" variant={complete ? "primary" : "secondary"} className="w-full" disabled={!complete || finishing}>
+      <form id="finish-round" action={finishAction}>
+        <input type="hidden" name="round_id" value={round.id} />
+        {finishState.message ? (
+          <p role="alert" className="text-[13px] text-bad">
+            {finishState.message}
+          </p>
+        ) : null}
+      </form>
+
+      <ActionBar>
+        <Button
+          type="button"
+          variant="secondary"
+          className={cn(barButton, "bg-bg")}
+          onClick={() => go(index - 1)}
+          disabled={index === 0 || saving}
+        >
+          Previous
+        </Button>
+        {finishable && current && draftUnchanged(draft, current) ? (
+          <Button type="submit" form="finish-round" className={barButton} disabled={finishing}>
             {finishing ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            {complete ? "Finish round" : `Finish after hole ${holes.length}`}
+            Finish round
           </Button>
-        </form>
-      )}
+        ) : (
+          <Button type="button" className={barButton} onClick={save} disabled={saving}>
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            {index === holes.length - 1 || (complete && current) ? "Save hole" : "Next hole"}
+          </Button>
+        )}
+      </ActionBar>
     </div>
   );
 }
 
-function Stepper({
-  label,
-  value,
-  min,
-  max,
-  onChange,
-  big = false,
-}: {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  onChange: (value: number) => void;
-  big?: boolean;
-}) {
+/** The design's scorecard marks: a circle under par, a box over, two boxes for a double. */
+function ScoreMark({ score, par }: { score: number; par: number }) {
+  const diff = score - par;
+  if (diff < 0) {
+    return <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-accent">{score}</span>;
+  }
+  if (diff === 0) return <span>{score}</span>;
   return (
-    <div className={cn("space-y-1.5", big && "mx-auto max-w-[240px]")}>
-      <span className="dsp block text-[10px] tracking-[0.15em] text-fg-subtle">{label}</span>
-      <div className="flex items-center justify-between gap-2">
-        <Button type="button" variant="secondary" size="icon" onClick={() => onChange(value - 1)} disabled={value <= min} aria-label={`Fewer ${label.toLowerCase()}`}>
-          <Minus className="h-4 w-4" />
-        </Button>
-        <output aria-live="polite" aria-label={label} className={cn("tabular font-semibold", big ? "text-[44px] leading-none" : "text-[24px]")}>
-          {value}
-        </output>
-        <Button type="button" variant="secondary" size="icon" onClick={() => onChange(value + 1)} disabled={value >= max} aria-label={`More ${label.toLowerCase()}`}>
-          <Plus className="h-4 w-4" />
-        </Button>
-      </div>
-    </div>
+    <span
+      className={cn(
+        "inline-flex h-6 w-6 items-center justify-center rounded-[5px] border-[1.5px] border-white",
+        diff >= 2 && "shadow-[0_0_0_2px_#23271f,0_0_0_3.5px_#ffffff]",
+      )}
+    >
+      {score}
+    </span>
   );
+}
+
+function draftUnchanged(draft: Draft, stat: HoleStat): boolean {
+  return (
+    draft.score === stat.score &&
+    draft.putts === (stat.putts ?? 2) &&
+    draft.fairway === stat.fairway &&
+    draft.penalties === stat.penalties
+  );
+}
+
+function scoreTone(toPar: number): string {
+  if (toPar < 0) return "bg-accent-soft text-accent-strong";
+  if (toPar === 0) return "bg-surface-2 text-fg";
+  if (toPar === 1) return "bg-warn-soft text-warn";
+  return "bg-bad-soft text-bad";
 }

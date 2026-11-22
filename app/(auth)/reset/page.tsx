@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 
 import { ResetForm } from "@/components/auth/reset-form";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/primitives";
 import { mode } from "@/lib/db/repo";
 
 export const metadata: Metadata = { title: "Reset password" };
@@ -14,11 +13,9 @@ export default function ResetPage() {
   if (mode() === "demo") redirect("/practice");
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Reset your password</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <div className="flex flex-col gap-4">
+      <h1 className="dsp text-[30px] leading-none">Reset your password</h1>
+      <div className="flex flex-col gap-4">
         <p className="text-xs leading-relaxed text-fg-muted">
           We will email you a link. Open it on this device and you can set a new password.
         </p>
@@ -28,7 +25,7 @@ export default function ResetPage() {
             Back to sign in
           </Link>
         </p>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

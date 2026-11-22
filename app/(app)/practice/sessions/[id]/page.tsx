@@ -2,27 +2,31 @@ import { createHash } from "node:crypto";
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { ArrowLeft } from "lucide-react";
+import { X } from "lucide-react";
 
 import { ReadoutSkeleton, SourceBadge } from "@/components/dashboard/sections";
 import { SessionRunner } from "@/components/practice/session-runner";
+import { ResultRow } from "@/components/practice/tracker-parts";
 import { DeletePracticeSessionButton } from "@/components/practice/delete-session";
 import {
   Badge,
-  ButtonLink,
   Card,
   CardContent,
   CardHeader,
   CardTitle,
-  HeroPill,
-  PageHero,
+  GroupLabel,
+  RoundButton,
+  ScreenTitle,
+  StatCircle,
+  TopBar,
 } from "@/components/ui/primitives";
 import { summarizePracticeSession } from "@/lib/ai/insights";
 import { getProvider } from "@/lib/ai/provider";
 import { cachedCoach } from "@/lib/ai/reconstruction-coach";
 import * as repo from "@/lib/db/repo";
 import { loadPlayerState } from "@/lib/player-state";
-import { formatDate } from "@/lib/utils";
+import { practiceTest, testResultLabel } from "@/lib/practice/tests";
+import { formatDate, percent } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Practice session" };
 export const dynamic = "force-dynamic";
@@ -38,65 +42,116 @@ export default async function PracticeSessionPage({
 
   const [bundle, state] = await Promise.all([repo.getPracticeSession(user.id, id), loadPlayerState(user.id)]);
   if (!bundle) notFound();
+  const { session, items, attempts } = bundle;
+
+  const runner = (
+    <SessionRunner
+      session={session}
+      items={items}
+      attempts={attempts}
+      drills={state.drills}
+      trends={state.practiceTrends}
+      history={state.drillAttempts}
+      footer={
+        <div className="flex justify-center">
+          <DeletePracticeSessionButton sessionId={session.id} />
+        </div>
+      }
+    />
+  );
+
+  // Live: the runner is the whole screen.
+  if (session.status !== "complete") return runner;
+
+  // Done: the design's session-complete screen.
+  const results = items
+    .map((item) => {
+      const attempt = attempts.find((candidate) => candidate.practice_item_id === item.id);
+      if (!attempt) return null;
+      const drill = state.drills.find((candidate) => candidate.id === item.drill_id);
+      const test = practiceTest(item.drill_id);
+      // A new best: better than every earlier attempt at the same drill.
+      const earlier = state.drillAttempts.filter(
+        (other) => other.drill_id === item.drill_id && other.id !== attempt.id && other.completed_at < attempt.completed_at,
+      );
+      const previousBest = earlier.length ? Math.max(...earlier.map((other) => other.score)) : null;
+      const best = previousBest !== null && attempt.score > previousBest;
+      const previous = earlier.sort((a, b) => a.completed_at.localeCompare(b.completed_at)).at(-1);
+      const detail = test
+        ? testResultLabel(test, attempt)
+        : best
+          ? `New best · was ${percent(previousBest!)}`
+          : previous
+            ? previous.score === attempt.score
+              ? "Same as last time"
+              : `Last time ${percent(previous.score)}`
+            : attempt.score >= item.target_value
+              ? "Goal met"
+              : `Target ${percent(item.target_value)}`;
+      return {
+        id: item.id,
+        name: drill?.name ?? test?.name ?? item.drill_id,
+        detail,
+        score: test && test.kind !== "spiral" && test.kind !== "carry" && test.kind !== "dispersion"
+          ? `${attempt.successes}/10`
+          : `${attempt.successes}/${attempt.attempts}`,
+        best,
+      };
+    })
+    .filter((row): row is NonNullable<typeof row> => row !== null);
 
   return (
-    <div className="space-y-5">
-      <PageHero
-        art="range"
-        eyebrow={`${formatDate(bundle.session.scheduled_for)} · ${
-          bundle.session.actual_duration ?? bundle.session.planned_duration
-        } min`}
-        title={bundle.session.title}
-        pills={
-          <>
-            <HeroPill tone="solid">{bundle.session.focus}</HeroPill>
-            <HeroPill>
-              {bundle.session.status === "complete" ? "Complete" : "In progress"}
-            </HeroPill>
-          </>
+    <div className="flex flex-col gap-4">
+      <TopBar
+        left={
+          <RoundButton href="/practice/history" label="Close">
+            <X className="h-[18px] w-[18px]" strokeWidth={2.2} />
+          </RoundButton>
         }
-        topLeft={
-          <ButtonLink href="/practice" variant="onHero" size="sm">
-            <ArrowLeft className="h-3.5 w-3.5" /> Practice
-          </ButtonLink>
-        }
+        center={formatDate(session.completed_at ?? session.scheduled_for)}
       />
+      <ScreenTitle>
+        Session
+        <br />
+        complete!
+      </ScreenTitle>
 
-      <div className="flex justify-end">
-        <DeletePracticeSessionButton sessionId={bundle.session.id} />
-      </div>
+      <dl aria-label="Session totals" className="grid grid-cols-3 gap-2 rounded-[28px] bg-ink px-3 py-5 text-white">
+        <StatCircle value={session.actual_duration ?? session.planned_duration} label="Minutes" tone="accent" size={64} />
+        <StatCircle value={attempts.reduce((sum, attempt) => sum + attempt.attempts, 0)} label="Attempts" tone="white" size={64} />
+        <StatCircle value={results.length} label="Blocks" tone="white" size={64} />
+      </dl>
+
+      {results.length > 0 ? (
+        <section className="flex flex-col gap-2.5">
+          <h2 className="dsp text-[24px] leading-none">Saved results</h2>
+          <ul className="flex flex-col gap-2">
+            {results.map((row) => (
+              <ResultRow key={row.id} name={row.name} detail={row.detail} score={row.score} best={row.best} />
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {session.reflection ? (
+        <section className="flex flex-col gap-2">
+          <GroupLabel>Reflection</GroupLabel>
+          <p className="rounded-[22px] bg-surface px-4 py-3.5 text-[15px] leading-relaxed">{session.reflection}</p>
+        </section>
+      ) : null}
 
       <Suspense fallback={<ReadoutSkeleton title="Session read-out" />}>
         <SessionReadout
           owner={user.id}
-          input={{
-            session: bundle.session,
-            attempts: bundle.attempts,
-            drills: state.drills,
-            trends: state.practiceTrends,
-          }}
+          input={{ session, attempts, drills: state.drills, trends: state.practiceTrends }}
         />
       </Suspense>
 
-      <SessionRunner
-        session={bundle.session}
-        items={bundle.items}
-        attempts={bundle.attempts}
-        drills={state.drills}
-        trends={state.practiceTrends}
-        history={state.drillAttempts}
-      />
+      {runner}
 
-      {bundle.session.reflection ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Your reflection</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm leading-relaxed text-fg-muted">{bundle.session.reflection}</p>
-          </CardContent>
-        </Card>
-      ) : null}
+      <div className="flex justify-center">
+        <DeletePracticeSessionButton sessionId={session.id} />
+      </div>
     </div>
   );
 }

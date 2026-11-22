@@ -213,7 +213,8 @@ export async function createRoundAction(
   }
 
   revalidatePath("/rounds");
-  redirect(`/rounds/${roundId}/play`);
+  // Shot by shot by default; the quick card when the player chose it.
+  redirect(`/rounds/${roundId}/${formData.get("log") === "card" ? "score" : "play"}`);
 }
 
 /** Save one hole of a shot-tracked round, entered as where each shot started. */

@@ -1,10 +1,8 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 
-import { AuthForm } from "@/components/auth/auth-form";
+import { AuthForm, AuthTabs } from "@/components/auth/auth-form";
 import { ConfirmationForm } from "@/components/auth/confirmation-form";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/primitives";
 import { mode } from "@/lib/db/repo";
 
 export const metadata: Metadata = { title: "Sign in" };
@@ -19,25 +17,10 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
     : null;
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Sign in</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <AuthForm mode="login" initialError={initialError} />
-        <ConfirmationForm />
-        <p className="text-center text-xs text-fg-muted">
-          No account yet?{" "}
-          <Link href="/signup" className="text-accent hover:underline">
-            Create one
-          </Link>
-        </p>
-        <p className="text-center text-xs text-fg-muted">
-          <Link href="/reset" className="text-accent hover:underline">
-            Forgot your password?
-          </Link>
-        </p>
-      </CardContent>
-    </Card>
+    <div className="flex flex-col gap-5">
+      <AuthTabs active="login" />
+      <AuthForm mode="login" initialError={initialError} />
+      <ConfirmationForm />
+    </div>
   );
 }

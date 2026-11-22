@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 
 import { ResetForm } from "@/components/auth/reset-form";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/primitives";
 import { mode } from "@/lib/db/repo";
 
 export const metadata: Metadata = { title: "New password" };
@@ -17,13 +16,9 @@ export default function ResetConfirmPage() {
   if (mode() === "demo") redirect("/practice");
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Choose a new password</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <ResetForm mode="confirm" />
-      </CardContent>
-    </Card>
+    <div className="flex flex-col gap-4">
+      <h1 className="dsp text-[30px] leading-none">Choose a new password</h1>
+      <ResetForm mode="confirm" />
+    </div>
   );
 }

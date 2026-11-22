@@ -393,3 +393,107 @@ function NoData({ height = 120, label = "Not enough data yet" }: { height?: numb
     </div>
   );
 }
+
+/**
+ * The five-sided game profile from the Play tab: two filled shapes, earlier
+ * in coral under recent in olive, on a two-ring pentagon grid.
+ */
+export function RadarChart({
+  axes,
+  label,
+  earlierColor = "#F2B59B",
+  recentColor = "#6F8F37",
+}: {
+  axes: { label: string; recent: number | null; earlier: number | null }[];
+  label: string;
+  earlierColor?: string;
+  recentColor?: string;
+}) {
+  const cx = 130;
+  const cy = 110;
+  const radius = 85;
+  const n = axes.length;
+  const point = (index: number, value: number) => {
+    const angle = -Math.PI / 2 + (index * 2 * Math.PI) / n;
+    return [cx + Math.cos(angle) * radius * value, cy + Math.sin(angle) * radius * value] as const;
+  };
+  const ring = (value: number) =>
+    axes.map((_, index) => point(index, value).map((v) => v.toFixed(1)).join(",")).join(" ");
+  // A missing value sits at the centre, so the shape still closes.
+  const shape = (pick: (axis: (typeof axes)[number]) => number | null) =>
+    axes.map((axis, index) => point(index, Math.max(0.04, pick(axis) ?? 0)).map((v) => v.toFixed(1)).join(",")).join(" ");
+  const hasEarlier = axes.some((axis) => axis.earlier !== null);
+  const anchor = (index: number) => {
+    const [x] = point(index, 1);
+    return Math.abs(x - cx) < 4 ? "middle" : x > cx ? "start" : "end";
+  };
+  return (
+    <svg role="img" aria-label={label} viewBox="-16 0 292 205" className="mx-auto block w-full max-w-[330px]">
+      <g fill="none" stroke="var(--c-track)" strokeWidth="1">
+        <polygon points={ring(1)} />
+        <polygon points={ring(0.5)} />
+        <path d={axes.map((_, index) => `M${cx} ${cy} L${point(index, 1).map((v) => v.toFixed(1)).join(" ")}`).join(" ")} />
+      </g>
+      {hasEarlier ? <polygon points={shape((axis) => axis.earlier)} fill={earlierColor} fillOpacity="0.75" /> : null}
+      <polygon points={shape((axis) => axis.recent)} fill={recentColor} fillOpacity="0.8" />
+      <g fontSize="10" fontWeight="600" className="fill-fg-muted">
+        {axes.map((axis, index) => {
+          const [x, y] = point(index, 1.1);
+          return (
+            <text key={axis.label} x={x} y={y + (y > cy ? 10 : y < cy - 60 ? -2 : 3)} textAnchor={anchor(index)}>
+              {axis.label}
+            </text>
+          );
+        })}
+      </g>
+    </svg>
+  );
+}
+
+/**
+ * Strokes gained as columns from a centre line, the way the design draws
+ * approach by distance: gains rise in olive, losses hang in stone, and the
+ * worst loss is red with its value printed over it.
+ */
+export function ColumnBars({ data, label }: { data: BarDatum[]; label: string }) {
+  if (data.length === 0) return <NoData height={170} />;
+  const max = Math.max(0.2, ...data.map((d) => Math.abs(d.value)));
+  const worst = data.reduce((low, d) => (d.value < low.value ? d : low), data[0]!);
+  const up = 34;
+  const down = 100;
+  return (
+    <div role="img" aria-label={label} className="flex flex-col gap-2">
+      <div className="relative grid items-start gap-2" style={{ gridTemplateColumns: `repeat(${data.length}, minmax(0, 1fr))`, height: up + down + 22 }}>
+        {data.map((datum) => {
+          const isWorst = datum === worst && datum.value < -0.05;
+          const height = Math.max(2, (Math.abs(datum.value) / max) * (datum.value >= 0 ? up : down));
+          return (
+            <div key={datum.label} className="relative h-full">
+              <div className="absolute inset-x-0 border-t-[1.5px] border-fg" style={{ top: up + 22 }} aria-hidden />
+              {isWorst ? (
+                <span className="font-display tabular absolute inset-x-0 text-center text-[16px] text-bad" style={{ top: 0 }}>
+                  {signedText(datum.value, 1)}
+                </span>
+              ) : null}
+              <div
+                className={cn("absolute inset-x-0", datum.value >= 0 ? "rounded-t-md" : "rounded-b-md")}
+                style={{
+                  top: datum.value >= 0 ? up + 22 - height : up + 22,
+                  height,
+                  background: isWorst ? BAD : datum.value >= 0 ? ACCENT : "var(--c-track)",
+                }}
+              />
+            </div>
+          );
+        })}
+      </div>
+      <div className="grid gap-2 text-center text-[11px] font-semibold text-fg-subtle" style={{ gridTemplateColumns: `repeat(${data.length}, minmax(0, 1fr))` }}>
+        {data.map((datum) => (
+          <span key={datum.label} className={cn(datum === worst && datum.value < -0.05 && "font-bold text-fg")}>
+            {datum.label}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}

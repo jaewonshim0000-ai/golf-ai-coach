@@ -2,9 +2,49 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Flag, Target, User, Video } from "lucide-react";
+import type { SVGProps } from "react";
 
 import { cn } from "@/lib/utils";
+
+/* The design's own tab icons: a target, a pennant, a camera and a person. */
+type IconProps = SVGProps<SVGSVGElement> & { strokeWidth?: number };
+
+function Target({ strokeWidth = 2, ...props }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" aria-hidden {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <circle cx="12" cy="12" r="5" />
+      <circle cx="12" cy="12" r="1.2" fill="currentColor" />
+    </svg>
+  );
+}
+
+export function Flag({ strokeWidth = 2, ...props }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" aria-hidden {...props}>
+      <path d="M6 21V3.5" />
+      <path d="M6 4h11l-2.5 4L17 12H6" />
+    </svg>
+  );
+}
+
+function Video({ strokeWidth = 2, ...props }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" aria-hidden {...props}>
+      <rect x="3" y="6" width="13" height="12" rx="2.5" />
+      <path d="m16 10.5 5-3v9l-5-3" />
+    </svg>
+  );
+}
+
+function User({ strokeWidth = 2, ...props }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" aria-hidden {...props}>
+      <circle cx="12" cy="8" r="4" />
+      <path d="M4 21c1.6-4 4.6-6 8-6s6.4 2 8 6" />
+    </svg>
+  );
+}
 
 /*
   Three destinations plus you: practice, play, swing. Practice is the landing
@@ -20,6 +60,21 @@ const ITEMS = [
 
 function isActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+/*
+  Focused flows - building or running a session, a test, logging a round,
+  reviewing one swing - have their own buttons pinned to the bottom, so the
+  tab bar steps aside, as in the design.
+*/
+const FOCUSED = [
+  /^\/practice\/(start|sessions|tests)(\/|$)/,
+  /^\/rounds\/(?!insights|handicap)[^/]+/,
+  /^\/swing\/(?!references|calibrate)[^/]+/,
+];
+
+export function isFocused(pathname: string): boolean {
+  return FOCUSED.some((pattern) => pattern.test(pathname));
 }
 
 export function Sidebar({ mode }: { mode: "demo" | "supabase" | "setup" }) {
@@ -81,6 +136,7 @@ export function Sidebar({ mode }: { mode: "demo" | "supabase" | "setup" }) {
  */
 export function MobileNav() {
   const pathname = usePathname();
+  if (isFocused(pathname)) return null;
 
   return (
     <>

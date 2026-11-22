@@ -1,11 +1,26 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { Loader2 } from "lucide-react";
 
 import { browserClient } from "@/lib/db/supabase";
-import { Button, Field, Input } from "@/components/ui/primitives";
+import { ActionBar, Button, Field, GroupLabel, Input, barButton, chip } from "@/components/ui/primitives";
+
+/** Sign in and Create account as the two chips at the top of the sheet. */
+export function AuthTabs({ active }: { active: "login" | "signup" }) {
+  return (
+    <nav aria-label="Account" className="flex gap-2">
+      <Link href="/login" aria-current={active === "login" ? "page" : undefined} className={chip(active === "login", "flex-1")}>
+        Sign in
+      </Link>
+      <Link href="/signup" aria-current={active === "signup" ? "page" : undefined} className={chip(active === "signup", "flex-1")}>
+        Create account
+      </Link>
+    </nav>
+  );
+}
 
 /**
  * Email + password auth against Supabase. Only rendered when Supabase is
@@ -69,7 +84,7 @@ export function AuthForm({ mode, initialError = null }: { mode: "login" | "signu
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-4">
+    <form id={`auth-${mode}`} onSubmit={onSubmit} className="flex flex-col gap-4">
       {mode === "signup" ? (
         <Field label="Name">
           <Input name="name" autoComplete="name" required maxLength={80} />
@@ -77,18 +92,30 @@ export function AuthForm({ mode, initialError = null }: { mode: "login" | "signu
       ) : null}
 
       <Field label="Email">
-        <Input name="email" type="email" autoComplete="email" required />
+        <Input name="email" type="email" autoComplete="email" required placeholder="you@example.com" />
       </Field>
 
-      <Field label="Password" hint={mode === "signup" ? "At least 8 characters" : undefined}>
+      <div className="flex flex-col gap-2">
+        <div className="flex items-baseline justify-between gap-3">
+          <label htmlFor="password">
+            <GroupLabel>Password</GroupLabel>
+          </label>
+          {mode === "login" ? (
+            <Link href="/reset" className="text-[13px] font-bold text-accent underline underline-offset-2">
+              Forgot?
+            </Link>
+          ) : null}
+        </div>
         <Input
+          id="password"
           name="password"
           type="password"
           autoComplete={mode === "signup" ? "new-password" : "current-password"}
           required
           minLength={8}
+          placeholder="At least 8 characters"
         />
-      </Field>
+      </div>
 
       {mode === "signup" ? (
         <Field label="Confirm password">
@@ -103,20 +130,22 @@ export function AuthForm({ mode, initialError = null }: { mode: "login" | "signu
       ) : null}
 
       {error ? (
-        <p role="alert" className="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad">
+        <p role="alert" className="rounded-2xl bg-bad-soft px-3.5 py-2.5 text-[13px] text-bad">
           {error}
         </p>
       ) : null}
       {notice ? (
-        <p role="status" className="rounded-lg bg-good-soft px-3 py-2 text-sm text-good">
+        <p role="status" className="rounded-2xl bg-good-soft px-3.5 py-2.5 text-[13px] text-accent-strong">
           {notice}
         </p>
       ) : null}
 
-      <Button type="submit" className="w-full" disabled={pending}>
-        {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-        {mode === "signup" ? "Create account" : "Sign in"}
-      </Button>
+      <ActionBar className="[--bar-fade:var(--c-surface)] md:[&>*]:flex-1">
+        <Button type="submit" className={barButton} disabled={pending}>
+          {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+          {mode === "signup" ? "Create account" : "Sign in"}
+        </Button>
+      </ActionBar>
     </form>
   );
 }

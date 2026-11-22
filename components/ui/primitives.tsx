@@ -269,7 +269,7 @@ export function Field({
   is under 16px, which on a one-handed shot-entry screen is genuinely disruptive.
 */
 const controlStyles =
-  "h-[50px] w-full rounded-full border-[1.5px] border-transparent bg-surface-2 px-[18px] text-base text-fg placeholder:text-fg-subtle focus:border-accent focus:outline-none";
+  "h-[50px] w-full rounded-full border-[1.5px] border-transparent bg-[var(--field)] px-[18px] text-base text-fg placeholder:text-fg-subtle focus:border-accent focus:outline-none";
 
 export function Input({ className, ...props }: ComponentProps<"input">) {
   return <input className={cn(controlStyles, "tabular", className)} {...props} />;
@@ -508,4 +508,372 @@ export function HeroPill({
   ...props
 }: ComponentProps<"span"> & VariantProps<typeof heroPillStyles>) {
   return <span className={cn(heroPillStyles({ tone }), className)} {...props} />;
+}
+
+// ------------------------------------------------------- screen furniture
+
+/*
+  The pieces the redesign repeats on every screen: the round back/close
+  button, the white sheet that rides up over the hero art, the action bar
+  pinned to the bottom of a focused flow, the pill chips, the dark strip of
+  numbered circles (balls, holes, phases, days) and the stone stat circle.
+*/
+
+const roundButtonStyles = cva(
+  "press inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full",
+  {
+    variants: {
+      tone: {
+        /* On the page colour. */
+        light: "bg-surface text-fg",
+        /* On hero artwork: near-white, so it reads on any part of the art. */
+        hero: "bg-white/90 text-[#1e211b]",
+        /* On the dark camera screen. */
+        dark: "bg-white/[0.12] text-white",
+        accent: "bg-accent text-accent-fg",
+      },
+    },
+    defaultVariants: { tone: "light" },
+  },
+);
+
+type RoundButtonBase = VariantProps<typeof roundButtonStyles> & {
+  label: string;
+  children: ReactNode;
+  className?: string;
+};
+
+/** A 44px round icon button or link: back, close, play, bookmark. */
+export function RoundButton(
+  props: RoundButtonBase & ({ href: string } | ({ href?: undefined } & Omit<ComponentProps<"button">, "children">)),
+) {
+  const { label, children, tone, className } = props;
+  const classes = cn(roundButtonStyles({ tone }), className);
+  if (props.href) {
+    return (
+      <Link href={props.href} aria-label={label} className={classes}>
+        {children}
+      </Link>
+    );
+  }
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- strip the props that are not button attributes
+  const { label: _l, children: _c, tone: _t, className: _cn, href: _h, ...rest } = props;
+  return (
+    <button type="button" aria-label={label} className={classes} {...rest}>
+      {children}
+    </button>
+  );
+}
+
+/** The top row of a screen: a round button on the left, something on the right. */
+export function TopBar({
+  left,
+  center,
+  right,
+  className,
+}: {
+  left?: ReactNode;
+  center?: ReactNode;
+  right?: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={cn("relative flex min-h-11 items-center justify-between gap-3", className)}>
+      <div className="flex shrink-0 items-center gap-2">{left}</div>
+      {center ? (
+        <div className="dsp pointer-events-none absolute inset-x-16 truncate text-center text-[12px] text-fg-muted">
+          {center}
+        </div>
+      ) : null}
+      <div className="flex shrink-0 items-center gap-2">{right}</div>
+    </div>
+  );
+}
+
+/** A big Anton title straight on the page, as on the list screens. */
+export function ScreenTitle({ className, ...props }: ComponentProps<"h1">) {
+  return <h1 className={cn("dsp text-[46px] leading-[0.98]", className)} {...props} />;
+}
+
+/** The small tracked caps label over a group of controls. */
+export function GroupLabel({ className, ...props }: ComponentProps<"p">) {
+  return <p className={cn("dsp text-[12px] tracking-[0.1em] text-fg-muted", className)} {...props} />;
+}
+
+/**
+ * The hero artwork that opens a focused screen: illustrated fairway, a row of
+ * round buttons on top, a big white title at the bottom. A `Sheet` after it
+ * rides up over its bottom edge.
+ */
+export function ArtHero({
+  art = "course",
+  title,
+  eyebrow,
+  topLeft,
+  topRight,
+  children,
+  height = "md",
+  center = false,
+  className,
+}: {
+  art?: keyof typeof HERO_ART;
+  title?: ReactNode;
+  eyebrow?: ReactNode;
+  topLeft?: ReactNode;
+  topRight?: ReactNode;
+  children?: ReactNode;
+  height?: "sm" | "md" | "lg";
+  center?: boolean;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "relative -mx-4 -mt-5 flex flex-col overflow-hidden text-white md:-mx-8 md:-mt-8",
+        { sm: "min-h-[240px]", md: "min-h-[270px]", lg: "min-h-[300px]" }[height],
+        HERO_ART[art],
+        className,
+      )}
+    >
+      <div className="hero-scrim pointer-events-none absolute inset-0" />
+      <div className="relative z-10 flex items-center justify-between gap-3 px-5 pt-5 md:px-8">
+        <div className="flex items-center">{topLeft}</div>
+        <div className="flex items-center gap-2">{topRight}</div>
+      </div>
+      <div
+        className={cn(
+          "relative z-10 mt-auto flex flex-col gap-3.5 px-5 pb-11 pt-6 md:px-8",
+          center && "items-center text-center",
+        )}
+      >
+        {eyebrow ? <p className="dsp text-[11px] tracking-[0.1em] text-white/85">{eyebrow}</p> : null}
+        {title ? <h1 className="dsp text-[46px] leading-[0.98] text-white">{title}</h1> : null}
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/** The white sheet that rides over the bottom of an `ArtHero`. */
+export function Sheet({ className, ...props }: ComponentProps<"div">) {
+  return (
+    <div
+      className={cn(
+        "sheet-rise relative z-10 -mx-4 -mt-7 flex min-h-[calc(100svh-212px)] flex-col gap-4 rounded-t-[28px] bg-surface px-5 pb-32 pt-6 md:-mx-8 md:px-8 md:pb-8",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+/**
+ * The buttons of a focused flow, pinned to the bottom of the phone. On a wider
+ * screen it simply follows the content.
+ */
+export function ActionBar({ className, ...props }: ComponentProps<"div">) {
+  return (
+    <div
+      className={cn(
+        "fixed inset-x-0 bottom-0 z-40 flex gap-2.5 px-5 pb-[calc(1.875rem+env(safe-area-inset-bottom))] pt-6 [&>*]:min-w-0 [&>*]:flex-1",
+        "bg-[linear-gradient(180deg,transparent,var(--bar-fade,var(--c-bg))_34%)]",
+        "md:static md:z-auto md:mt-2 md:bg-none md:px-0 md:pb-0 md:pt-0 md:[&>*]:flex-none",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+/** Classes for the big buttons in an `ActionBar`. */
+export const barButton = "h-14 px-5 text-[13px] md:min-w-[200px]";
+
+const chipStyles = cva(
+  "press dsp inline-flex h-10 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-4 text-[11px] transition-colors",
+  {
+    variants: {
+      active: {
+        true: "bg-accent text-accent-fg",
+        false: "border-[1.5px] border-fg bg-transparent text-fg hover:bg-fg/5",
+      },
+    },
+    defaultVariants: { active: false },
+  },
+);
+
+/** A pill chip: filled olive when chosen, outlined when not. */
+export function chip(active: boolean, className?: string): string {
+  return cn(chipStyles({ active }), className);
+}
+
+/** A row of chip links, such as the tabs at the top of Play. */
+export function ChipNav({
+  items,
+  label,
+  className,
+  stretch = true,
+}: {
+  items: { href: string; label: ReactNode; active: boolean }[];
+  label: string;
+  className?: string;
+  stretch?: boolean;
+}) {
+  return (
+    <nav aria-label={label} className={cn("no-bar -mx-4 flex gap-2 overflow-x-auto px-4", className)}>
+      {items.map((item) => (
+        <Link
+          key={item.href}
+          href={item.href}
+          scroll={false}
+          aria-current={item.active ? "page" : undefined}
+          className={chip(item.active, stretch ? "flex-1" : undefined)}
+        >
+          {item.label}
+        </Link>
+      ))}
+    </nav>
+  );
+}
+
+export type StepTone = "good" | "bad" | "done" | "now" | "next" | "open";
+
+const STEP_TONE: Record<StepTone, string> = {
+  good: "bg-accent text-white",
+  bad: "bg-[#3a3f33] text-[#e9a08e]",
+  done: "bg-[#3a3f33] text-[#c9ccbf]",
+  now: "step-now bg-white text-[#1e211b]",
+  next: "bg-white text-[#1e211b]",
+  open: "border-[1.5px] border-[#4a5042] text-[#a9ad9f]",
+};
+
+/** One circle in a `StepStrip`. */
+export function StepDot({
+  tone,
+  value,
+  label,
+  href,
+  className,
+  current,
+  ariaLabel,
+}: {
+  tone: StepTone;
+  value: ReactNode;
+  label?: ReactNode;
+  href?: string;
+  className?: string;
+  current?: boolean;
+  ariaLabel?: string;
+}) {
+  const classes = cn(
+    "flex aspect-square min-w-0 flex-col items-center justify-center rounded-full leading-none",
+    STEP_TONE[tone],
+    className,
+  );
+  const body = (
+    <>
+      <span className="font-display tabular text-[20px]">{value}</span>
+      {label ? <span className="mt-0.5 text-[8px] font-bold uppercase tracking-[0.06em]">{label}</span> : null}
+    </>
+  );
+  if (href) {
+    return (
+      <Link
+        href={href}
+        aria-label={ariaLabel}
+        aria-current={current ? "step" : undefined}
+        className={cn("press", classes)}
+      >
+        {body}
+      </Link>
+    );
+  }
+  return (
+    <div aria-label={ariaLabel} className={classes}>
+      {body}
+    </div>
+  );
+}
+
+/** The dark strip of numbered circles: balls in a drill, holes in a round. */
+export function StepStrip({
+  className,
+  columns,
+  style,
+  ...props
+}: ComponentProps<"div"> & { columns: number }) {
+  return (
+    <div
+      className={cn("grid gap-1.5 rounded-[22px] bg-ink p-2.5", className)}
+      style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, ...style }}
+      {...props}
+    />
+  );
+}
+
+/** A number in a stone circle with a caps label under it. */
+export function StatCircle({
+  value,
+  label,
+  tone = "stone",
+  size = 60,
+  className,
+}: {
+  value: ReactNode;
+  label?: ReactNode;
+  tone?: "stone" | "white" | "accent";
+  size?: number;
+  className?: string;
+}) {
+  return (
+    <div className={cn("flex min-w-0 flex-col items-center gap-2", className)}>
+      <span
+        className={cn(
+          "font-display tabular flex items-center justify-center rounded-full leading-none",
+          tone === "stone" && "bg-surface-2 text-fg",
+          tone === "white" && "bg-white text-[#1e211b]",
+          tone === "accent" && "bg-accent text-white",
+        )}
+        style={{ width: size, height: size, fontSize: Math.round(size * 0.34) }}
+      >
+        {value}
+      </span>
+      {label ? <span className="dsp text-center text-[10px] tracking-[0.08em] opacity-80">{label}</span> : null}
+    </div>
+  );
+}
+
+/** A white list row: icon circle, title and detail, something on the right. */
+export function ListRow({
+  href,
+  icon,
+  title,
+  detail,
+  trailing,
+  className,
+}: {
+  href?: string;
+  icon?: ReactNode;
+  title: ReactNode;
+  detail?: ReactNode;
+  trailing?: ReactNode;
+  className?: string;
+}) {
+  const body = (
+    <>
+      {icon ? <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full">{icon}</span> : null}
+      <span className="min-w-0 flex-1">
+        <span className="block text-[16px] font-bold leading-[1.25]">{title}</span>
+        {detail ? <span className="mt-0.5 block text-[12.5px] text-fg-subtle">{detail}</span> : null}
+      </span>
+      {trailing ? <span className="flex shrink-0 items-center">{trailing}</span> : null}
+    </>
+  );
+  const classes = cn("flex items-center gap-3.5 rounded-[22px] bg-surface px-3.5 py-3.5", className);
+  return href ? (
+    <Link href={href} className={cn("press-lg", classes)}>
+      {body}
+    </Link>
+  ) : (
+    <div className={classes}>{body}</div>
+  );
 }

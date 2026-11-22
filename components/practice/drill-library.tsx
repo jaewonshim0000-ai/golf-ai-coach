@@ -100,7 +100,7 @@ export function DrillLibrary({
           No drills match. Try another distance or choose all areas.
         </p>
       ) : (
-        <ul className="grid gap-2 md:grid-cols-2">
+        <ul className="grid grid-cols-1 gap-2 md:grid-cols-2">
           {filtered.map(({ drill, forYou }) => {
             const test = practiceTest(drill.id)!;
             const saved = priorities.includes(drill.id);

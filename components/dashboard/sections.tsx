@@ -625,7 +625,7 @@ export function WeaknessList({
   return (
     <div className="space-y-4">
       <SectionHeading title={title} description={description} />
-      <div className="grid gap-2.5 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
         {weaknesses.slice(0, limit).map((weakness) => (
           <MiniCard key={weakness.id} className="space-y-2.5 p-3.5">
             <div className="flex items-start justify-between gap-3">

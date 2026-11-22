@@ -103,7 +103,7 @@ export default async function PracticePage() {
         {benchmarks.length === 0 ? (
           <p className="text-[14px] text-fg-muted">Run a session and the standards you are chasing show up here.</p>
         ) : (
-          <ul className="grid gap-2 md:grid-cols-2">
+          <ul className="grid grid-cols-1 gap-2 md:grid-cols-2">
             {benchmarks.map((benchmark) => {
               const note = benchmarkNote(benchmark);
               const isTest = Boolean(practiceTest(benchmark.drill.id));

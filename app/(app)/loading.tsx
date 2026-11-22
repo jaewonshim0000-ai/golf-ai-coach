@@ -20,7 +20,7 @@ export default function Loading() {
       </div>
 
       <div className="relative space-y-5">
-        <div className="rounded-[var(--radius-card)] bg-ink p-6 shadow-[var(--shadow-ink)]">
+        <div className="ink-surface rounded-[var(--radius-card)] p-6">
           <Skeleton className="skeleton-ink h-3 w-20" />
           <Skeleton className="skeleton-ink mt-4 h-8 w-64" />
           <Skeleton className="skeleton-ink mt-6 h-9 w-36" />

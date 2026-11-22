@@ -2,7 +2,7 @@ import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
 
 import type { HoleStat, Round } from "../../types/rounds";
-import { classicStats, classicTrends, holeLines, lineFromStat } from "./classic";
+import { classicStats, classicTrends, gameProfile, holeLines, lineFromStat } from "./classic";
 
 const holes = [4, 3, 5, 4, 4, 3, 4, 5, 4].map((par, index) => ({ hole_number: index + 1, par, yards: 380 }));
 
@@ -83,5 +83,35 @@ describe("classic stats", () => {
       trends.fairways.map((point) => [point.date, point.value]),
       [["2026-09-01", 0], ["2026-09-10", 100]],
     );
+  });
+});
+
+describe("game profile", () => {
+  it("scales each axis 0-1 and splits the last five rounds from the five before", () => {
+    const level = holes.map((spec) => hole(spec.par, 2, spec.par === 3 ? null : "hit"));
+    const bogeys = holes.map((spec) => hole(spec.par + 1, 3, spec.par === 3 ? null : "left"));
+    const rounds = [
+      ...Array.from({ length: 5 }, (_, index) => round(level, `2026-10-0${index + 1}`)),
+      ...Array.from({ length: 5 }, (_, index) => round(bogeys, `2026-09-0${index + 1}`)),
+    ].map((entry) => ({ round: entry, lines: holeLines(entry, holes, []) }));
+    const profile = gameProfile(rounds);
+    const axis = (label: string) => profile.axes.find((item) => item.label === label)!;
+    assert.equal(profile.hasEarlier, true);
+    assert.equal(axis("Driving").recent, 1);
+    assert.equal(axis("Driving").earlier, 0);
+    assert.equal(axis("Scoring").recent, 1);
+    assert.equal(axis("Scoring").earlier, 0.5);
+    assert.ok(Math.abs(axis("Putting").recent! - 1 / 3) < 1e-9);
+    assert.equal(axis("Putting").earlier, 0);
+    for (const item of profile.axes) {
+      for (const value of [item.recent, item.earlier]) {
+        if (value !== null) assert.ok(value >= 0 && value <= 1);
+      }
+    }
+  });
+
+  it("has no earlier shape with five rounds or fewer", () => {
+    const one = round(holes.map((spec) => hole(spec.par, 2)));
+    assert.equal(gameProfile([{ round: one, lines: holeLines(one, holes, []) }]).hasEarlier, false);
   });
 });

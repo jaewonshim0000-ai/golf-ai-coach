@@ -47,3 +47,34 @@ export function BaselinePicker({ current }: { current: string }) {
     </div>
   );
 }
+
+/** The same choice as a compact pill dropdown: "vs 10 hcp". */
+export function BaselineSelect({ current }: { current: string }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const params = useSearchParams();
+  const [pending, startTransition] = useTransition();
+  return (
+    <label className={cn("relative inline-flex", pending && "opacity-60")}>
+      <span className="sr-only">Compare against</span>
+      <select
+        value={current}
+        onChange={(event) => {
+          const next = new URLSearchParams(params.toString());
+          next.set("baseline", event.target.value);
+          startTransition(() => router.push(`${pathname}?${next.toString()}`, { scroll: false }));
+        }}
+        className="dsp h-11 cursor-pointer appearance-none rounded-full border-[1.5px] border-fg bg-transparent pl-4 pr-9 text-[11px]"
+      >
+        {BASELINES.map((baseline) => (
+          <option key={baseline.id} value={baseline.id}>
+            vs {baseline.short}
+          </option>
+        ))}
+      </select>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2">
+        <path d="m6 9 6 6 6-6" />
+      </svg>
+    </label>
+  );
+}

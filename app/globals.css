@@ -218,6 +218,65 @@ body {
   animation: pill-open 0.6s cubic-bezier(0.34, 1.45, 0.64, 1) both;
 }
 
+/*
+  Form fields take the colour that reads against whatever they sit on: white
+  on the stone page, stone inside a white card or sheet.
+*/
+:root {
+  --field: var(--c-surface);
+}
+
+.bg-surface {
+  --field: var(--c-surface-2);
+}
+
+/* The circle you are on in a strip of balls or holes: a slow gold pulse. */
+@keyframes step-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgb(232 197 71 / 0.7);
+  }
+  100% {
+    box-shadow: 0 0 0 14px rgb(232 197 71 / 0);
+  }
+}
+
+.step-now {
+  animation: step-pulse 1.6s ease-out infinite;
+}
+
+/* The pennant on the hero art flutters. */
+@keyframes flag-wave {
+  0%,
+  100% {
+    transform: none;
+  }
+  50% {
+    transform: skewY(-9deg) scaleX(0.84);
+  }
+}
+
+.flag-wave {
+  transform-box: fill-box;
+  transform-origin: 0 50%;
+  animation: flag-wave 2.6s ease-in-out infinite;
+}
+
+/* The white sheet rides up over the hero art. */
+@keyframes sheet-rise {
+  from {
+    opacity: 0;
+    transform: translateY(64px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.sheet-rise {
+  animation: sheet-rise 0.75s var(--ease) both;
+}
+
 /* Numbers in tables and stat blocks must not jitter between renders. */
 .tabular {
   font-variant-numeric: tabular-nums;

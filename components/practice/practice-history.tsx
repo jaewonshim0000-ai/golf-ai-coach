@@ -5,15 +5,21 @@ import { useActionState, useCallback, useEffect, useRef, useState, type PointerE
 import { Loader2, MoreHorizontal, Trash2 } from "lucide-react";
 import { deletePracticeSessionFromListAction } from "@/app/actions";
 import { IDLE } from "@/lib/action-state";
-import { formatDate, relativeDays } from "@/lib/utils";
+import { relativeDays } from "@/lib/utils";
 import { SWIPE_REVEAL, swipeIntent, swipeOffset } from "@/lib/practice/swipe";
 import type { PracticeSession } from "@/types/practice";
-import { Badge, Button, Card, EmptyState, SectionHeading } from "@/components/ui/primitives";
+import { Badge, Button, chip } from "@/components/ui/primitives";
 import { ShowMore } from "@/components/ui/show-more";
 
+/**
+ * Past and open sessions, as in the design: two chip tabs, then one white row
+ * per session with its date in a stone circle. Swipe a row right (or use its
+ * actions button) to delete it.
+ */
 export function PracticeHistory({ sessions }: { sessions: PracticeSession[] }) {
   const [removed, setRemoved] = useState<string[]>([]);
   const [message, setMessage] = useState("");
+  const [tab, setTab] = useState<"complete" | "open">("complete");
   const onDeleted = useCallback((id: string) => {
     setRemoved((current) => [...current, id]);
     setMessage("Session deleted.");
@@ -21,17 +27,59 @@ export function PracticeHistory({ sessions }: { sessions: PracticeSession[] }) {
   const visible = sessions.filter((session) => !removed.includes(session.id));
   const active = visible.filter((session) => session.status !== "complete");
   const completed = visible.filter((session) => session.status === "complete");
-  return <div className="space-y-5">
-    <p role="status" className={message ? "text-[12px] text-good" : "sr-only"}>{message}</p>
-    {[{ title: "Saved practices", rows: active, empty: "No practices in progress" },
-      { title: "Recent sessions", rows: completed, empty: "No completed sessions yet" }].map(({ title, rows, empty }) =>
-      <section key={title} className="space-y-3">
-        <SectionHeading title={title} count={rows.length} description={rows.length ? "Swipe right for Delete, or use the row’s action button." : undefined} />
-        {rows.length ? <Card className="space-y-3 p-3.5">
-          <ShowMore as="ul" limit={5} className="space-y-2">{rows.map((session) => <SwipePracticeRow key={session.id} session={session} onDeleted={onDeleted} />)}</ShowMore>
-        </Card> : <EmptyState title={empty} message="Your saved sessions will appear here." />}
-      </section>)}
-  </div>;
+  const rows = tab === "complete" ? completed : active;
+  return (
+    <div className="flex flex-col gap-4">
+      <p role="status" className={message ? "text-[12px] text-good" : "sr-only"}>
+        {message}
+      </p>
+      <div role="tablist" aria-label="History view" className="flex gap-2">
+        {(
+          [
+            ["complete", `Completed · ${completed.length}`],
+            ["open", `In progress · ${active.length}`],
+          ] as const
+        ).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            aria-selected={tab === key}
+            onClick={() => setTab(key)}
+            className={chip(tab === key, "flex-1")}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {rows.length ? (
+        <ShowMore as="ul" limit={8} className="flex flex-col gap-2">
+          {rows.map((session) => (
+            <SwipePracticeRow key={session.id} session={session} onDeleted={onDeleted} />
+          ))}
+        </ShowMore>
+      ) : (
+        <p className="rounded-[22px] bg-surface px-4 py-5 text-[14px] text-fg-muted">
+          {tab === "complete" ? "No completed sessions yet." : "No practices in progress."}
+        </p>
+      )}
+    </div>
+  );
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function DateCircle({ iso }: { iso: string }) {
+  const [year, month, day] = iso.slice(0, 10).split("-").map(Number);
+  return (
+    <span
+      className="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-full bg-surface-2 leading-none"
+      title={String(year)}
+    >
+      <span className="text-[9px] font-bold uppercase tracking-[0.06em] text-fg-subtle">{MONTHS[(month ?? 1) - 1]}</span>
+      <span className="font-display text-[18px]">{day}</span>
+    </span>
+  );
 }
 
 function SwipePracticeRow({ session, onDeleted }: { session: PracticeSession; onDeleted: (id: string) => void }) {
@@ -89,30 +137,35 @@ function SwipePracticeRow({ session, onDeleted }: { session: PracticeSession; on
       event.preventDefault(); setConfirming(false); setOffset(0); requestAnimationFrame(() => actions.current?.focus());
     }
   }}>
-    <div className="relative overflow-hidden rounded-xl bg-bad">
+    <div className="relative overflow-hidden rounded-[22px] bg-bad">
       <button ref={deleteTrigger} type="button" aria-label={`Delete ${session.title}`} aria-hidden={!revealed} tabIndex={revealed ? 0 : -1}
         disabled={!revealed || pending} onClick={() => setConfirming(true)}
         className="absolute inset-y-0 left-0 flex w-[88px] flex-col items-center justify-center gap-1 text-[12px] font-medium text-white">
         <Trash2 className="h-4 w-4" aria-hidden />Delete
       </button>
-      <div className="relative flex min-h-16 select-none items-center gap-2 rounded-xl border border-border bg-surface-2"
+      <div className="relative flex min-h-[68px] select-none items-center gap-2 rounded-[22px] bg-surface"
         style={{ touchAction: "pan-y", transform: `translateX(${offset}px)`, transition: dragging ? "none" : "transform 160ms ease" }}
         onPointerDown={start} onPointerMove={move} onPointerUp={(event) => finish(event)} onPointerCancel={(event) => finish(event, true)}
         onClickCapture={(event) => {
           if (suppressClick.current) { event.preventDefault(); event.stopPropagation(); suppressClick.current = false; }
         }}>
-        <Link href={`/practice/sessions/${session.id}`} className="min-w-0 flex-1 px-3.5 py-3" draggable={false}>
-          <span className="block truncate text-[13px] font-medium">{session.title}</span>
-          <span className="mt-0.5 block text-[11px] text-fg-subtle">{formatDate(session.scheduled_for)} · {relativeDays(session.scheduled_for)}</span>
+        <Link href={`/practice/sessions/${session.id}`} className="flex min-w-0 flex-1 items-center gap-3 py-2.5 pl-2.5" draggable={false}>
+          <DateCircle iso={session.scheduled_for} />
+          <span className="min-w-0">
+            <span className="block truncate text-[15px] font-bold">{session.title}</span>
+            <span className="mt-0.5 block truncate text-[12px] text-fg-subtle">
+              {session.actual_duration ?? session.planned_duration} min · {relativeDays(session.scheduled_for)}
+            </span>
+          </span>
         </Link>
-        <Badge tone={session.status === "complete" ? "good" : "warn"}>{session.status === "complete" ? "done" : session.status === "planned" ? "planned" : "open"}</Badge>
+        {session.status !== "complete" ? <Badge tone="warn">{session.status === "planned" ? "planned" : "open"}</Badge> : null}
         <button ref={actions} type="button" aria-label={`Session actions for ${session.title}`} aria-expanded={revealed}
-          disabled={pending} onClick={() => { setOffset(revealed ? 0 : SWIPE_REVEAL); requestAnimationFrame(() => revealed ? actions.current?.focus() : deleteTrigger.current?.focus()); }} className="mr-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-fg-muted hover:bg-track">
+          disabled={pending} onClick={() => { setOffset(revealed ? 0 : SWIPE_REVEAL); requestAnimationFrame(() => revealed ? actions.current?.focus() : deleteTrigger.current?.focus()); }} className="mr-1.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-fg-muted hover:bg-surface-2">
           <MoreHorizontal className="h-4 w-4" aria-hidden />
         </button>
       </div>
     </div>
-    {confirming ? <div role="alertdialog" aria-labelledby={`delete-title-${session.id}`} className="rounded-xl bg-surface-2 p-3">
+    {confirming ? <div role="alertdialog" aria-labelledby={`delete-title-${session.id}`} className="rounded-[22px] bg-surface p-4">
       <p id={`delete-title-${session.id}`} className="text-[13px] font-semibold">Delete “{session.title}”?</p>
       <p className="mt-1 text-[12px] text-fg-muted">This removes the session and its saved results.</p>
       <form action={formAction} className="mt-3 flex flex-wrap items-center gap-2">

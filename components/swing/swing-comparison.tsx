@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { cn } from "@/lib/utils";
 import { Button, ButtonLink, Select } from "@/components/ui/primitives";
 import { browserClient } from "@/lib/db/supabase";
 import { getClip } from "@/lib/video-store";
@@ -106,26 +107,36 @@ function SynchronizedVideos({ user, reference, comparison }: { user: ComparisonC
     { clip: user, src: userSource, video: userVideo, label: "Your swing", anchors: a, mirror: false },
     { clip: reference, src: referenceSource, video: refVideo, label: comparison.referenceName, anchors: b, mirror: comparison.mirrorReference },
   ];
-  return <div className="space-y-4">
-    <div className="grid grid-cols-2 items-start gap-2 sm:gap-4">{clips.map((item, index) => <div key={item.clip.id}>
-      <p className="mb-2 truncate text-[12px] font-semibold">{item.label}</p>
-      <div className="overflow-hidden rounded-xl bg-black"><video ref={item.video} src={item.src.source ?? undefined} preload="metadata" muted playsInline
+  const phase = Math.min(3, Math.round(progress));
+  return <div className="space-y-3">
+    <div className="grid grid-cols-2 items-start gap-2 sm:gap-4">{clips.map((item, index) => <div key={item.clip.id} className="relative overflow-hidden rounded-[22px] bg-[#2a3a1f]">
+      <video ref={item.video} src={item.src.source ?? undefined} preload="metadata" muted playsInline
         aria-label={item.label} className="aspect-[3/4] w-full object-contain" style={item.mirror ? { transform: "scaleX(-1)" } : undefined}
         onLoadedMetadata={(event) => {
           const video = event.currentTarget;
           video.currentTime = Math.min(video.duration, item.anchors[0] * item.clip.slowMotion);
           setLoaded((previous) => index === 0 ? [true, previous[1]] : [previous[0], true]);
-        }} onError={() => { pause(); setError(`The ${index === 0 ? "user" : "reference"} video cannot be played. Try an MP4 export.`); }} /></div>
-      {item.src.error ? <p role="alert" className="mt-2 text-[12px] text-bad">{item.src.error}</p> : null}
+        }} onError={() => { pause(); setError(`The ${index === 0 ? "user" : "reference"} video cannot be played. Try an MP4 export.`); }} />
+      <span className={cn("dsp absolute left-2.5 top-2.5 inline-flex h-7 max-w-[calc(100%-1.25rem)] items-center truncate rounded-full px-2.5 text-[10px]", index === 0 ? "bg-gold text-[#1e211b]" : "bg-white text-[#1e211b]")}>
+        {index === 0 ? "You" : item.label}
+      </span>
+      {item.src.error ? <p role="alert" className="p-2 text-[12px] text-bad">{item.src.error}</p> : null}
     </div>)}
+    </div>
+    <div role="group" aria-label="Swing position" className="grid grid-cols-4 gap-1 rounded-full bg-ink p-1.5">
+      {(["Setup", "Top", "Contact", "Finish"] as const).map((label, index) => (
+        <button key={label} type="button" disabled={!ready} aria-pressed={phase === index} onClick={() => seek(index)}
+          className={cn("press dsp h-11 rounded-full text-[11px] disabled:opacity-50", phase === index ? "bg-accent text-white" : "text-[#c9ccbf]")}>
+          {label}
+        </button>
+      ))}
     </div>
     <label className="block text-[12px] text-fg-muted">Synchronized swing position
       <input aria-label="Synchronized swing position" type="range" min={0} max={3} step={0.01} value={progress} disabled={!ready} onChange={(event) => seek(Number(event.target.value))} className="mt-2 w-full accent-accent" />
     </label>
-    <div className="flex flex-wrap gap-2">
-      <Button type="button" size="sm" disabled={!ready} onClick={() => playing ? pause() : void play()}>{playing ? "Pause" : "Play together"}</Button>
-      {(["Setup", "Top", "Contact", "Follow-through"] as const).map((label, index) => <Button key={label} type="button" variant="secondary" size="sm" disabled={!ready} onClick={() => seek(index)}>{label}</Button>)}
-    </div>
+    <Button type="button" className="h-14 w-full text-[13px]" disabled={!ready} onClick={() => playing ? pause() : void play()}>
+      {playing ? "Pause" : <><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden><path d="M7 4.5v15l12.5-7.5z" fill="currentColor" /></svg> Play together</>}
+    </Button>
     {comparison.mirrorReference ? <p className="text-[11px] text-fg-subtle">Reference mirrored to line up the lead and trail sides.</p> : null}
     {error ? <p role="alert" className="text-[12px] text-bad">{error}</p> : null}
   </div>;
@@ -136,8 +147,9 @@ export function SwingComparisonPanel({ user, reference, comparison, options, req
   options: ReferenceOption[]; requested?: string; message?: string | null; advice?: ReactNode;
 }) {
   const canReplay = comparison && reference && comparison.userAnchors && comparison.referenceAnchors && comparison.status !== "incompatible";
-  return <section className="rounded-2xl border border-border bg-surface p-5">
-    <h2 className="text-[15px] font-semibold">{comparison ? `Compare with ${comparison.referenceName}` : "Compare with a reference"}</h2>
+  return <section className="rounded-[22px] bg-surface-2 p-4">
+    <h2 className="dsp text-[26px] leading-none">{comparison ? "You vs your best" : "Compare with a reference"}</h2>
+    {comparison ? <p className="mt-1.5 text-[12.5px] text-fg-subtle">Against {comparison.referenceName}</p> : null}
     <div className="mt-3 space-y-4">
       <ReferencePicker options={options} requested={requested} />
       <p className="text-[12px] leading-relaxed text-fg-muted">{message ?? comparison?.message}</p>

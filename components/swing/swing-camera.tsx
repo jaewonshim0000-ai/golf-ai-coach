@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Circle, Loader2, RotateCcw, Square, X } from "lucide-react";
+import { Loader2, RotateCcw, Upload, X } from "lucide-react";
 import { checkFraming, detectView, type Framing } from "@/lib/golf/framing";
 import type { MotionView } from "@/lib/golf/motion-analysis";
 import { createSwingDetector } from "@/lib/pose-worker-client";
@@ -83,8 +83,10 @@ type Stage = "starting" | "ready" | "countdown" | "recording" | "review" | "erro
  * mode, so most give 60 fps; the guide points to the camera app for more.
  * Clips play back in real time, and the analysis detects that.
  */
-export function SwingCamera({ open, onUse, onClose }: {
+export function SwingCamera({ open, onUse, onClose, onUpload }: {
   open: boolean; onUse: (file: File, fps: number | null) => void; onClose: () => void;
+  /** Close the camera and pick a file instead. */
+  onUpload?: () => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const live = useRef<HTMLVideoElement>(null);
@@ -238,50 +240,107 @@ export function SwingCamera({ open, onUse, onClose }: {
 
   return (
     <dialog ref={dialog} aria-label="Record your swing" onClose={onClose} onCancel={(event) => { if (stage === "recording") event.preventDefault(); }}
-      className="m-0 h-[100svh] max-h-none w-screen max-w-none bg-black p-0 text-white backdrop:bg-black">
+      className="m-0 h-[100svh] max-h-none w-screen max-w-none bg-[linear-gradient(180deg,#1f2a16,#26341b_62%,#2e3f20)] p-0 text-white backdrop:bg-black">
       <div className="relative flex h-full flex-col">
-        <div className="relative min-h-0 flex-1">
-          <video ref={live} playsInline muted autoPlay className={cn("absolute inset-0 h-full w-full object-contain", take && "hidden")} />
+        <div className="flex items-center justify-between gap-3 px-5 pt-[max(1.25rem,env(safe-area-inset-top))]">
+          <button type="button" aria-label="Close camera" disabled={stage === "recording"} onClick={() => dialog.current?.close()}
+            className="press flex h-11 w-11 items-center justify-center rounded-full bg-white/[0.12] disabled:opacity-40">
+            <X className="h-[18px] w-[18px]" strokeWidth={2.2} />
+          </button>
+          <div role="radiogroup" aria-label="Camera angle" className="flex rounded-full bg-white/[0.12] p-1">
+            {(["face_on", "down_the_line"] as const).map((option) => (
+              <button key={option} type="button" role="radio" aria-checked={view === option} disabled={stage === "recording" || stage === "countdown"}
+                onClick={() => setView(option)}
+                className={cn("dsp h-9 rounded-full px-3.5 text-[10px]", view === option ? "bg-accent text-white" : "text-white/85")}>
+                {option === "face_on" ? "Face on" : "Down the line"}
+              </button>
+            ))}
+          </div>
+          <span className="w-11" aria-hidden />
+        </div>
+
+        <h2 className="dsp mt-5 text-center text-[24px] leading-none">
+          {stage === "review" ? "Check your swing" : stage === "recording" ? `Recording ${count}s / ${MAX_SECONDS}s` : "Stand inside the frame"}
+        </h2>
+
+        <div className="relative mx-auto mt-4 min-h-0 w-[min(100%-2.5rem,420px)] flex-1 overflow-hidden rounded-[28px] border-[1.5px] border-dashed border-white/45">
+          <video ref={live} playsInline muted autoPlay className={cn("absolute inset-0 h-full w-full object-cover", take && "hidden")} />
           {/* Real-speed recording, watched in slow motion. */}
           {take ? <video src={take.url} playsInline controls autoPlay loop muted className="absolute inset-0 h-full w-full object-contain"
             onLoadedMetadata={(event) => { event.currentTarget.defaultPlaybackRate = event.currentTarget.playbackRate = 0.25; }} /> : null}
           {!take && stage !== "error" ? <GolferOutline view={view} ok={Boolean(framing?.ok)} /> : null}
-          <div className="absolute inset-x-0 top-0 flex items-start justify-between gap-3 p-4">
-            <div className="space-y-1.5">
-              {fps ? <p className="w-fit rounded-full bg-black/60 px-2.5 py-1 text-[11px] tabular-nums">{slow ? `Slow motion · ${fps} fps` : `${fps} fps`}</p> : null}
-              {stage === "ready" && framing ? (
-                <p role="status" className={cn("max-w-[260px] rounded-lg px-2.5 py-1.5 text-[12px] leading-snug", framing.ok ? "bg-good text-white" : "bg-black/70")}>{framing.message}</p>
-              ) : null}
+          {!take && stage !== "error" ? (
+            <div className="pointer-events-none absolute inset-x-0 bottom-4 flex items-center justify-end gap-2 px-4">
+              <span className="h-px flex-1 bg-white/70" />
+              <span className="dsp text-[10px] text-white/80">Target</span>
             </div>
-            <Button type="button" variant="ghost" size="icon" aria-label="Close camera" className="text-white hover:bg-white/10"
-              disabled={stage === "recording"} onClick={() => dialog.current?.close()}><X className="h-5 w-5" /></Button>
-          </div>
-          {stage === "countdown" ? <p role="status" className="absolute inset-0 flex items-center justify-center text-[96px] font-semibold tabular-nums drop-shadow">{count}</p> : null}
-          {stage === "recording" ? (
-            <p role="status" className="absolute left-1/2 top-4 flex -translate-x-1/2 items-center gap-2 rounded-full bg-black/60 px-3 py-1 text-[13px] tabular-nums">
-              <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-bad" /> Recording {count}s / {MAX_SECONDS}s
-            </p>
           ) : null}
-          {stage === "starting" ? <p role="status" className="absolute inset-0 flex items-center justify-center gap-2 text-[13px]"><Loader2 className="h-4 w-4 animate-spin" /> Starting the camera</p> : null}
-          {stage === "error" ? <p role="alert" className="absolute inset-x-6 top-1/3 rounded-xl bg-black/70 p-4 text-center text-[13px] leading-relaxed">{error}</p> : null}
-        </div>
-        <div className="space-y-3 bg-black px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
-          {stage === "ready" ? <div className="space-y-1.5 text-center text-[12px] leading-relaxed text-white/75">
-            <p>{TIPS[view]} Fit yourself inside the outline, with the phone on a stand.</p>
-            <p>Tap record, walk to the ball and swing after the beeps. It stops by itself after {MAX_SECONDS} seconds.</p>
-            {fps && !slow ? <p className="text-white/60">This browser films at {fps} fps. For smoother slow motion, use your camera app&apos;s Slo-mo and upload the video.</p> : null}
-          </div> : null}
-          {stage === "review" ? <p className="text-center text-[12px] text-white/75">Playing at quarter speed. Check the whole swing is in the clip.</p> : null}
-          <div className="flex items-center justify-center gap-3">
-            {stage === "ready" ? <Button type="button" size="lg" onClick={record}><Circle className="h-4 w-4 fill-current" /> Record</Button> : null}
-            {stage === "countdown" ? <Button type="button" variant="secondary" onClick={() => { clearTimers(); setStage("ready"); }}>Cancel</Button> : null}
-            {stage === "recording" ? <Button type="button" variant="danger" size="lg" onClick={stop}><Square className="h-4 w-4 fill-current" /> Stop</Button> : null}
-            {stage === "review" && take ? <>
-              <Button type="button" variant="secondary" onClick={retake}><RotateCcw className="h-4 w-4" /> Retake</Button>
-              <Button type="button" size="lg" onClick={() => { onUse(take.file, fps); dialog.current?.close(); }}>Use this video</Button>
-            </> : null}
-            {stage === "error" ? <Button type="button" variant="secondary" onClick={() => dialog.current?.close()}>Close</Button> : null}
+          <div className="absolute inset-x-0 top-0 flex flex-col items-start gap-1.5 p-3">
+            {fps ? <p className="w-fit rounded-full bg-black/50 px-2.5 py-1 text-[11px] tabular-nums">{slow ? `Slow motion · ${fps} fps` : `${fps} fps`}</p> : null}
+            {stage === "ready" && framing ? (
+              <p role="status" className={cn("max-w-[260px] rounded-xl px-2.5 py-1.5 text-[12px] leading-snug", framing.ok ? "bg-accent text-white" : "bg-black/60")}>{framing.message}</p>
+            ) : null}
           </div>
+          {stage === "countdown" ? <p role="status" className="font-display absolute inset-0 flex items-center justify-center text-[110px] drop-shadow">{count}</p> : null}
+          {stage === "starting" ? <p role="status" className="absolute inset-0 flex items-center justify-center gap-2 text-[13px]"><Loader2 className="h-4 w-4 animate-spin" /> Starting the camera</p> : null}
+          {stage === "error" ? <p role="alert" className="absolute inset-x-5 top-1/3 rounded-2xl bg-black/60 p-4 text-center text-[13px] leading-relaxed">{error}</p> : null}
+        </div>
+
+        <div className="flex flex-col gap-4 px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-4">
+          {stage === "ready" || stage === "starting" ? (
+            <div className="flex flex-wrap justify-center gap-1.5 text-[12px] font-semibold">
+              {["Phone on a stand", "Even light", "One swing"].map((tip) => (
+                <span key={tip} className="rounded-full bg-white/[0.12] px-3 py-1.5">{tip}</span>
+              ))}
+            </div>
+          ) : stage === "review" ? (
+            <p className="text-center text-[12px] text-white/75">Playing at quarter speed. Check the whole swing is in the clip.</p>
+          ) : null}
+          {stage === "ready" ? <p className="text-center text-[12px] leading-relaxed text-white/70">{TIPS[view]} Tap record, walk to the ball and swing after the beeps. It stops after {MAX_SECONDS} seconds.</p> : null}
+
+          {stage === "review" && take ? (
+            <div className="flex gap-2.5">
+              <Button type="button" variant="secondary" className="h-14 flex-1 border-white bg-transparent text-white hover:bg-white/10" onClick={retake}><RotateCcw className="h-4 w-4" /> Retake</Button>
+              <Button type="button" className="h-14 flex-1 text-[13px]" onClick={() => { onUse(take.file, fps); dialog.current?.close(); }}>Use this video</Button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-[1fr_auto_1fr] items-center">
+              <div>
+                {onUpload && stage !== "recording" && stage !== "countdown" ? (
+                  <button type="button" aria-label="Upload a video instead" onClick={() => { dialog.current?.close(); onUpload(); }}
+                    className="press flex h-[52px] w-[52px] items-center justify-center rounded-2xl bg-white/[0.12]">
+                    <Upload className="h-5 w-5" />
+                  </button>
+                ) : null}
+              </div>
+              <div className="flex h-[120px] w-[120px] items-center justify-center rounded-full bg-[rgb(232_197_71_/_0.12)]">
+                {stage === "recording" ? (
+                  <button type="button" aria-label="Stop recording" onClick={stop}
+                    className="press flex h-[84px] w-[84px] items-center justify-center rounded-full border-4 border-white">
+                    <span className="h-8 w-8 rounded-lg bg-[#d9442b]" />
+                  </button>
+                ) : stage === "countdown" ? (
+                  <button type="button" aria-label="Cancel" onClick={() => { clearTimers(); setStage("ready"); }}
+                    className="press flex h-[84px] w-[84px] items-center justify-center rounded-full border-4 border-white text-[12px] font-bold">
+                    Cancel
+                  </button>
+                ) : (
+                  <button type="button" aria-label="Start recording" disabled={stage !== "ready"} onClick={record}
+                    className="press flex h-[84px] w-[84px] items-center justify-center rounded-full border-4 border-white disabled:opacity-40">
+                    <span className="h-16 w-16 rounded-full bg-[#d9442b]" />
+                  </button>
+                )}
+              </div>
+              <div className="flex justify-end">
+                {slow ? (
+                  <span aria-label="Slow motion on" className="font-display flex h-[52px] w-[52px] items-center justify-center rounded-full bg-gold text-[17px] text-[#1e211b]">
+                    ¼×
+                  </span>
+                ) : null}
+              </div>
+            </div>
+          )}
+          {stage === "error" ? <Button type="button" variant="secondary" className="border-white text-white" onClick={() => dialog.current?.close()}>Close</Button> : null}
         </div>
       </div>
     </dialog>

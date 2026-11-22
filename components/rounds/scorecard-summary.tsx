@@ -1,86 +1,99 @@
-import type { ClassicStats, HoleLine } from "@/lib/analytics/classic";
-import { Card, CardContent, CardHeader, CardTitle, Stat } from "@/components/ui/primitives";
+import type { HoleLine } from "@/lib/analytics/classic";
 import { cn, toParLabel } from "@/lib/utils";
 
-const pct = (value: number | null) => (value === null ? "—" : `${Math.round(value * 100)}%`);
 const mark = (value: boolean | null) => (value === null ? "" : value ? "●" : "○");
 
-/** A scorecard round read back: the classic numbers, then the card itself. */
-export function ScorecardSummary({ lines, stats }: { lines: HoleLine[]; stats: ClassicStats }) {
-  const score = lines.reduce((sum, line) => sum + line.score, 0);
-  const par = lines.reduce((sum, line) => sum + line.par, 0);
-  const threePutts = lines.filter((line) => (line.putts ?? 0) >= 3).length;
+/** The design's score marks: an olive circle under par, a box over it, a double box for a double. */
+export function ScoreMark({ score, par }: { score: number; par: number }) {
+  const diff = score - par;
+  if (diff < 0) return <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-accent">{score}</span>;
+  if (diff === 0) return <span className="inline-flex h-6 w-6 items-center justify-center">{score}</span>;
   return (
-    <>
-      <Card>
-        <CardContent className="grid grid-cols-3 gap-x-3 gap-y-4 p-5 lg:grid-cols-6">
-          <Stat label="Score" value={score || "—"} sub={lines.length ? toParLabel(score - par) : undefined} />
-          <Stat label="Fairways" value={pct(stats.fairways.pct)} sub={`${stats.fairways.made}/${stats.fairways.chances}`} />
-          <Stat label="Greens" value={pct(stats.greens.pct)} sub={`${stats.greens.made}/${stats.greens.chances}`} />
-          <Stat
-            label="Putts"
-            value={lines.every((line) => line.putts !== null) ? lines.reduce((sum, line) => sum + (line.putts ?? 0), 0) : "—"}
-            sub={threePutts ? `${threePutts} three-putt${threePutts === 1 ? "" : "s"}` : undefined}
-          />
-          <Stat label="Scrambling" value={pct(stats.scrambling.pct)} sub={`${stats.scrambling.made}/${stats.scrambling.chances}`} />
-          <Stat label="Penalties" value={lines.reduce((sum, line) => sum + line.penalties, 0)} />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Scorecard</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {[lines.filter((line) => line.hole <= 9), lines.filter((line) => line.hole > 9)]
-            .filter((side) => side.length > 0)
-            .map((side, index) => (
-              <div key={index} className="overflow-x-auto">
-                <table className="tabular w-full text-center text-[12px]">
-                  <caption className="sr-only">{index === 0 ? "Front nine" : "Back nine"}</caption>
-                  <tbody>
-                    <Row label="Hole" cells={side.map((line) => line.hole)} muted />
-                    <Row label="Par" cells={side.map((line) => line.par)} total={side.reduce((sum, line) => sum + line.par, 0)} muted />
-                    <tr className="font-semibold">
-                      <th scope="row" className="w-12 text-left font-normal text-fg-subtle">Score</th>
-                      {side.map((line) => (
-                        <td key={line.hole} className="py-1">
-                          <span
-                            className={cn(
-                              "inline-flex h-6 w-6 items-center justify-center rounded-full",
-                              line.score < line.par && "bg-good text-white",
-                              line.score === line.par + 1 && "bg-warn-soft text-warn",
-                              line.score >= line.par + 2 && "bg-bad-soft text-bad",
-                            )}
-                          >
-                            {line.score}
-                          </span>
-                        </td>
-                      ))}
-                      <td>{side.reduce((sum, line) => sum + line.score, 0)}</td>
-                    </tr>
-                    <Row label="Putts" cells={side.map((line) => line.putts ?? "")} muted />
-                    <Row label="FW" cells={side.map((line) => mark(line.fairway))} muted />
-                    <Row label="GIR" cells={side.map((line) => mark(line.gir))} muted />
-                  </tbody>
-                </table>
-              </div>
-            ))}
-          <p className="text-[11px] text-fg-subtle">● hit · ○ missed. Green in regulation is worked out from score and putts.</p>
-        </CardContent>
-      </Card>
-    </>
+    <span
+      className={cn(
+        "inline-flex h-6 w-6 items-center justify-center rounded-[5px] border-[1.5px] border-white",
+        diff >= 2 && "shadow-[0_0_0_2px_#23271f,0_0_0_3.5px_#ffffff]",
+      )}
+    >
+      {score}
+    </span>
   );
 }
 
-function Row({ label, cells, total, muted }: { label: string; cells: (string | number)[]; total?: number; muted?: boolean }) {
+/**
+ * A round's card as the design draws it: "Front nine" with the total, then
+ * the ink table of hole, par and your score. Putts, fairways and greens follow
+ * when the card has them.
+ */
+export function InkScorecard({ lines }: { lines: HoleLine[] }) {
+  const sides = [lines.filter((line) => line.hole <= 9), lines.filter((line) => line.hole > 9)].filter((side) => side.length > 0);
+  const detail = lines.some((line) => line.putts !== null || line.fairway !== null);
   return (
-    <tr className={cn(muted && "text-fg-muted")}>
-      <th scope="row" className="w-12 text-left font-normal text-fg-subtle">{label}</th>
-      {cells.map((cell, index) => (
-        <td key={index} className="py-0.5">{cell}</td>
-      ))}
-      <td>{total ?? ""}</td>
-    </tr>
+    <div className="flex flex-col gap-4">
+      {sides.map((side, index) => {
+        const score = side.reduce((sum, line) => sum + line.score, 0);
+        const par = side.reduce((sum, line) => sum + line.par, 0);
+        return (
+          <section key={index} className="flex flex-col gap-2.5">
+            <div className="flex items-baseline justify-between">
+              <h2 className="dsp text-[24px] leading-none">{index === 0 && side[0]!.hole <= 9 ? "Front nine" : "Back nine"}</h2>
+              <span className="text-[13px] font-bold">
+                {score} · {toParLabel(score - par)}
+              </span>
+            </div>
+            <div className="overflow-x-auto rounded-[22px] bg-ink px-3 py-3 text-white">
+              <table className="tabular w-full text-center text-[12px]">
+                <caption className="sr-only">{index === 0 ? "Front nine" : "Back nine"}</caption>
+                <tbody>
+                  <tr className="text-[#a9ad9f]">
+                    <th scope="row" className="dsp w-12 text-left text-[10px] font-bold">Hole</th>
+                    {side.map((line) => (
+                      <td key={line.hole} className="font-bold">{line.hole}</td>
+                    ))}
+                  </tr>
+                  <tr className="text-[#a9ad9f]">
+                    <th scope="row" className="dsp text-left text-[10px] font-bold">Par</th>
+                    {side.map((line) => (
+                      <td key={line.hole} className="py-1">{line.par}</td>
+                    ))}
+                  </tr>
+                  <tr className="font-display text-[15px]">
+                    <th scope="row" className="dsp text-left font-sans text-[10px] font-bold text-[#a9ad9f]">You</th>
+                    {side.map((line) => (
+                      <td key={line.hole} className="py-1">
+                        <ScoreMark score={line.score} par={line.par} />
+                      </td>
+                    ))}
+                  </tr>
+                  {detail ? (
+                    <>
+                      <tr className="text-[#a9ad9f]">
+                        <th scope="row" className="dsp text-left text-[10px] font-bold">Putts</th>
+                        {side.map((line) => (
+                          <td key={line.hole} className="pt-1">{line.putts ?? ""}</td>
+                        ))}
+                      </tr>
+                      <tr className="text-[#a9ad9f]">
+                        <th scope="row" className="dsp text-left text-[10px] font-bold">FW</th>
+                        {side.map((line) => (
+                          <td key={line.hole}>{mark(line.fairway)}</td>
+                        ))}
+                      </tr>
+                      <tr className="text-[#a9ad9f]">
+                        <th scope="row" className="dsp text-left text-[10px] font-bold">GIR</th>
+                        {side.map((line) => (
+                          <td key={line.hole}>{mark(line.gir)}</td>
+                        ))}
+                      </tr>
+                    </>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        );
+      })}
+      {detail ? <p className="text-[11px] text-fg-subtle">● hit · ○ missed. Green in regulation is worked out from score and putts.</p> : null}
+    </div>
   );
 }

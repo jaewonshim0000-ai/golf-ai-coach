@@ -52,8 +52,8 @@ export function ConfirmationForm() {
   }
 
   return (
-    <details className="rounded-xl border border-border bg-surface-2 px-3.5 py-3">
-      <summary className="cursor-pointer text-center text-xs font-medium text-accent">
+    <details className="rounded-[22px] bg-surface-2 px-4 py-3">
+      <summary className="cursor-pointer text-center text-[12.5px] font-semibold text-accent">
         Didn&apos;t receive a confirmation email?
       </summary>
       <form onSubmit={onSubmit} className="mt-3 space-y-3">

@@ -144,3 +144,54 @@ export function classicTrends(rounds: { round: Round; lines: HoleLine[] }[]): Cl
     scrambling: series((stats) => percent(stats.scrambling.pct)),
   };
 }
+
+export type ProfileAxis = { label: string; recent: number | null; earlier: number | null };
+
+export type GameProfile = {
+  axes: ProfileAxis[];
+  recentLabel: string;
+  earlierLabel: string;
+  hasEarlier: boolean;
+};
+
+const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
+
+/**
+ * The five-sided shape on the Play tab, from the classic numbers so it works
+ * for every round however it was logged. Each axis is scaled 0-1 against a
+ * rough scratch standard: fairways as hit, greens against 67%, scrambling
+ * against 60%, putting from 40 putts (0) to 28 (1), scoring from 36 over (0)
+ * to level (1). It is a shape, not a grade, so no numbers are printed on it.
+ *
+ * The recent shape is the last five rounds; the earlier one, the five before.
+ */
+export function gameProfile(rounds: { round: Round; lines: HoleLine[] }[]): GameProfile {
+  const ordered = [...rounds]
+    .filter(({ lines }) => lines.length > 0)
+    .sort((a, b) => b.round.played_on.localeCompare(a.round.played_on));
+  const shape = (group: { round: Round; lines: HoleLine[] }[]) => {
+    if (group.length === 0) return null;
+    const lines = group.flatMap(({ lines }) => lines);
+    const stats = classicStats(lines);
+    const toPar = (lines.reduce((sum, line) => sum + line.score - line.par, 0) / lines.length) * 18;
+    return {
+      Driving: stats.fairways.pct === null ? null : clamp01(stats.fairways.pct),
+      Approach: stats.greens.pct === null ? null : clamp01(stats.greens.pct / 0.67),
+      "Short game": stats.scrambling.pct === null ? null : clamp01(stats.scrambling.pct / 0.6),
+      Putting: stats.puttsPerRound === null ? null : clamp01((40 - stats.puttsPerRound) / 12),
+      Scoring: clamp01(1 - toPar / 36),
+    } as Record<string, number | null>;
+  };
+  const recent = shape(ordered.slice(0, 5));
+  const earlier = shape(ordered.slice(5, 10));
+  return {
+    axes: ["Driving", "Approach", "Short game", "Putting", "Scoring"].map((label) => ({
+      label,
+      recent: recent?.[label] ?? null,
+      earlier: earlier?.[label] ?? null,
+    })),
+    recentLabel: "Last 5 rounds",
+    earlierLabel: "5 before",
+    hasEarlier: earlier !== null,
+  };
+}

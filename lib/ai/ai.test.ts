@@ -11,7 +11,7 @@ import type { SwingFinding, SwingSession } from "../../types/practice";
 import { certaintyFor, ruleBasedInsight } from "./coaching";
 import type { CoachingContext } from "./context";
 import { ruleBasedRoundSummary, ruleBasedTrend } from "./insights";
-import { RulesProvider, setProvider, getProvider } from "./provider";
+import { RulesProvider, setProvider, getProvider, requestOptions } from "./provider";
 import { coachingInsightSchema, roundSummarySchema, swingAnalysisSchema } from "./schemas";
 import { ruleBasedSwingAnalysis } from "./swing-analysis";
 
@@ -390,3 +390,10 @@ function askWeakness(
     related_skills: [],
   };
 }
+
+describe("model call limits", () => {
+  it("gives every call a bounded wait and no automatic retries, so the fallback shows promptly", () => {
+    assert.deepEqual(requestOptions({}), { timeout: 20_000, maxRetries: 0 });
+    assert.deepEqual(requestOptions({ timeoutMs: 12_000 }), { timeout: 12_000, maxRetries: 0 });
+  });
+});

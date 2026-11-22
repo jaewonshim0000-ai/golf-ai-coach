@@ -28,7 +28,7 @@ const context: CoachingContext = {
     primaryGoal: "Improve approach play",
     secondaryGoals: ["Break 80"],
   },
-  availability: { daysPerWeek: 4, minutesPerSession: 45, facilities: ["range"] },
+  availability: { daysPerWeek: 4, minutesPerSession: 45, facilities: ["range"], bag: ["driver", "7_iron", "putter"] },
   dataCoverage: {
     rounds: 6,
     shots: 480,

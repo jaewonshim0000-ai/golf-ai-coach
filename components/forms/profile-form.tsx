@@ -25,19 +25,54 @@ import { ActionBar, Button, Field, GroupLabel, Input, barButton } from "@/compon
  * profile regardless of which step or row the player is looking at.
  */
 
-const STEPS = [
-  { id: "player", title: "About you", label: "About you", question: "Tell us about you" },
-  { id: "game", title: "Your golf game", label: "Your scores", question: "Where's your game today?" },
-  { id: "goals", title: "Goals", label: "Your goals", question: "What are you playing for?" },
-  { id: "practice", title: "Practice preferences", label: "Practice", question: "How do you practise?" },
+/* The profile page's rows. `uses` tells the player what each one changes in the app. */
+const SECTIONS = [
+  {
+    id: "player",
+    title: "About you",
+    fields: ["display_name", "handicap_index", "experience_level", "dominant_hand"],
+    uses: "Your handicap sets the benchmark your stats and strokes gained are compared with. Ask coach reads the rest.",
+  },
+  {
+    id: "game",
+    title: "Your golf game",
+    fields: ["typical_score", "average_driver_distance", "swing_pattern", "common_miss"],
+    uses: "Ask coach reads these to fit its answers to your game.",
+  },
+  {
+    id: "goals",
+    title: "Goals",
+    fields: ["primary_goal", "secondary_goals"],
+    uses: "Your goals decide which weaknesses rise to the top of your priorities.",
+  },
+  {
+    id: "practice",
+    title: "Practice preferences",
+    fields: ["practice_days_per_week", "typical_practice_duration", "facilities"],
+    uses: "Session length is where Build a session starts, and days a week is your target in Practice history. Ask coach knows where you can practise.",
+  },
+  {
+    id: "bag",
+    title: "What's in the bag",
+    fields: ["bag"],
+    uses: "Recording a swing offers just these clubs, and Ask coach knows what you carry.",
+  },
 ] as const;
 
-const SECTIONS = [
-  ["display_name", "handicap_index", "experience_level", "dominant_hand"],
-  ["typical_score", "average_driver_distance", "swing_pattern", "common_miss"],
-  ["primary_goal", "secondary_goals"],
-  ["practice_days_per_week", "typical_practice_duration", "facilities", "bag"],
-];
+/* Onboarding's four steps, each showing one or more of the sections. */
+const STEPS = [
+  { label: "About you", question: "Tell us about you", sections: [0] },
+  { label: "Your scores", question: "Where's your game today?", sections: [1] },
+  { label: "Your goals", question: "What are you playing for?", sections: [2] },
+  { label: "Practice", question: "How do you practise?", sections: [3, 4] },
+] as const;
+
+const stepFor = (section: number) => Math.max(0, STEPS.findIndex((item) => (item.sections as readonly number[]).includes(section)));
+
+/** One line under each section saying what it is used for. */
+function Uses({ children }: { children: ReactNode }) {
+  return <p className="text-[13px] leading-snug text-fg-muted">{children}</p>;
+}
 
 const DEFAULT_BAG = [
   "driver", "3_wood", "4_hybrid", "5_iron", "6_iron", "7_iron", "8_iron",
@@ -155,8 +190,8 @@ export function ProfileForm({
   useEffect(() => {
     const field = Object.keys(state.errors ?? {})[0];
     if (!field) return;
-    const section = Math.max(0, SECTIONS.findIndex((names) => names.includes(field)));
-    setStep(section);
+    const section = Math.max(0, SECTIONS.findIndex((item) => (item.fields as readonly string[]).includes(field)));
+    setStep(stepFor(section));
     setOpen(section);
     revealField(field);
   }, [state.errors]);
@@ -186,11 +221,13 @@ export function ProfileForm({
     profile?.typical_score ? `Shoots ${profile.typical_score}` : "",
     profile ? GOAL_LABELS[profile.primary_goal] : "",
     profile ? `${profile.practice_days_per_week}× a week` : "",
+    `${bagCount} clubs`,
   ];
 
   const sections: ReactNode[] = [
     // About you
     <div key="player" className="flex flex-col gap-4">
+      <Uses>{SECTIONS[0].uses}</Uses>
       <Field label="Name" error={errors.display_name}>
         <Input name="display_name" defaultValue={profile?.display_name ?? ""} required maxLength={80} placeholder="Alex Mercer" />
       </Field>
@@ -247,6 +284,7 @@ export function ProfileForm({
     </div>,
     // Your golf game
     <div key="game" className="flex flex-col gap-4">
+      <Uses>{SECTIONS[1].uses}</Uses>
       <div className="flex flex-col gap-2">
         <GroupLabel>Typical 18-hole score</GroupLabel>
         <div role="radiogroup" aria-label="Typical score" className="grid grid-cols-4 gap-2">
@@ -312,6 +350,7 @@ export function ProfileForm({
     </div>,
     // Goals
     <div key="goals" className="flex flex-col gap-4">
+      <Uses>{SECTIONS[2].uses}</Uses>
       <div className="flex flex-col gap-2">
         <GroupLabel>Primary goal</GroupLabel>
         <ChoiceChips
@@ -334,6 +373,7 @@ export function ProfileForm({
     </div>,
     // Practice preferences
     <div key="practice" className="flex flex-col gap-4">
+      <Uses>{SECTIONS[3].uses}</Uses>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Days a week" error={errors.practice_days_per_week}>
           <Input name="practice_days_per_week" type="number" min={0} max={7} defaultValue={profile?.practice_days_per_week ?? 3} required />
@@ -351,6 +391,10 @@ export function ProfileForm({
         </div>
         {errors.facilities ? <p role="alert" className="text-[12px] text-bad">{errors.facilities}</p> : null}
       </fieldset>
+    </div>,
+    // What's in the bag
+    <div key="bag" className="flex flex-col gap-4">
+      <Uses>{SECTIONS[4].uses}</Uses>
       <fieldset className="flex flex-col gap-2">
         <legend className="dsp pb-2 text-[12px] tracking-[0.1em] text-fg-muted">What&apos;s in the bag?</legend>
         <div className="flex flex-wrap gap-2">
@@ -382,7 +426,7 @@ export function ProfileForm({
         <>
           <div className="flex gap-1.5" aria-label={`Setup progress, step ${step + 1} of ${STEPS.length}`} role="img">
             {STEPS.map((item, index) => (
-              <span key={item.id} className={cn("h-1.5 flex-1 rounded-full", index <= step ? "bg-accent" : "bg-track")} />
+              <span key={item.label} className={cn("h-1.5 flex-1 rounded-full", index <= step ? "bg-accent" : "bg-track")} />
             ))}
           </div>
           <p className="dsp text-[12px] tracking-[0.1em] text-fg-muted">
@@ -390,7 +434,12 @@ export function ProfileForm({
           </p>
           <h1 className="dsp text-[46px] leading-[0.98]">{STEPS[step]!.question}</h1>
           {sections.map((section, index) => (
-            <fieldset key={index} hidden={index !== step} disabled={pending} className="min-w-0 border-0 p-0">
+            <fieldset
+              key={index}
+              hidden={!(STEPS[step]!.sections as readonly number[]).includes(index)}
+              disabled={pending}
+              className="min-w-0 border-0 p-0"
+            >
               {section}
             </fieldset>
           ))}
@@ -428,7 +477,7 @@ export function ProfileForm({
       ) : (
         <>
           <ul aria-label="Profile settings" className="overflow-hidden rounded-[22px] bg-surface">
-            {STEPS.map((item, index) => (
+            {SECTIONS.map((item, index) => (
               <li key={item.id} className="border-b border-border last:border-0">
                 <details
                   open={open === index}
@@ -451,12 +500,6 @@ export function ProfileForm({
                 </details>
               </li>
             ))}
-            <li className="flex min-h-[52px] items-center justify-between gap-3 px-4">
-              <span className="text-[16px] font-semibold">What&apos;s in the bag</span>
-              <button type="button" onClick={() => setOpen(3)} className="flex items-center gap-2 text-[13px] font-semibold text-fg-subtle">
-                {bagCount} clubs <ChevronRight className="h-[18px] w-[18px]" />
-              </button>
-            </li>
           </ul>
           {state.message && (!state.ok || !dirty) ? (
             <p role="status" className={cn("text-[13px]", state.ok ? "text-accent-strong" : "text-bad")}>

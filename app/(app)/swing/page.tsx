@@ -69,7 +69,7 @@ export default async function SwingLibraryPage({ searchParams }: { searchParams:
           <br />
           swing
         </ScreenTitle>
-        <AddSwing left={remaining(billing, "swing")} plan={billing.plan} autoOpen={search.record === "1"} />
+        <AddSwing left={remaining(billing, "swing")} plan={billing.plan} autoOpen={search.record === "1"} bag={state.profile?.bag} />
       </div>
 
       {swings.length === 0 ? (

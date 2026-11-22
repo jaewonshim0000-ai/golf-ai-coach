@@ -32,6 +32,7 @@ export type CoachingContext = {
     daysPerWeek: number;
     minutesPerSession: number;
     facilities: string[];
+    bag: string[];
   };
   dataCoverage: {
     rounds: number;
@@ -141,6 +142,7 @@ export function buildCoachingContext(input: ContextInput): CoachingContext {
       daysPerWeek: input.profile.practice_days_per_week,
       minutesPerSession: input.profile.typical_practice_duration,
       facilities: input.profile.facilities,
+      bag: input.profile.bag,
     },
     dataCoverage: {
       rounds: input.rounds.length,

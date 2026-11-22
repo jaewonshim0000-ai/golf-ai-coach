@@ -16,6 +16,11 @@ import { practiceTest, testObjective } from "./tests";
 export const PLAN_LENGTHS = [15, 30, 60] as const;
 export type PlanLength = (typeof PLAN_LENGTHS)[number];
 
+/** The longest plan that fits the player's usual session, never shorter than the shortest plan. */
+export function planLengthFor(minutes: number | null | undefined): PlanLength {
+  return [...PLAN_LENGTHS].reverse().find((length) => length <= (minutes ?? 30)) ?? PLAN_LENGTHS[0];
+}
+
 const LAYOUT: Record<PlanLength, [PracticeBlock, number][]> = {
   15: [
     ["warm_up", 5],

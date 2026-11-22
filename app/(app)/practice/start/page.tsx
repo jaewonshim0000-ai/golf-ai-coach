@@ -6,7 +6,7 @@ import { RoundButton, ScreenTitle, TopBar } from "@/components/ui/primitives";
 import * as repo from "@/lib/db/repo";
 import { loadPlayerState } from "@/lib/player-state";
 import { PRACTICE_GOALS, earnedTolerance, goalForWeakness, type GoalId } from "@/lib/practice/goals";
-import { PLAN_LENGTHS, buildPlan } from "@/lib/practice/plan";
+import { PLAN_LENGTHS, buildPlan, planLengthFor } from "@/lib/practice/plan";
 import { DRILLS_BY_ID } from "@/lib/seed/drills";
 import { goalsForDrill, rankPracticeDrills } from "@/lib/practice/drill-priorities";
 
@@ -83,6 +83,7 @@ export default async function StartPracticePage({
         recommended={recommended}
         priorityGoal={state.weaknesses[0] ? goalForWeakness(state.weaknesses[0]) : null}
         initialGoal={asked ?? preferredGoal ?? recommended}
+        initialMinutes={planLengthFor(state.profile?.typical_practice_duration)}
         previews={previews}
         bands={bands}
         priorityNames={priorities.map(({ drill }) => drill.name)}

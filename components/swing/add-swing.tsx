@@ -27,7 +27,8 @@ const SHORT_CLUB: Partial<Record<Club, string>> = {
   pw: "PW", gw: "GW", sw: "SW", lw: "LW",
 };
 
-export function AddSwing({ reference = false, left = null, plan = "premium", autoOpen = false }: { reference?: boolean; left?: number | null; plan?: Plan; autoOpen?: boolean }) {
+/** `bag` limits the club chips to what the player carries; without it every club is offered. */
+export function AddSwing({ reference = false, left = null, plan = "premium", autoOpen = false, bag }: { reference?: boolean; left?: number | null; plan?: Plan; autoOpen?: boolean; bag?: Club[] }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
@@ -98,7 +99,10 @@ export function AddSwing({ reference = false, left = null, plan = "premium", aut
 
   const preview = useMemo(() => (file ? URL.createObjectURL(file) : null), [file]);
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
-  const [club, setClub] = useState<Club>("7_iron");
+  const swingClubs = CLUBS.filter((option) => option !== "putter");
+  const carried = swingClubs.filter((option) => bag?.includes(option));
+  const clubs = carried.length > 0 ? carried : swingClubs;
+  const [club, setClub] = useState<Club>(clubs.includes("7_iron") ? "7_iron" : clubs[0]!);
   const steps = ["Video uploaded", "Swing phases found", "Measuring body positions", "Writing your report"];
 
   return <>
@@ -171,7 +175,7 @@ export function AddSwing({ reference = false, left = null, plan = "premium", aut
           <fieldset>
             <legend className="dsp pb-2 text-[12px] tracking-[0.1em] text-fg-muted">Club</legend>
             <div role="radiogroup" aria-label="Club" className="no-bar -mx-5 flex gap-2 overflow-x-auto px-5">
-              {CLUBS.filter((option) => option !== "putter").map((option) => (
+              {clubs.map((option) => (
                 <button key={option} type="button" role="radio" aria-checked={club === option} disabled={pending} onClick={() => setClub(option)}
                   className={cn("press h-10 shrink-0 rounded-full px-4 text-[13px] font-semibold", club === option ? "bg-accent text-white" : "border-[1.5px] border-fg")}>
                   {SHORT_CLUB[option] ?? CLUB_LABELS[option]}

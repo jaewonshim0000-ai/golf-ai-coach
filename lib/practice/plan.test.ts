@@ -3,12 +3,20 @@ import { describe, it } from "node:test";
 
 import { DRILLS_BY_ID } from "../seed/drills";
 import { PRACTICE_GOALS, earnedTolerance, goalForWeakness, missPattern } from "./goals";
-import { PLAN_LENGTHS, buildPlan } from "./plan";
+import { PLAN_LENGTHS, buildPlan, planLengthFor } from "./plan";
 import { PRACTICE_DRILL_IDS } from "./drill-priorities";
 
 const goal = (id: string) => PRACTICE_GOALS.find((candidate) => candidate.id === id)!;
 
 describe("practice plans", () => {
+  it("starts at the longest plan that fits the player's usual session", () => {
+    assert.equal(planLengthFor(45), 30);
+    assert.equal(planLengthFor(60), 60);
+    assert.equal(planLengthFor(120), 60);
+    assert.equal(planLengthFor(10), 15);
+    assert.equal(planLengthFor(null), 30);
+  });
+
   it("fills the time asked for, with real drills, none twice", () => {
     for (const minutes of PLAN_LENGTHS) {
       for (const { id } of PRACTICE_GOALS) {

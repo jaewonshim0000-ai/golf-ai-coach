@@ -478,11 +478,14 @@ export async function askCoach(rawQuestion: string, state: PlayerState): Promise
 
 You are answering a question by choosing from a list of things already found in this player's data. Extra rules:
 - Choose only from the ids listed. Never invent an id, a screen or a statistic.
-- Quote a number only if it appears in the entry you are pointing at.
+- Quote a number only if it appears in the entry you are pointing at or in the player's profile.
+- Use the player's profile (experience, typical score, common miss, goals, where they practise, clubs carried) to make the answer fit them.
 - Answer in one or two short sentences. The app renders the entries themselves underneath you, so do not list them again.
 - If nothing listed really answers the question, say so plainly and point at the closest entry.`,
     prompt: `Question: ${question}
-
+${state.context ? `
+Player profile: ${JSON.stringify({ ...state.context.playerProfile, ...state.context.availability })}
+` : ""}
 Candidates:
 ${hits.map((hit) => `- id: ${hit.id}\n  name: ${hit.title}\n  facts: ${hit.detail}`).join("\n")}
 

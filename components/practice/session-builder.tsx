@@ -35,6 +35,7 @@ export function SessionBuilder({
   recommended,
   priorityGoal,
   initialGoal,
+  initialMinutes,
   previews,
   bands,
   priorityNames,
@@ -44,6 +45,8 @@ export function SessionBuilder({
   /** The goal behind the player's #1 priority, if they have one. */
   priorityGoal: GoalId | null;
   initialGoal: GoalId;
+  /** Where the length starts: the player's usual session, from their profile. */
+  initialMinutes: PlanLength;
   /** Keyed `${minutes}:${goal}`, built on the server. */
   previews: Record<string, PlanPreview>;
   /** Today's band per goal, earned from the last test. */
@@ -52,7 +55,7 @@ export function SessionBuilder({
 }) {
   const [state, formAction, pending] = useActionState(createPracticeSessionAction, IDLE);
   const [goal, setGoal] = useState<GoalId>(initialGoal);
-  const [minutes, setMinutes] = useState<PlanLength>(30);
+  const [minutes, setMinutes] = useState<PlanLength>(initialMinutes);
   const preview = previews[`${minutes}:${goal}`];
   const now = new Date();
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;

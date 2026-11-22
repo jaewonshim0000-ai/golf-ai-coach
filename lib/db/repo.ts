@@ -575,15 +575,27 @@ export async function deleteAccount(userId: string): Promise<void> {
     throw new Error("Connect Supabase before deleting an account.");
   }
 
-  const { data: files } = await sb.storage.from("swing-videos").list(userId, { limit: 1000 });
-  const paths = (files ?? []).map((file) => `${userId}/${file.name}`);
-  if (paths.length > 0) {
-    const { error: storageError } = await sb.storage.from("swing-videos").remove(paths);
-    if (storageError) throw new Error(`deleteAccount: ${storageError.message}`);
-  }
-
+  await removeVideoFolder(sb, userId);
   const { error } = await sb.rpc("delete_my_account");
   if (error) throw new Error(`deleteAccount: ${error.message}`);
+}
+
+/**
+ * Every file in the player's video folder. Storage lists at most 1,000 a call,
+ * so this lists and removes until the folder is empty. A read error stops the
+ * account delete rather than leaving videos behind it.
+ */
+export async function removeVideoFolder(sb: SupabaseClient, userId: string): Promise<void> {
+  const bucket = sb.storage.from("swing-videos");
+  for (;;) {
+    const { data: files, error } = await bucket.list(userId, { limit: 1000 });
+    if (error) throw new Error(`deleteAccount: ${error.message}`);
+    if (!files?.length) return;
+    const { data: removed, error: removeError } = await bucket.remove(files.map((file) => `${userId}/${file.name}`));
+    if (removeError) throw new Error(`deleteAccount: ${removeError.message}`);
+    // Storage reports a delete its policy refused as success with nothing removed.
+    if (!removed?.length) throw new Error("deleteAccount: your videos could not be deleted. Please try again.");
+  }
 }
 
 export async function deleteSwingSession(userId: string, sessionId: string): Promise<void> {

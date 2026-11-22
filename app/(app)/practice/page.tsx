@@ -52,7 +52,7 @@ export default async function PracticePage() {
           <Link
             href="/profile"
             aria-label="Profile"
-            className="flex h-11 w-11 items-center justify-center accent-surface rounded-full text-[14px] font-bold text-accent-fg ring-4 ring-surface md:hidden"
+            className="flex h-11 w-11 items-center justify-center rounded-full border-[3px] border-white bg-accent text-[14px] font-bold text-accent-fg md:hidden"
           >
             {initials || "You"}
           </Link>

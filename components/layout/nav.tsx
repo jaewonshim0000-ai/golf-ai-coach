@@ -26,19 +26,18 @@ export function Sidebar({ mode }: { mode: "demo" | "supabase" | "setup" }) {
   const pathname = usePathname();
 
   return (
-    <aside className="ink-surface sticky top-0 hidden h-svh w-64 shrink-0 flex-col text-ink-fg md:flex">
+    <aside className="sticky top-0 hidden h-svh w-60 shrink-0 flex-col bg-ink text-ink-fg md:flex">
       <Link href="/practice" className="flex items-center gap-2.5 px-5 py-6">
-        <span className="accent-surface flex h-10 w-10 items-center justify-center rounded-2xl text-white">
+        <span className="flex h-10 w-10 items-center justify-center rounded-full border-[3px] border-white bg-accent text-white">
           <Flag className="h-4 w-4" strokeWidth={2.5} />
         </span>
         <span className="flex flex-col leading-tight">
-          <span className="font-display text-[20px] uppercase tracking-[0.02em]">Golf AI Coach</span>
+          <span className="font-display text-[18px] uppercase tracking-[0.02em]">Golf AI Coach</span>
           <span className="dsp text-[10px] text-gold">Learns your game</span>
         </span>
       </Link>
 
-      <p className="dsp px-6 pb-2 pt-2 text-[10px] text-white/40">Menu</p>
-      <nav className="flex flex-1 flex-col gap-1 px-3">
+      <nav className="flex flex-1 flex-col gap-1.5 px-3">
         {ITEMS.map(({ href, label, icon: Icon }) => {
           const active = isActive(pathname, href);
           return (
@@ -47,10 +46,8 @@ export function Sidebar({ mode }: { mode: "demo" | "supabase" | "setup" }) {
               href={href}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "font-display flex h-12 items-center gap-3 rounded-2xl px-4 text-[16px] uppercase tracking-[0.05em] transition-[background-color,color,box-shadow]",
-                active
-                  ? "accent-surface text-accent-fg"
-                  : "text-white/65 hover:bg-white/[0.07] hover:text-white",
+                "font-display flex h-12 items-center gap-3 rounded-full px-4 text-[15px] uppercase tracking-[0.05em] transition-colors",
+                active ? "bg-accent text-accent-fg" : "text-[#c9ccbf] hover:bg-white/5 hover:text-white",
               )}
             >
               <Icon className="h-5 w-5" strokeWidth={active ? 2 : 1.9} />
@@ -60,15 +57,15 @@ export function Sidebar({ mode }: { mode: "demo" | "supabase" | "setup" }) {
         })}
       </nav>
 
-      <div className="dsp mx-3 mb-4 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-[10px] text-white/70">
+      <div className="dsp px-5 py-5 text-[10px] text-[#c9ccbf]">
         {mode === "demo" ? (
           <span className="inline-flex items-center gap-1.5">
-            <span className="h-1.5 w-1.5 rounded-full bg-gold shadow-[0_0_8px_var(--c-gold)]" />
+            <span className="h-1.5 w-1.5 rounded-full bg-gold" />
             Demo mode
           </span>
         ) : (
           <span className="inline-flex items-center gap-1.5">
-            <span className="h-1.5 w-1.5 rounded-full bg-[#2fd17a] shadow-[0_0_8px_#2fd17a]" />
+            <span className="h-1.5 w-1.5 rounded-full bg-accent" />
             Connected
           </span>
         )}
@@ -78,8 +75,8 @@ export function Sidebar({ mode }: { mode: "demo" | "supabase" | "setup" }) {
 }
 
 /**
- * The floating tab bar: a frosted dark pill above the content. The current tab
- * opens into a glowing green pill with its name; the others are icons. The page fades out
+ * The floating tab bar: a dark pill above the content. The current tab opens
+ * into an olive pill with its name; the others are icons. The page fades out
  * under it instead of stopping at a rule.
  */
 export function MobileNav() {
@@ -89,11 +86,11 @@ export function MobileNav() {
     <>
       <div
         aria-hidden
-        className="pointer-events-none fixed inset-x-0 bottom-0 z-30 h-32 bg-[linear-gradient(180deg,rgb(242_244_241_/_0),rgb(242_244_241_/_0.9)_58%)] md:hidden dark:bg-[linear-gradient(180deg,rgb(8_12_10_/_0),rgb(8_12_10_/_0.9)_58%)]"
+        className="pointer-events-none fixed inset-x-0 bottom-0 z-30 h-32 bg-[linear-gradient(180deg,rgb(236_233_224_/_0),rgb(236_233_224_/_0.92)_58%)] md:hidden dark:bg-[linear-gradient(180deg,rgb(18_20_15_/_0),rgb(18_20_15_/_0.92)_58%)]"
       />
       <nav
         aria-label="Primary"
-        className="fixed inset-x-5 bottom-[calc(1.375rem+env(safe-area-inset-bottom))] z-40 glass flex h-16 items-center justify-between rounded-full border border-white/10 bg-[#0d1f16]/90 px-2 shadow-[var(--shadow-raised)] md:hidden"
+        className="fixed inset-x-5 bottom-[calc(1.375rem+env(safe-area-inset-bottom))] z-40 flex h-16 items-center justify-between rounded-full bg-ink px-2 shadow-[var(--shadow-raised)] md:hidden"
       >
         {ITEMS.map(({ href, short, label, icon: Icon }) => {
           const active = isActive(pathname, href);
@@ -103,7 +100,7 @@ export function MobileNav() {
               key={`${href}:on`}
               href={href}
               aria-current="page"
-              className="nav-pill press accent-surface font-display flex h-12 items-center gap-2 rounded-full px-[18px] text-[16px] uppercase tracking-[0.05em] text-accent-fg"
+              className="nav-pill press font-display flex h-12 items-center gap-2 rounded-full bg-accent px-[18px] text-[15px] uppercase tracking-[0.05em] text-accent-fg"
             >
               <Icon className="h-5 w-5" strokeWidth={2} />
               {short}
@@ -113,7 +110,7 @@ export function MobileNav() {
               key={href}
               href={href}
               aria-label={label}
-              className="press flex h-12 w-[52px] items-center justify-center rounded-full text-white/60 transition-colors hover:text-white"
+              className="press flex h-12 w-[52px] items-center justify-center rounded-full text-[#c9ccbf] transition-colors hover:text-white"
             >
               <Icon className="h-[22px] w-[22px]" strokeWidth={1.9} />
             </Link>

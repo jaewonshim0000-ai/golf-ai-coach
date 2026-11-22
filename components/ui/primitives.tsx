@@ -9,28 +9,26 @@ import { cn } from "@/lib/utils";
  * tokens in globals.css. No component library dependency - these are the pieces
  * the app actually uses.
  *
- * House style, after the polished fitness apps: Barlow Condensed for headings
- * and big numbers, tracked-out bold caps for labels and buttons, white cards
- * that lift off the page with a hairline and a soft shadow, pill controls, a
- * forest-ink card with a green glow for the one thing that matters most, and
- * one fairway-green gradient reserved for the primary action on a screen.
+ * House style, from the redesign: Anton for headings, tracked-out bold caps for
+ * labels and buttons, flat white cards with big radii on a stone page, pill
+ * controls, and one olive fill reserved for the primary action on a screen.
  */
 
 // ------------------------------------------------------------------ button
 
 const buttonStyles = cva(
-  "press dsp inline-flex items-center justify-center gap-2 rounded-full transition-[opacity,transform,background-color,color,box-shadow,filter] disabled:pointer-events-none disabled:opacity-50 whitespace-nowrap",
+  "press dsp inline-flex items-center justify-center gap-2 rounded-full transition-[opacity,transform,background-color,color] disabled:pointer-events-none disabled:opacity-50 whitespace-nowrap",
   {
     variants: {
       variant: {
-        primary: "accent-surface text-accent-fg hover:brightness-110",
-        secondary: "border border-border-strong bg-surface text-fg shadow-[var(--shadow-soft)] hover:border-fg/40 hover:bg-surface-2",
+        primary: "bg-accent text-accent-fg hover:bg-accent-strong dark:hover:opacity-90",
+        secondary: "border-[1.5px] border-fg bg-transparent text-fg hover:bg-fg/5",
         ghost: "text-fg-muted hover:bg-fg/5 hover:text-fg",
-        danger: "bg-bad text-white shadow-[0_10px_24px_-12px_rgb(198_63_43_/_0.7)] hover:opacity-90",
+        danger: "bg-bad text-white hover:opacity-90",
         subtle: "bg-accent-soft text-accent-strong hover:opacity-90",
         /* For use on top of hero artwork; `.hero-plain` re-inks them. */
-        onHero: "on-hero glass border border-white/40 bg-white/15 text-white hover:bg-white/25",
-        onHeroSolid: "on-hero-solid bg-white text-[#0f1a14] shadow-[0_8px_20px_-10px_rgb(0_0_0_/_0.5)] hover:bg-white/90",
+        onHero: "on-hero border border-white/60 bg-white/20 text-white hover:bg-white/30",
+        onHeroSolid: "on-hero-solid bg-white/90 text-[#1e211b] hover:bg-white",
       },
       size: {
         sm: "h-9 px-3.5 text-[11px]",
@@ -64,7 +62,7 @@ export function Card({ className, ...props }: ComponentProps<"div">) {
   return (
     <div
       className={cn(
-        "relative rounded-[var(--radius-card)] border border-border bg-surface shadow-[var(--shadow-card)]",
+        "relative rounded-[var(--radius-card)] bg-surface",
         className,
       )}
       {...props}
@@ -77,7 +75,7 @@ export function MiniCard({ className, ...props }: ComponentProps<"div">) {
   return (
     <div
       className={cn(
-        "relative rounded-[var(--radius-soft)] border border-border bg-surface shadow-[var(--shadow-soft)]",
+        "relative rounded-[var(--radius-soft)] bg-surface",
         className,
       )}
       {...props}
@@ -90,7 +88,7 @@ export function InkCard({ className, ...props }: ComponentProps<"div">) {
   return (
     <div
       className={cn(
-        "ink-surface relative overflow-hidden rounded-[var(--radius-card)] text-ink-fg",
+        "relative overflow-hidden rounded-[var(--radius-card)] bg-ink text-ink-fg",
         className,
       )}
       {...props}
@@ -105,7 +103,7 @@ export function CardHeader({ className, ...props }: ComponentProps<"div">) {
 export function CardTitle({ className, ...props }: ComponentProps<"h3">) {
   return (
     <h3
-      className={cn("dsp text-[24px] leading-none", className)}
+      className={cn("dsp text-[22px] leading-none", className)}
       {...props}
     />
   );
@@ -139,11 +137,11 @@ const badgeStyles = cva(
         warn: "bg-warn-soft text-warn",
         info: "bg-info-soft text-info",
         /* The AI mark: ink pill, flag-yellow text, like the coach button. */
-        gold: "bg-ink text-gold ring-1 ring-gold/30",
+        gold: "bg-ink text-gold",
         /* On the ink card the soft fills disappear, so these carry a hairline. */
         onInk: "border border-white/25 bg-white/10 text-ink-fg/85",
-        onInkBad: "bg-[#ff8a73]/15 text-[#ffb3a3] ring-1 ring-[#ff8a73]/30",
-        onInkGood: "accent-surface text-white",
+        onInkBad: "bg-[#3a3f33] text-[#e9a08e]",
+        onInkGood: "bg-accent text-white",
       },
     },
     defaultVariants: { tone: "neutral" },
@@ -173,8 +171,8 @@ export function Progress({
 }) {
   const pct = Math.max(0, Math.min(100, Math.round(value * 100)));
   const bar = {
-    accent: "bg-[image:var(--grad-accent)]",
-    good: "bg-[image:var(--grad-accent)]",
+    accent: "bg-accent",
+    good: "bg-good",
     bad: "bg-bad",
     warn: "bg-warn",
   }[tone];
@@ -271,7 +269,7 @@ export function Field({
   is under 16px, which on a one-handed shot-entry screen is genuinely disruptive.
 */
 const controlStyles =
-  "h-[50px] w-full rounded-2xl border border-border bg-surface px-[18px] text-base text-fg shadow-[inset_0_1px_2px_rgb(15_26_20_/_0.04)] transition-[border-color,box-shadow] placeholder:text-fg-subtle hover:border-border-strong focus:border-accent focus:shadow-[0_0_0_4px_color-mix(in_oklab,var(--c-accent)_18%,transparent)] focus:outline-none";
+  "h-[50px] w-full rounded-full border-[1.5px] border-transparent bg-surface-2 px-[18px] text-base text-fg placeholder:text-fg-subtle focus:border-accent focus:outline-none";
 
 export function Input({ className, ...props }: ComponentProps<"input">) {
   return <input className={cn(controlStyles, "tabular", className)} {...props} />;
@@ -288,7 +286,7 @@ export function Select({ className, children, ...props }: ComponentProps<"select
 export function Textarea({ className, ...props }: ComponentProps<"textarea">) {
   return (
     <textarea
-      className={cn(controlStyles, "h-auto min-h-20 resize-y py-3 leading-relaxed", className)}
+      className={cn(controlStyles, "h-auto min-h-20 resize-y rounded-[22px] py-3 leading-relaxed", className)}
       {...props}
     />
   );
@@ -308,12 +306,8 @@ export function EmptyState({
   icon?: ReactNode;
 }) {
   return (
-    <div className="relative flex flex-col items-center gap-3 rounded-[var(--radius-card)] border border-dashed border-border-strong bg-surface/60 px-6 py-10 text-center">
-      {icon ? (
-        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-soft text-accent-strong">
-          {icon}
-        </div>
-      ) : null}
+    <div className="relative flex flex-col items-center gap-3 rounded-[var(--radius-card)] border-[1.5px] border-dashed border-border-strong px-6 py-10 text-center">
+      {icon ? <div className="text-fg-subtle">{icon}</div> : null}
       <h3 className="dsp text-[22px] leading-none">{title}</h3>
       <p className="max-w-sm text-[14px] leading-relaxed text-fg-muted">{message}</p>
       {action}
@@ -323,7 +317,7 @@ export function EmptyState({
 
 export function ErrorState({ title, message }: { title: string; message: string }) {
   return (
-    <div className="rounded-[var(--radius-soft)] border border-bad/20 bg-bad-soft p-5">
+    <div className="rounded-[var(--radius-soft)] bg-bad-soft p-5">
       <h3 className="dsp text-[20px] leading-none text-bad">{title}</h3>
       <p className="mt-1 text-[13px] leading-relaxed text-fg-muted">{message}</p>
     </div>
@@ -349,10 +343,10 @@ export function SectionHeading({
   return (
     <div className="flex flex-wrap items-end justify-between gap-3">
       <div className="min-w-0">
-        <h2 className="dsp flex items-center gap-2 text-[28px] leading-none">
+        <h2 className="dsp flex items-center gap-2 text-[26px] leading-none">
           {title}
           {count !== undefined ? (
-            <span className="tabular flex h-[24px] min-w-[24px] items-center justify-center rounded-full bg-accent-soft px-2 font-sans text-[12px] font-bold text-accent-strong">
+            <span className="tabular flex h-[26px] min-w-[26px] items-center justify-center rounded-full bg-surface px-2 font-sans text-[12px] font-bold text-fg">
               {count}
             </span>
           ) : null}
@@ -430,11 +424,11 @@ export function PageHero({
         <div className="flex items-end justify-between gap-3">
           <div className="min-w-0">
             {eyebrow ? (
-              <p className="dsp text-[12px] tracking-[0.12em] text-accent">{eyebrow}</p>
+              <p className="dsp text-[12px] tracking-[0.1em] text-fg-muted">{eyebrow}</p>
             ) : null}
-            <h1 className="dsp mt-1.5 text-[50px] leading-[0.95] md:text-[60px]">{title}</h1>
+            <h1 className="dsp mt-1.5 text-[46px] leading-[0.98]">{title}</h1>
             {description ? (
-              <p className="mt-2.5 max-w-md text-[15px] font-medium leading-[1.45] text-fg-muted">
+              <p className="mt-2.5 max-w-md text-[14px] font-semibold leading-[1.45] text-fg-muted">
                 {description}
               </p>
             ) : null}
@@ -481,7 +475,7 @@ export function PageHero({
           {eyebrow ? (
             <p className="dsp text-[11px] tracking-[0.1em] text-white/85">{eyebrow}</p>
           ) : null}
-          <h1 className="dsp mt-1.5 text-[48px] leading-[0.95] text-white drop-shadow-[0_2px_12px_rgb(0_0_0_/_0.25)] md:text-[56px]">{title}</h1>
+          <h1 className="dsp mt-1.5 text-[44px] leading-[0.98] text-white">{title}</h1>
           {description ? (
             <p className="mt-2 max-w-[300px] text-[13px] leading-[1.45] text-white/85">
               {description}
@@ -500,8 +494,8 @@ const heroPillStyles = cva(
   {
     variants: {
       tone: {
-        solid: "hero-pill-solid bg-white text-[#0f1a14]",
-        outline: "hero-pill-outline glass border border-white/50 bg-white/10 text-white",
+        solid: "hero-pill-solid bg-white/90 text-[#1e211b]",
+        outline: "hero-pill-outline border-[1.5px] border-white/85 text-white",
       },
     },
     defaultVariants: { tone: "outline" },

@@ -4,56 +4,64 @@
   Design tokens. Defined as plain custom properties so the light/dark swap is a
   single block, then exposed to Tailwind with `@theme inline`.
 
-  The palette is the olive / stone scheme from the redesign: a warm stone page,
-  flat white cards with big radii, one olive accent, a near-black ink for the
-  tab bar and the card that matters most, and a flag-yellow highlight.
+  The palette is "clubhouse premium", after the polished fitness apps (Whoop,
+  Apple Fitness): a cool off-white page, white cards that lift off it with a
+  hairline and a soft layered shadow, one fairway-green accent with a gentle
+  gradient and glow, a deep forest ink for the card that matters most and the
+  navigation, and a flag-yellow highlight.
 */
 :root {
-  --c-bg: #ece9e0;
+  --c-bg: #f2f4f1;
   --c-surface: #ffffff;
-  --c-surface-2: #ece9e0;
-  --c-track: #dedace;
-  --c-border: #e4e1d7;
-  --c-border-strong: #c9c5b8;
-  --c-fg: #1e211b;
-  --c-fg-muted: #4a4e44;
-  --c-fg-subtle: #5e6157;
+  --c-surface-2: #eef1ed;
+  --c-track: #e3e8e2;
+  --c-border: #e3e7e1;
+  --c-border-strong: #c8cfc6;
+  --c-fg: #0f1a14;
+  --c-fg-muted: #45524a;
+  --c-fg-subtle: #5d6a62;
 
-  --c-accent: #5c7a2a;
+  --c-accent: #12874a;
   --c-accent-fg: #ffffff;
-  --c-accent-soft: #e4ead5;
+  --c-accent-soft: #e0f3e8;
   /* Accent text on the soft fill; the fill colour itself is too light for it. */
-  --c-accent-strong: #465e1f;
+  --c-accent-strong: #0a6535;
 
-  /* Kept as a gradient so `bg-[image:var(--grad-accent)]` still works: flat now. */
-  --grad-accent: linear-gradient(#5c7a2a, #5c7a2a);
-  --shadow-accent: none;
+  --grad-accent: linear-gradient(135deg, #22b464 0%, #0f7d44 100%);
+  --shadow-accent: 0 10px 24px -10px rgb(18 135 74 / 0.6), inset 0 1px 0 rgb(255 255 255 / 0.22);
 
-  /* The dark card and the tab bar. */
-  --c-ink: #23271f;
+  /* The dark card and the navigation. */
+  --c-ink: #0d1f16;
   --c-ink-fg: #ffffff;
-  --c-gold: #e8c547;
+  --c-ink-muted: #b7c6bd;
+  --c-gold: #f5c84c;
+  --grad-ink: radial-gradient(120% 90% at 100% 0%, rgb(34 180 100 / 0.32) 0%, transparent 55%),
+    radial-gradient(90% 70% at 0% 100%, rgb(245 200 76 / 0.1) 0%, transparent 60%),
+    linear-gradient(160deg, #143324 0%, #0b1a12 100%);
 
-  --c-good: #5c7a2a;
-  --c-good-soft: #e4ead5;
-  --c-bad: #b4442a;
-  --c-bad-soft: #f8e3db;
-  --c-warn: #85620a;
-  --c-warn-soft: #f6edcb;
-  --c-info: #2f5e86;
-  --c-info-soft: #e1e9ef;
+  --c-good: #12874a;
+  --c-good-soft: #e0f3e8;
+  --c-bad: #c63f2b;
+  --c-bad-soft: #fbe5e0;
+  --c-warn: #8a5f00;
+  --c-warn-soft: #fbefcd;
+  --c-info: #1f63a8;
+  --c-info-soft: #e2edf8;
 
-  --c-chart-1: #5c7a2a;
-  --c-chart-2: #2f5e86;
-  --c-chart-3: #c9a227;
-  --c-chart-4: #8659b5;
-  --c-chart-5: #b4442a;
+  --c-chart-1: #12874a;
+  --c-chart-2: #1f63a8;
+  --c-chart-3: #d9a514;
+  --c-chart-4: #7c4dcc;
+  --c-chart-5: #c63f2b;
 
-  /* The redesign is flat: cards sit on the page by colour, not by shadow. */
-  --shadow-card: 0 0 #0000;
-  --shadow-soft: 0 0 #0000;
-  --shadow-raised: 0 18px 40px -18px rgb(30 33 27 / 0.45);
-  --shadow-ink: 0 0 #0000;
+  /* Cards lift off the page with a hairline and two soft shadows. */
+  --shadow-card: 0 1px 2px rgb(15 26 20 / 0.04), 0 6px 20px -8px rgb(15 26 20 / 0.1);
+  --shadow-soft: 0 1px 2px rgb(15 26 20 / 0.04), 0 3px 10px -6px rgb(15 26 20 / 0.08);
+  --shadow-raised: 0 24px 48px -20px rgb(13 31 22 / 0.5), 0 2px 6px rgb(13 31 22 / 0.08);
+  --shadow-ink: 0 22px 44px -22px rgb(13 31 22 / 0.65);
+
+  --page-glow: radial-gradient(900px 520px at 100% -8%, rgb(34 180 100 / 0.1), transparent 70%),
+    radial-gradient(700px 420px at -10% 0%, rgb(245 200 76 / 0.08), transparent 70%);
 
   /*
     Two curves, no more. The first is critically damped: it covers most of the
@@ -68,45 +76,55 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --c-bg: #12140f;
-    --c-surface: #1c1f18;
-    --c-surface-2: #262a21;
-    --c-track: #30352a;
-    --c-border: #2b2f26;
-    --c-border-strong: #424839;
-    --c-fg: #f2f0e8;
-    --c-fg-muted: #bfc2b6;
-    --c-fg-subtle: #9a9e91;
+    --c-bg: #080c0a;
+    --c-surface: #121915;
+    --c-surface-2: #1a221d;
+    --c-track: #253029;
+    --c-border: #1f2923;
+    --c-border-strong: #34413a;
+    --c-fg: #f1f5f2;
+    --c-fg-muted: #b5c0b9;
+    --c-fg-subtle: #8f9b94;
 
-    --c-accent: #8db04a;
-    --c-accent-fg: #12140f;
-    --c-accent-soft: #2a341a;
-    --c-accent-strong: #b5d27a;
+    --c-accent: #2fd17a;
+    --c-accent-fg: #04140b;
+    --c-accent-soft: #123222;
+    --c-accent-strong: #7ee6ab;
 
-    --grad-accent: linear-gradient(#8db04a, #8db04a);
+    --grad-accent: linear-gradient(135deg, #46e08c 0%, #1fb365 100%);
+    --shadow-accent: 0 10px 28px -10px rgb(47 209 122 / 0.55), inset 0 1px 0 rgb(255 255 255 / 0.25);
 
     /* Darker than the page is not available here, so the ink card lifts
        off the background instead of sinking into it. */
-    --c-ink: #2a2e25;
-    --c-ink-fg: #f2f0e8;
-    --c-gold: #e8c547;
+    --c-ink: #13241b;
+    --c-ink-fg: #f1f5f2;
+    --c-gold: #f5c84c;
+    --grad-ink: radial-gradient(120% 90% at 100% 0%, rgb(47 209 122 / 0.28) 0%, transparent 55%),
+      radial-gradient(90% 70% at 0% 100%, rgb(245 200 76 / 0.08) 0%, transparent 60%),
+      linear-gradient(160deg, #173426 0%, #0e1b14 100%);
 
-    --c-good: #8db04a;
-    --c-good-soft: #2a341a;
-    --c-bad: #e9876f;
-    --c-bad-soft: #3a1f17;
-    --c-warn: #e0b84a;
-    --c-warn-soft: #332a12;
-    --c-info: #7fb0dc;
-    --c-info-soft: #18232e;
+    --c-good: #2fd17a;
+    --c-good-soft: #123222;
+    --c-bad: #ff8a73;
+    --c-bad-soft: #3a1a14;
+    --c-warn: #f1c453;
+    --c-warn-soft: #33290f;
+    --c-info: #79b6f2;
+    --c-info-soft: #14222f;
 
-    --c-chart-1: #8db04a;
-    --c-chart-2: #7fb0dc;
-    --c-chart-3: #e8c547;
-    --c-chart-4: #b18ce0;
-    --c-chart-5: #e9876f;
+    --c-chart-1: #2fd17a;
+    --c-chart-2: #79b6f2;
+    --c-chart-3: #f5c84c;
+    --c-chart-4: #b392f0;
+    --c-chart-5: #ff8a73;
 
-    --shadow-raised: 0 18px 40px -16px rgb(0 0 0 / 0.75);
+    --shadow-card: 0 1px 0 rgb(255 255 255 / 0.03) inset, 0 8px 24px -12px rgb(0 0 0 / 0.7);
+    --shadow-soft: 0 1px 0 rgb(255 255 255 / 0.03) inset, 0 4px 12px -8px rgb(0 0 0 / 0.6);
+    --shadow-raised: 0 24px 48px -16px rgb(0 0 0 / 0.85);
+    --shadow-ink: 0 0 0 1px rgb(47 209 122 / 0.14), 0 22px 44px -20px rgb(0 0 0 / 0.9);
+
+    --page-glow: radial-gradient(900px 520px at 100% -8%, rgb(47 209 122 / 0.12), transparent 70%),
+      radial-gradient(700px 420px at -10% 0%, rgb(245 200 76 / 0.05), transparent 70%);
   }
 }
 
@@ -139,8 +157,8 @@
   --color-info: var(--c-info);
   --color-info-soft: var(--c-info-soft);
 
-  --radius-card: 28px;
-  --radius-soft: 22px;
+  --radius-card: 26px;
+  --radius-soft: 20px;
   --radius-control: 999px;
 
   --shadow-card: var(--shadow-card);
@@ -150,7 +168,8 @@
 
   --font-sans: var(--font-inter-tight), "Inter Tight", ui-sans-serif, system-ui, -apple-system,
     "Segoe UI", Roboto, Arial, sans-serif;
-  --font-display: var(--font-anton), "Anton", Impact, ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-barlow-condensed), "Barlow Condensed", "Arial Narrow", ui-sans-serif,
+    system-ui, sans-serif;
   --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
 }
 
@@ -166,7 +185,8 @@ html {
 }
 
 body {
-  background: var(--c-bg);
+  background: var(--page-glow), var(--c-bg);
+  background-attachment: fixed;
   color: var(--c-fg);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
@@ -174,13 +194,13 @@ body {
 }
 
 /*
-  Display type, in two voices. `.dsp` on a heading is Anton: condensed, one
-  weight, uppercase. `.dsp` on anything else - eyebrows, buttons, pills - is the
+  Display type, in two voices. `.dsp` on a heading is Barlow Condensed: the
+  tall, tight sports-tech face of the scoreboard and the fitness tracker. `.dsp` on anything else - eyebrows, buttons, pills - is the
   label voice: Inter Tight bold, uppercase, tracked out. One class, so every
   component gets the right voice without being re-declared.
 
   Unlayered on purpose: it beats Tailwind's weight and tracking utilities, so a
-  stray `font-semibold` cannot fake-bold Anton.
+  stray `font-semibold` cannot change the heading weight.
 */
 .dsp {
   font-family: var(--font-sans);
@@ -191,14 +211,42 @@ body {
 
 :is(h1, h2, h3, h4).dsp {
   font-family: var(--font-display);
-  letter-spacing: 0.005em;
+  letter-spacing: 0.01em;
 }
 
-/* Anton has one weight; never let the browser fake a bolder one. */
 :is(h1, h2, h3, h4).dsp,
 .font-display {
-  font-weight: 400;
+  font-weight: 700;
   font-synthesis: none;
+}
+
+/* Big numbers read best with a touch of negative tracking. */
+.font-display.tabular {
+  letter-spacing: -0.01em;
+}
+
+/*
+  The ink card's surface: deep forest with a soft green glow from one corner
+  and a faint flag-yellow one from the other, the way premium trackers light
+  their hero metric.
+*/
+.ink-surface {
+  background: var(--grad-ink);
+  box-shadow: var(--shadow-ink);
+}
+
+/* The primary action: a fairway gradient with a soft glow under it. */
+.accent-surface {
+  background: var(--grad-accent);
+  box-shadow: var(--shadow-accent);
+}
+
+/* Big readings on a coloured background. */
+.text-gradient {
+  background: var(--grad-accent);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 /* The current tab opens out from its icon. */
@@ -243,7 +291,7 @@ body {
 .hero-art-range,
 .hero-art-green,
 .hero-art-dusk {
-  background: #d9e0cb url("/hero/course.svg") center 62% / cover no-repeat;
+  background: #d3e7e4 url("/hero/course.svg") center 62% / cover no-repeat;
 }
 
 .hero-art-range {
@@ -255,17 +303,17 @@ body {
 }
 
 .hero-art-dusk {
-  background-color: #aeb79c;
+  background-color: #e9a97e;
   background-image: url("/hero/dusk.svg");
 }
 
 .hero-scrim {
   background-image: linear-gradient(
     to bottom,
-    rgb(20 24 15 / 0.32) 0%,
-    rgb(20 24 15 / 0.08) 40%,
-    rgb(20 24 15 / 0.5) 78%,
-    rgb(20 24 15 / 0.68) 100%
+    rgb(6 22 14 / 0.3) 0%,
+    rgb(6 22 14 / 0.04) 38%,
+    rgb(6 22 14 / 0.5) 76%,
+    rgb(6 22 14 / 0.78) 100%
   );
 }
 
@@ -276,18 +324,20 @@ body {
 .hero-plain .on-hero,
 .hero-plain .hero-pill-outline {
   color: var(--c-fg);
-  border-color: var(--c-fg);
+  border-color: var(--c-border-strong);
+  background: color-mix(in oklab, var(--c-surface) 55%, transparent);
 }
 
 .hero-plain .on-hero-solid,
 .hero-plain .hero-pill-solid {
   background: var(--c-surface);
   color: var(--c-fg);
+  box-shadow: var(--shadow-soft);
 }
 
-/* The full-page shells: sign-in, onboarding, not-found. Flat stone, like the app. */
+/* The full-page shells: sign-in, onboarding, not-found. The page with its glow. */
 .hero-grid {
-  background: var(--c-bg);
+  background: var(--page-glow), var(--c-bg);
 }
 
 @keyframes rise-in {

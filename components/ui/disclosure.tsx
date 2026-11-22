@@ -13,7 +13,7 @@ export function Disclosure({ title, description, count, children, className, def
         </span>
         {description ? <span className="mt-1.5 block text-[13px] leading-relaxed text-fg-muted">{description}</span> : null}
       </span>
-      <span aria-hidden className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-[1.5px] border-fg text-fg">
+      <span aria-hidden className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border-strong bg-surface text-fg shadow-[var(--shadow-soft)]">
         <ChevronDown className="h-4 w-4 transition-transform group-open/disclosure:rotate-180" />
       </span>
     </summary>

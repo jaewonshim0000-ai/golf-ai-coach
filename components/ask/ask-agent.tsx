@@ -63,9 +63,9 @@ export function AskAgent() {
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Ask about your game"
-        className="dsp fixed right-5 bottom-[calc(6.25rem+env(safe-area-inset-bottom))] z-30 flex h-11 items-center gap-2 rounded-full bg-ink pl-1.5 pr-3.5 text-[11px] text-white shadow-[var(--shadow-raised)] transition-transform active:scale-95 md:right-6 md:bottom-6"
+        className="dsp fixed right-5 bottom-[calc(6.25rem+env(safe-area-inset-bottom))] z-30 flex h-11 items-center gap-2 ink-surface rounded-full border border-white/10 pl-1.5 pr-3.5 text-[11px] text-white transition-transform active:scale-95 md:right-6 md:bottom-6"
       >
-        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#3a3f33] text-gold">
+        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gold/15 text-gold ring-1 ring-gold/30">
           <Sparkles className="h-3.5 w-3.5" fill="currentColor" />
         </span>
         Ask coach
@@ -78,11 +78,11 @@ export function AskAgent() {
         onClick={(event) => {
           if (event.target === dialog.current) setOpen(false);
         }}
-        className="m-0 mt-auto max-h-[86svh] w-full max-w-none overflow-y-auto rounded-t-[28px] bg-bg p-0 text-fg backdrop:bg-[rgb(20_24_15_/_0.55)] sm:m-auto sm:max-w-[540px] sm:rounded-[28px]"
+        className="m-0 mt-auto max-h-[86svh] w-full max-w-none overflow-y-auto rounded-t-[28px] bg-bg p-0 text-fg backdrop:bg-[rgb(6_22_14_/_0.5)] backdrop:backdrop-blur-sm sm:m-auto sm:max-w-[540px] sm:rounded-[28px]"
       >
         <div className="sticky top-0 z-10 flex items-center justify-between gap-3 bg-bg px-5 py-4">
           <div className="flex items-center gap-3">
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-ink text-gold" aria-hidden>
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center ink-surface rounded-2xl text-gold" aria-hidden>
               <Sparkles className="h-4 w-4" fill="currentColor" />
             </span>
             <div>

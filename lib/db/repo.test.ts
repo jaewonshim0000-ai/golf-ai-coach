@@ -20,6 +20,7 @@ import {
   saveSwingModel,
   getSwingModel,
   selectAll,
+  removeVideoFolder,
 } from "./repo";
 import { faceOnSwing } from "../golf/__fixtures__/face-on";
 import { buildVideoModel } from "../golf/video-review";
@@ -231,5 +232,41 @@ describe("whole-history reads", () => {
     const rows = await selectAll<{ id: string }>(sb, "shots", "*", "getShots", (q) => q);
     assert.deepEqual(rows.map((row) => row.id), ids);
     assert.deepEqual(waves(), [1, 4]);
+  });
+});
+
+/** A video bucket that lists at most `cap` files a call, as Storage does. */
+function bucketClient(files: number, cap = 1000, { listError = null as string | null, removes = true } = {}) {
+  let names = Array.from({ length: files }, (_, index) => `${index}.mp4`);
+  const sb = {
+    storage: {
+      from: () => ({
+        list: async (_folder: string, options: { limit: number }) =>
+          listError ? { data: null, error: { message: listError } }
+            : { data: names.slice(0, Math.min(options.limit, cap)).map((name) => ({ name })), error: null },
+        remove: async (paths: string[]) => {
+          if (!removes) return { data: [], error: null };
+          names = names.filter((name) => !paths.includes(`u/${name}`));
+          return { data: paths.map((name) => ({ name })), error: null };
+        },
+      }),
+    },
+  } as unknown as SupabaseClient;
+  return { sb, left: () => names.length };
+}
+
+describe("emptying a leaving player's video folder", () => {
+  it("removes every file, not just the first page", async () => {
+    const bucket = bucketClient(2500);
+    await removeVideoFolder(bucket.sb, "u");
+    assert.equal(bucket.left(), 0);
+  });
+
+  it("stops the account delete when the folder cannot be read", async () => {
+    await assert.rejects(removeVideoFolder(bucketClient(3, 1000, { listError: "timeout" }).sb, "u"), /timeout/);
+  });
+
+  it("stops rather than loops when Storage deletes nothing", async () => {
+    await assert.rejects(removeVideoFolder(bucketClient(3, 1000, { removes: false }).sb, "u"), /could not be deleted/);
   });
 });

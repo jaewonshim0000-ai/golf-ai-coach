@@ -22,12 +22,13 @@ describe("visible swing coaching score", () => {
     assert.equal(score.priorities[0]!.time, 1.1);
     assert.ok(score.priorities.every((item) => item.cue && item.check && item.evidence));
   });
-  it("does not turn good visibility, missing measurements or a moved camera into a swing score", () => {
+  it("gives no score only when nothing was measured", () => {
     const empty = report(); empty.readings = []; empty.tempo = null;
     assert.equal(scoreSwing(empty).total, null);
-    for (const change of [{ coverage: 0.84 }, { largestGap: 0.15 }]) {
+    // Patchy tracking elsewhere does not discard the checks that were measured.
+    for (const change of [{ coverage: 0.4 }, { largestGap: 0.15 }]) {
       const motion = report(); Object.assign(motion.quality, change);
-      assert.equal(scoreSwing(motion).total, null);
+      assert.equal(scoreSwing(motion).total, scoreSwing(report()).total);
     }
     assert.equal(scoreSwing(report("other")).total, null);
     const unresolved = report(); unresolved.phases = null;
@@ -38,10 +39,11 @@ describe("visible swing coaching score", () => {
     const score = scoreSwing(behind, "right");
     assert.deepEqual(score.components.map((item) => item.id), ["posture", "tempo"]); // hip space is a displacement
     assert.equal(score.total, 100);
-    // Face on, head and height are displacements; rhythm alone is not a score.
+    // Face on, head and height are displacements; rhythm alone still scores.
     const faceOn = report(); faceOn.quality.cameraStable = false;
-    assert.equal(scoreSwing(faceOn).total, null);
-    assert.match(scoreSwing(faceOn).reason!, /1 of 3/);
+    assert.deepEqual(scoreSwing(faceOn).components.map((item) => item.id), ["tempo"]);
+    assert.equal(scoreSwing(faceOn).total, 100);
+    assert.equal(scoreSwing(faceOn).reason, null);
   });
   it("uses observed height bounds, shows partial coverage, and never treats omissions as perfect", () => {
     const motion = report(); motion.tempo = null;
@@ -83,17 +85,17 @@ describe("visible swing coaching score", () => {
     assert.equal(score.reviews.length, 0);
     for (const range of [[NaN, 3], [8, 2], [-Infinity, 8]] as [number, number][]) {
       lift.range = range;
-      assert.equal(scoreSwing(motion).total, null);
+      assert.deepEqual(scoreSwing(motion).components.map((item) => item.id), ["head"]); // an invalid range is never scored
     }
   });
-  it("keeps a supported improvement priority when too few checks can produce an overall score", () => {
+  it("scores a single measured check and keeps its improvement priority", () => {
     const motion = report(); motion.tempo = null;
     motion.readings = motion.readings.filter((row) => row.id !== "lift_top");
     motion.readings.find((row) => row.id === "head_impact")!.value = 40;
     const score = scoreSwing(motion);
-    assert.equal(score.total, null);
+    assert.equal(score.total, 0);
     assert.equal(score.priorities[0]?.id, "head");
-    assert.match(score.reason!, /Movement analysis is complete/);
+    assert.equal(score.reason, null);
   });
   it("scores DTL posture and ball-side displacement, including mirrored and left-handed footage", () => {
     const motion = report("down_the_line");

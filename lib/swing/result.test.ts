@@ -7,7 +7,7 @@ import { golfPoseProResult } from "../golfposepro/result";
 import { ironPoses } from "../golfposepro/__fixtures__/poses";
 import { DRILLS_BY_ID } from "../seed/drills";
 import { reviewSwing } from "./review";
-import { swingResult } from "./result";
+import { scoreTrend, swingResult } from "./result";
 
 const options = { aspect: 9 / 16, view: "face_on" as const, handedness: "right" as const };
 const golfPosePro = golfPoseProResult(ironPoses(), 30, 720, 1280)!.result;
@@ -61,4 +61,14 @@ it("gives no score or drills when the recording cannot be reviewed", () => {
   assert.equal(result.score, null);
   assert.match(result.reason!, /Review again/);
   assert.deepEqual(result.drills, []);
+});
+
+it("averages the latest swings and compares them with as many before", () => {
+  const points = (values: number[]) => values.map((value, i) => ({ date: `2026-11-${String(i + 1).padStart(2, "0")}`, value }));
+  assert.deepEqual(scoreTrend([]), { recent: 1, average: null, change: null });
+  assert.deepEqual(scoreTrend(points([6.2])), { recent: 1, average: 6.2, change: null });
+  assert.deepEqual(scoreTrend(points([6, 7])), { recent: 1, average: 7, change: 1 });
+  // Five against the five before; the oldest two fall outside both.
+  assert.deepEqual(scoreTrend(points([1, 1, 5, 5, 5, 5, 5, 7, 7, 7, 7, 8])), { recent: 5, average: 7.2, change: 2.2 });
+  assert.deepEqual(scoreTrend(points([8, 7, 6])), { recent: 1, average: 6, change: -1 });
 });

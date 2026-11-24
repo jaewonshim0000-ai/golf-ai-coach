@@ -25,6 +25,26 @@ export type SwingResult = {
   drills: Drill[];
 };
 
+export type ScorePoint = { date: string; value: number };
+
+/**
+ * The swing score over time, oldest point first: the average of the latest
+ * swings (up to five, never more than half) and its change on as many swings
+ * before them. One swing is noise; an average of a few says which way it goes.
+ */
+export function scoreTrend(points: ScorePoint[]): { recent: number; average: number | null; change: number | null } {
+  const recent = Math.min(5, Math.max(1, Math.floor(points.length / 2)));
+  const mean = (list: ScorePoint[]) => (list.length ? list.reduce((sum, point) => sum + point.value, 0) / list.length : null);
+  const average = mean(points.slice(-recent));
+  const before = points.length > 1 ? mean(points.slice(-2 * recent, -recent)) : null;
+  const round = (value: number) => Math.round(value * 10) / 10;
+  return {
+    recent,
+    average: average === null ? null : round(average),
+    change: average === null || before === null ? null : round(average - before),
+  };
+}
+
 /** What a player sees after an analysis: one score, the weakness, and library drills for it. */
 export function swingResult(model: PoseModel): SwingResult {
   const { report, blocks } = reviewSwing(model);

@@ -673,6 +673,21 @@ export async function getSwingModel(userId: string, sessionId: string): Promise<
   return expandMotionModel((data as { pose_model: PoseModel | null } | null)?.pose_model ?? null);
 }
 
+/** Several swings' models in one read (~40 KB each), keyed by session id. */
+export async function getSwingModels(userId: string, sessionIds: string[]): Promise<Map<string, PoseModel>> {
+  if (sessionIds.length === 0) return new Map();
+  const sb = await client();
+  const rows: { id: string; pose_model: PoseModel | null }[] = sb
+    ? unwrap(await sb.from("swing_sessions").select("id,pose_model").eq("user_id", userId).in("id", sessionIds), "getSwingModels")
+    : store().swingSessions
+      .filter((session) => session.user_id === userId && sessionIds.includes(session.id))
+      .map((session) => ({ id: session.id, pose_model: store().swingModels[session.id] ?? null }));
+  return new Map(rows.flatMap(({ id, pose_model }) => {
+    const model = expandMotionModel(pose_model);
+    return model ? [[id, model] as const] : [];
+  }));
+}
+
 export type SwingWriteGuard = {
   revision: string | null; videoUrl: string | null; clipStart: number | null; clipEnd: number | null;
 };

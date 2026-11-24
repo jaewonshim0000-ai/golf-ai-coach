@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 import { SwingVideo } from "@/components/swing/swing-video";
 import { chip } from "@/components/ui/primitives";
@@ -66,9 +66,12 @@ function TopOfSwing() {
 export function SwingLibrary({
   swings,
   latest,
+  trend,
 }: {
   swings: LibrarySwing[];
   latest: { id: string; title: string; when: string; score: number | null; toWork: number | null } | null;
+  /** The score trend card, shown under the latest swing. */
+  trend?: ReactNode;
 }) {
   const [filter, setFilter] = useState<(typeof FILTERS)[number][0]>("all");
   const shown = swings.filter((swing) => filter === "all" || swing.group === filter);
@@ -116,6 +119,7 @@ export function SwingLibrary({
           </div>
         </Link>
       ) : null}
+      {filter === "all" ? trend : null}
 
       <h2 className="dsp text-[26px] leading-none">Recordings · {shown.length}</h2>
       {shown.length === 0 ? (

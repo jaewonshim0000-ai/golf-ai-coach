@@ -497,3 +497,63 @@ export function ColumnBars({ data, label }: { data: BarDatum[]; label: string })
     </div>
   );
 }
+
+// ------------------------------------------------------------- ink card
+
+const MONTH_ONLY = new Intl.DateTimeFormat("en-US", { month: "short", timeZone: "UTC" });
+const DAY = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+
+/** A trend on the dark ink card, as on Handicap: a gold line, one dot on the latest value, month or day labels. */
+export function InkTrendLine({ points, label, dates = "month" }: { points: { date: string; value: number }[]; label: string; dates?: "month" | "day" }) {
+  const format = dates === "day" ? DAY : MONTH_ONLY;
+  const width = 314;
+  const height = 110;
+  const top = 14;
+  const bottom = 90;
+  const values = points.map((point) => point.value);
+  const max = Math.max(...values);
+  const min = Math.min(...values);
+  const span = max - min || 1;
+  const x = (index: number) => (points.length === 1 ? width / 2 : (index / (points.length - 1)) * (width - 6));
+  const y = (value: number) => top + ((max - value) / span) * (bottom - top);
+  const last = points.at(-1)!;
+  const middle = points[Math.floor((points.length - 1) / 2)]!;
+  const grid = [Math.ceil(max), Math.floor(min)].filter((value, index, all) => all.indexOf(value) === index && value <= max && value >= min);
+  return (
+    <svg
+      role="img"
+      aria-label={`${label} from ${points[0]!.value.toFixed(1)} in ${format.format(new Date(points[0]!.date))} to ${last.value.toFixed(1)} in ${format.format(new Date(last.date))}`}
+      viewBox={`0 0 ${width} ${height}`}
+      className="block w-full"
+    >
+      {grid.map((value) => (
+        <line key={value} x1="0" x2={width - 22} y1={y(value)} y2={y(value)} stroke="rgb(255 255 255 / 0.08)" />
+      ))}
+      <polyline
+        points={points.map((point, index) => `${x(index).toFixed(1)},${y(point.value).toFixed(1)}`).join(" ")}
+        fill="none"
+        stroke="#E8C547"
+        strokeWidth="2.5"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+      <circle cx={x(points.length - 1)} cy={y(last.value)} r="5" fill="#E8C547" stroke="#23271F" strokeWidth="2" />
+      <g fontSize="10" fontWeight="700" fill="#A9AD9F">
+        <text x="0" y="106">{format.format(new Date(points[0]!.date)).toUpperCase()}</text>
+        {points.length > 2 ? (
+          <text x={width / 2} y="106" textAnchor="middle">
+            {format.format(new Date(middle.date)).toUpperCase()}
+          </text>
+        ) : null}
+        <text x={width} y="106" textAnchor="end">
+          {format.format(new Date(last.date)).toUpperCase()}
+        </text>
+        {grid.map((value) => (
+          <text key={value} x={width} y={y(value) + 4} textAnchor="end">
+            {value}
+          </text>
+        ))}
+      </g>
+    </svg>
+  );
+}

@@ -2,6 +2,8 @@
 
 import { useEffect } from "react";
 
+import { reportError } from "@/lib/report-error";
+
 /**
  * Catches what `(app)/error.tsx` cannot: a failure in a layout, such as the
  * app layout's profile read during a Supabase outage. Without it the player
@@ -9,7 +11,7 @@ import { useEffect } from "react";
  */
 export default function RootError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   useEffect(() => {
-    console.error(error);
+    reportError(error);
   }, [error]);
 
   return (

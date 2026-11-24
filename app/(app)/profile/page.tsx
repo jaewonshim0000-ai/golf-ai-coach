@@ -118,6 +118,11 @@ export default async function ProfilePage({
           <li className="flex min-h-[52px] items-center px-4 text-[13px] text-fg-subtle">Demo mode: no account to sign out of.</li>
         )}
       </ul>
+      <p className="text-center text-[12px] text-fg-subtle">
+        <Link href="/privacy" className="underline underline-offset-2">Privacy policy</Link>
+        {" · "}
+        <Link href="/terms" className="underline underline-offset-2">Terms of service</Link>
+      </p>
     </div>
   );
 }

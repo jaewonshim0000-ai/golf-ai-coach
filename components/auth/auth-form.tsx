@@ -6,6 +6,7 @@ import { useState, type FormEvent } from "react";
 import { Loader2 } from "lucide-react";
 
 import { browserClient } from "@/lib/db/supabase";
+import { LEGAL } from "@/lib/legal";
 import { ActionBar, Button, Field, GroupLabel, Input, barButton, chip } from "@/components/ui/primitives";
 
 /** Sign in and Create account as the two chips at the top of the sheet. */
@@ -61,7 +62,8 @@ export function AuthForm({ mode, initialError = null }: { mode: "login" | "signu
           email,
           password,
           options: {
-            data: { name },
+            // When they agreed, kept with the account.
+            data: { name, terms_accepted_at: new Date().toISOString() },
             emailRedirectTo: `${window.location.origin}/auth/callback`,
           },
         });
@@ -127,6 +129,17 @@ export function AuthForm({ mode, initialError = null }: { mode: "login" | "signu
             minLength={8}
           />
         </Field>
+      ) : null}
+
+      {mode === "signup" ? (
+        <label className="flex items-start gap-2.5 text-[13px] leading-snug text-fg-muted">
+          <input type="checkbox" name="terms" required className="mt-0.5 h-[18px] w-[18px] shrink-0 accent-[var(--c-accent)]" />
+          <span>
+            I&apos;m {LEGAL.minAge} or older and agree to the{" "}
+            <Link href="/terms" className="font-bold text-accent underline underline-offset-2">Terms</Link> and the{" "}
+            <Link href="/privacy" className="font-bold text-accent underline underline-offset-2">Privacy policy</Link>.
+          </span>
+        </label>
       ) : null}
 
       {error ? (

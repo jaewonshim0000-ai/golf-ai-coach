@@ -150,6 +150,22 @@ export async function getBilling(userId: string): Promise<Billing> {
   };
 }
 
+/**
+ * Takes one of today's Ask Coach model answers for the signed-in player.
+ * False when they are used up, and also when the count fails: a missing
+ * migration should cost a rule-based answer, not an uncapped bill.
+ */
+export async function claimAiAnswer(): Promise<boolean> {
+  const sb = await client();
+  if (!sb) return true;
+  const { data, error } = await sb.rpc("claim_ai_answer");
+  if (error) {
+    console.error(`claimAiAnswer: ${error.message}`);
+    return false;
+  }
+  return data === true;
+}
+
 // --------------------------------------------------------------- profile
 
 export async function getProfile(userId: string): Promise<PlayerProfile | null> {

@@ -16,6 +16,7 @@ import type { Goal, PracticeFacility } from "@/types/player";
 import type { Club } from "@/types/golf";
 import type { HoleStat } from "@/types/rounds";
 import { ASK_IDLE, askCoach, type AskState } from "@/lib/ai/ask";
+import { askLimitMessage } from "@/lib/billing/plans";
 import {
   FRAME_COUNT,
   acceptFindings,
@@ -805,7 +806,10 @@ export async function askAction(_prev: AskState, formData: FormData): Promise<As
   const user = await requireUser();
   const question = String(formData.get("question") ?? "");
   try {
-    return await askCoach(question, await loadPlayerState(user.id));
+    return await askCoach(question, await loadPlayerState(user.id), {
+      use: repo.claimAiAnswer,
+      limited: async () => askLimitMessage((await repo.getBilling(user.id)).plan),
+    });
   } catch (error) {
     return {
       ...ASK_IDLE,

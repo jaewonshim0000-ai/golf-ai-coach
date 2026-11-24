@@ -6,7 +6,7 @@ import { Loader2, Sparkles } from "lucide-react";
 
 import { manageBillingAction, upgradeAction } from "@/app/billing-actions";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Progress } from "@/components/ui/primitives";
-import { LIMITS, type Billing, type Metered } from "@/lib/billing/plans";
+import { ASK_PER_DAY, LIMITS, type Billing, type Metered } from "@/lib/billing/plans";
 import { formatDate } from "@/lib/utils";
 
 function Submit({ children, variant }: { children: React.ReactNode; variant?: "primary" | "secondary" }) {
@@ -95,8 +95,9 @@ export function PlanCard({ billing, notice }: { billing: Billing; notice: string
           end ? <p className="text-[13px] text-fg-muted">{billing.cancelAtPeriodEnd ? `Premium ends ${end}.` : `Renews ${end}.`}</p> : null
         ) : (
           <p className="text-[13px] leading-relaxed text-fg-muted">
-            Premium gives you {LIMITS.premium.swing} swing analyses a month, unlimited rounds and the full strokes-gained
-            breakdown. Free includes {LIMITS.free.swing} swing analyses and {LIMITS.free.round} rounds a month.
+            Premium gives you {LIMITS.premium.swing} swing analyses a month, unlimited rounds, the full strokes-gained
+            breakdown and {ASK_PER_DAY.premium} AI coach answers a day. Free includes {LIMITS.free.swing} swing analyses and{" "}
+            {LIMITS.free.round} rounds a month, and {ASK_PER_DAY.free} AI coach answers a day.
           </p>
         )}
         <div className="flex flex-wrap gap-2">

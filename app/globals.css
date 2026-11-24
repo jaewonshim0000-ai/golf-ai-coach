@@ -273,8 +273,11 @@ body {
   }
 }
 
+/* Backwards, not both: a transform left on the sheet after the animation would
+   make it the containing block for the fixed ActionBar inside it, so the
+   buttons would scroll away instead of staying pinned to the screen. */
 .sheet-rise {
-  animation: sheet-rise 0.75s var(--ease) both;
+  animation: sheet-rise 0.75s var(--ease) backwards;
 }
 
 /* Numbers in tables and stat blocks must not jitter between renders. */

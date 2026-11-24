@@ -176,6 +176,10 @@ Setup, in Stripe test mode first:
 
 Demo mode shows everything unlocked and has no billing.
 
+## Error monitoring
+
+Server and browser errors go to [Sentry](https://sentry.io) once `NEXT_PUBLIC_SENTRY_DSN` is set in Vercel (create a Next.js project in Sentry, copy its DSN, redeploy). Without it nothing is sent and the browser never downloads the SDK. The settings in `lib/report-error.ts` send errors only: no tracing, and no user info, cookies, headers, request bodies, query strings, AI prompts or database data. Source maps are not uploaded, so browser stack traces show minified code; add `withSentryConfig` and a `SENTRY_AUTH_TOKEN` if that gets in the way.
+
 ## Coaching
 
 Strokes gained, practice scores, trends, and weakness ranking are computed from player data. Without `ANTHROPIC_API_KEY`, the rule-based coach still works. An optional model adds explanations; model output is validated before display.

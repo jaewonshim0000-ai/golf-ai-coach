@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { RotateCcw } from "lucide-react";
 
 import { Button, ErrorState } from "@/components/ui/primitives";
+import { reportError } from "@/lib/report-error";
 
 export default function AppError({
   error,
@@ -13,7 +14,7 @@ export default function AppError({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error(error);
+    reportError(error);
   }, [error]);
 
   return (

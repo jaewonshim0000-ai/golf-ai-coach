@@ -50,11 +50,11 @@ export function DesktopLanding() {
         <a className="logo" href="#top" aria-label="Golf AI Coach home">
           GOLF<span className="flag" aria-hidden />AI
         </a>
-        <p className="mono">{"// Copyright © 2026"}</p>
+        <p className="mono">{"// © 2026 Golf AI Coach"}</p>
         <p className="mono">
-          Golf AI Coach, Inc.
-          <br />
-          All Rights Reserved.
+          <Link href="/privacy">Privacy</Link>
+          {" · "}
+          <Link href="/terms">Terms</Link>
         </p>
       </header>
 
@@ -110,22 +110,27 @@ export function DesktopLanding() {
       <nav className="hud dots" aria-label="Chapters">
         <button type="button" aria-label="Intro" />
         <button type="button" aria-label="Swing Lab" />
-        <button type="button" aria-label="Green Reader" />
-        <button type="button" aria-label="Caddie AI" />
+        <button type="button" aria-label="Practice" />
+        <button type="button" aria-label="Coach" />
       </nav>
 
       <div id="toast" className="toast" role="status" />
 
+      {/*
+        Every number here is something the app does, not a result it promises:
+        no yards gained, no strokes saved. Check them against the code before
+        changing a feature they describe.
+      */}
       <main id="top">
-        <Chapter side="right" num="01" kicker="Swing Lab" title="Every swing," em="decoded."
-          lede="Dolor sit fairway, consectetur birdie elit. Sed do eagle tempor incididunt ut divot et dolore magna grip."
-          stats={[["240", "fps capture"], ["12", "swing checkpoints"], ["+9", "yards, avg gain"]]} />
-        <Chapter side="left" num="02" kicker="Green Reader" title="Read greens like a" em="caddie."
-          lede="Quis nostrud bunker ullamco laboris nisi ut aliquip ex ea commodo chippa, in reprehenderit in velvet greens."
-          stats={[["0.1°", "slope accuracy"], ["4", "cups of break read"], ["−2.3", "putts per round"]]} />
-        <Chapter side="right" num="03" kicker="Caddie AI" title="Your coach," em="on every hole."
-          lede="Excepteur sint occaecat cupidatat, sunt in culpa qui officia mulligan. Lorem ipsum flagstick."
-          stats={[["24/7", "on-call caddie"], ["36", "holes remembered"], ["1", "tap club pick"]]}>
+        <Chapter side="right" num="01" kicker="Swing Lab" title="Every swing," em="scored."
+          lede="Film a swing on your phone, face on or down the line. Your body is tracked frame by frame right in the browser, the swing is scored out of 10, and you get the one fault to fix first, with drills for it. A trend line shows whether it is getting better."
+          stats={[["5", "swing checks"], ["1", "fix at a time"], ["0", "video sent to AI"]]} />
+        <Chapter side="left" num="02" kicker="Practice" title="Practice you can" em="measure."
+          lede="Thirty practice tests for the range, chipping and putting. Your recent rounds decide which come first, and each test's target tightens as you improve. Pick 15, 30 or 60 minutes and the session is built for you."
+          stats={[["30", "practice tests"], ["10", "balls a goal test"], ["15–60", "minute sessions"]]} />
+        <Chapter side="right" num="03" kicker="Coach" title="Your coach, from" em="your numbers."
+          lede="Log a round shot by shot or as a live scorecard that saves each hole as you go. See fairways, greens, putts and scrambling, and with Premium, strokes gained by club and distance. Ask the coach anything about your game; it answers from your own data."
+          stats={[["2", "ways to log a round"], ["10", "recent rounds read"], ["1", "priority, worst first"]]}>
           <Link className="cta" href="/signup">
             Open the coach <span aria-hidden>→</span>
           </Link>

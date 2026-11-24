@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { ChevronLeft } from "lucide-react";
 
-import { TrendLine } from "@/components/charts";
+import { InkTrendLine, TrendLine } from "@/components/charts";
 import { ChartCard, ScoreMix, one, pct } from "@/components/rounds/play-stats";
 import { Card, CardContent, CardHeader, CardTitle, RoundButton, ScreenTitle, Stat, TopBar } from "@/components/ui/primitives";
 import { classicStats, classicTrends, holeLines } from "@/lib/analytics/classic";
@@ -12,61 +12,6 @@ import { cn } from "@/lib/utils";
 export const metadata: Metadata = { title: "Handicap & classic stats" };
 export const dynamic = "force-dynamic";
 
-const MONTH = new Intl.DateTimeFormat("en-US", { month: "short", timeZone: "UTC" });
-
-/** The handicap line on the ink card: gold, one dot on today's value. */
-function HandicapLine({ points }: { points: { date: string; value: number }[] }) {
-  const width = 314;
-  const height = 110;
-  const top = 14;
-  const bottom = 90;
-  const values = points.map((point) => point.value);
-  const max = Math.max(...values);
-  const min = Math.min(...values);
-  const span = max - min || 1;
-  const x = (index: number) => (points.length === 1 ? width / 2 : (index / (points.length - 1)) * (width - 6));
-  const y = (value: number) => top + ((max - value) / span) * (bottom - top);
-  const last = points.at(-1)!;
-  const middle = points[Math.floor((points.length - 1) / 2)]!;
-  const grid = [Math.ceil(max), Math.floor(min)].filter((value, index, all) => all.indexOf(value) === index && value <= max && value >= min);
-  return (
-    <svg
-      role="img"
-      aria-label={`Handicap index from ${points[0]!.value.toFixed(1)} in ${MONTH.format(new Date(points[0]!.date))} to ${last.value.toFixed(1)} in ${MONTH.format(new Date(last.date))}`}
-      viewBox={`0 0 ${width} ${height}`}
-      className="block w-full"
-    >
-      {grid.map((value) => (
-        <line key={value} x1="0" x2={width - 22} y1={y(value)} y2={y(value)} stroke="rgb(255 255 255 / 0.08)" />
-      ))}
-      <polyline
-        points={points.map((point, index) => `${x(index).toFixed(1)},${y(point.value).toFixed(1)}`).join(" ")}
-        fill="none"
-        stroke="#E8C547"
-        strokeWidth="2.5"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-      />
-      <circle cx={x(points.length - 1)} cy={y(last.value)} r="5" fill="#E8C547" stroke="#23271F" strokeWidth="2" />
-      <g fontSize="10" fontWeight="700" fill="#A9AD9F">
-        <text x="0" y="106">{MONTH.format(new Date(points[0]!.date)).toUpperCase()}</text>
-        {points.length > 2 ? (
-          <text x={width / 2} y="106" textAnchor="middle">
-            {MONTH.format(new Date(middle.date)).toUpperCase()}
-          </text>
-        ) : null}
-        <text x={width} y="106" textAnchor="end">
-          {MONTH.format(new Date(last.date)).toUpperCase()}
-        </text>
-        {grid.map((value) => (
-          <text key={value} x={width} y={y(value) + 4} textAnchor="end">
-            {value}
-          </text>
-        ))}
-      </g>
-    </svg>
-  );
-}
 
 /** A classic stat as the design's tile: name and change on the left, value in a stone circle. */
 function StatTile({ label, value, change, sub }: { label: string; value: string; change: number | null; sub?: string }) {
@@ -140,7 +85,7 @@ export default async function HandicapPage() {
           ) : null}
         </div>
         {year.length > 1 ? (
-          <HandicapLine points={year.map((entry) => ({ date: entry.recorded_on, value: entry.handicap_index }))} />
+          <InkTrendLine label="Handicap index" points={year.map((entry) => ({ date: entry.recorded_on, value: entry.handicap_index }))} />
         ) : (
           <p className="text-[13px] text-[#c9ccbf]">Your trend line appears once your handicap has changed a couple of times.</p>
         )}

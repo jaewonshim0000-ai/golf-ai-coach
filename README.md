@@ -108,6 +108,10 @@ The 2D report identifies setup, top and estimated contact from the observed hand
 
 The swing score is shown out of 10 with one decimal (internally, whole points of 100). Its thresholds and weights live in `lib/golf/score-rubric.ts`. To tune them to a coach's judgment, run `npm run dev`, open `/swing/calibrate`, choose many clips and give each a score out of 10 (like 9.8) with an optional reason. Each clip gets the same analysis as an upload. Its pose tracks and the score go to `calibration/swings/` in the project, not the database, and the video is not kept. Then `npm run calibrate:swing` lists where the app and the coach disagree most, fits the rubric, and reports the fit's error on held-out clips. `npm run calibrate:swing -- --write` adopts the fit only when it beats the current rubric on held-out clips (10 or more scored clips). The page and its save action work only on a local dev server.
 
+### Swing score trend
+
+Under the latest swing, Swing shows how the score has moved: the average of the latest swings (up to five) and its change on as many swings before them, with a line through the last 12. It keeps to the latest swing's camera side, since face on and down the line score different checks, and leaves out references. Scores are worked out from the stored tracks on each visit, so a refit rubric re-scores the whole line. No migration is required.
+
 ### Check your setup
 
 The pose model sees the body, not the club, and it can pick up a second person in the frame. Once a review exists, **Check your setup** shows the setup frame paused with the tracked outline. The player confirms the outline is on them; if it is not, the step points to recording again or adjusting the timing (there is no joint dragging). The player then taps the grip and the clubhead, and face on may also tap the ball. The taps are stored as fractions of the picture with the frame time inside the existing `pose_model` JSON, validated with zod to 0–1, so no migration is needed. A new review, a trim change or moving the setup frame clears them, the same way stale observations are dropped.

@@ -5,7 +5,7 @@ import { PGlite } from "@electric-sql/pglite";
 import { compactMotionModel, expandMotionModel } from "../golf/motion-storage";
 import { denseMotionModel } from "../golf/__fixtures__/motion";
 import type { PoseModel } from "../golf/pose";
-import { LIMIT_ERROR, LIMITS, limitMessage, type Metered, type Plan } from "../billing/plans";
+import { ASK_PER_DAY, LIMIT_ERROR, LIMITS, limitMessage, type Metered, type Plan } from "../billing/plans";
 
 test("live schema: atomic practice, persistent results, and cross-user isolation", async () => {
   const db = new PGlite();
@@ -21,7 +21,7 @@ test("live schema: atomic practice, persistent results, and cross-user isolation
       create table storage.objects(id text primary key, bucket_id text, name text);
       create function storage.foldername(text) returns text[] language sql as $$ select string_to_array($1, '/') $$;
     `);
-    for (const path of ["supabase/migrations/0001_init.sql", "supabase/migrations/0002_live_practice.sql", "supabase/migrations/0003_swing_vision.sql", "supabase/migrations/0004_swing_clips.sql", "supabase/migrations/0005_delete_account.sql", "supabase/migrations/0006_pose_source.sql", "supabase/migrations/0007_scorecards.sql", "supabase/migrations/0008_swing_model.sql", "supabase/migrations/0009_plans_plots_scorecards.sql", "supabase/migrations/0010_round_type.sql", "supabase/migrations/0011_practice_tests.sql", "supabase/migrations/0012_subscriptions.sql", "supabase/seed/seed.sql"]) {
+    for (const path of ["supabase/migrations/0001_init.sql", "supabase/migrations/0002_live_practice.sql", "supabase/migrations/0003_swing_vision.sql", "supabase/migrations/0004_swing_clips.sql", "supabase/migrations/0005_delete_account.sql", "supabase/migrations/0006_pose_source.sql", "supabase/migrations/0007_scorecards.sql", "supabase/migrations/0008_swing_model.sql", "supabase/migrations/0009_plans_plots_scorecards.sql", "supabase/migrations/0010_round_type.sql", "supabase/migrations/0011_practice_tests.sql", "supabase/migrations/0012_subscriptions.sql", "supabase/migrations/0013_ask_limit.sql", "supabase/seed/seed.sql"]) {
       const sql = (await readFile(path, "utf8")).replace('create extension if not exists "pgcrypto";', "");
       await db.exec(sql);
     }
@@ -155,6 +155,20 @@ test("live schema: atomic practice, persistent results, and cross-user isolation
     // A lapsed subscription falls back to Free; last month's use no longer counts.
     await db.exec(`reset role; update subscriptions set status = 'canceled'; update usage_events set created_at = now() - interval '40 days'; set role authenticated;`);
     await swing("swing_next_month");
+    // Ask Coach model answers: a daily number per plan, the same as plans.ts.
+    const claims = async (count: number) => {
+      const out: boolean[] = [];
+      for (let i = 0; i < count; i++) out.push((await db.query<{ ok: boolean }>("select claim_ai_answer() as ok")).rows[0]!.ok);
+      return out;
+    };
+    assert.deepEqual(await claims(ASK_PER_DAY.free + 1), [...Array(ASK_PER_DAY.free).fill(true), false]);
+    await db.exec(`reset role; update subscriptions set status = 'active'; set role authenticated;`);
+    const more = ASK_PER_DAY.premium - ASK_PER_DAY.free;
+    assert.deepEqual(await claims(more + 1), [...Array(more).fill(true), false]);
+    // Yesterday's answers no longer count.
+    await db.exec(`reset role; update usage_events set created_at = now() - interval '1 day' where kind = 'ask'; update subscriptions set status = 'canceled'; set role authenticated;`);
+    assert.deepEqual(await claims(1), [true]);
+    await assert.rejects(db.exec(`insert into usage_events(user_id, kind) values ('${user}', 'ask')`));
     await db.exec(`set request.jwt.claim.sub = '${other}'`);
     assert.equal((await db.query("select * from usage_events")).rows.length, 0);
     assert.equal((await db.query("select * from subscriptions")).rows.length, 0);

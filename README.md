@@ -29,6 +29,7 @@ Public app: [golf-ai-coach-alpha.vercel.app](https://golf-ai-coach-alpha.vercel.
    - `supabase/migrations/0010_round_type.sql` (new and existing projects; apply once).
    - `supabase/migrations/0011_practice_tests.sql` (new and existing projects; apply once).
    - `supabase/migrations/0012_subscriptions.sql` (new and existing projects; apply once, before deploying billing).
+   - `supabase/migrations/0013_ask_limit.sql` (new and existing projects; apply once, before deploying the Ask Coach cap).
    - `supabase/seed/seed.sql` (reference drills and swing bands only; safe to re-run).
 3. Copy `.env.example` to `.env.local` and set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` from the project's connection settings. Use the public anon key for these; the service-role key only ever goes in the server-only `SUPABASE_SERVICE_ROLE_KEY` (see [Plans and billing](#plans-and-billing)). Keep `ENABLE_DEMO_MODE=false`.
 4. In Supabase Authentication URL Configuration, set the Site URL to `https://golf-ai-coach-alpha.vercel.app` and allow `https://golf-ai-coach-alpha.vercel.app/auth/callback`. Also allow the callback at the local port you use, such as `http://localhost:3001/auth/callback`. Email/password sign-in must be enabled. See [redirect URL configuration](https://supabase.com/docs/guides/auth/redirect-urls).
@@ -159,8 +160,11 @@ Profile settings are organized into collapsible sections with live summaries and
 | Swing analyses | 3 a month | 100 a month |
 | Rounds | 4 a month | Unlimited |
 | Strokes-gained breakdowns | No | Yes |
+| AI coach answers (Ask Coach) | 5 a day | 50 a day |
 
-A swing analysis is one new swing recording or upload, references included. Allowances count new rounds and recordings per calendar month (UTC) and reset on the 1st; deleting one does not give it back. Free keeps every other feature, including shot-by-shot logging and the classic numbers (fairways, greens, putts, scrambling); strokes gained on Play and on each round need Premium. Change the numbers in both `lib/billing/plans.ts` and `0012_subscriptions.sql`; `npm test` fails if they disagree.
+A swing analysis is one new swing recording or upload, references included. Allowances count new rounds and recordings per calendar month (UTC) and reset on the 1st; deleting one does not give it back. Free keeps every other feature, including shot-by-shot logging and the classic numbers (fairways, greens, putts, scrambling); strokes gained on Play and on each round need Premium. Change the numbers in both `lib/billing/plans.ts` and `0012_subscriptions.sql` (Ask Coach: `0013_ask_limit.sql`); `npm test` fails if they disagree.
+
+Ask Coach answers count per UTC day and only when the model writes them. Past the day's number, the answer comes from the player's data without the model, with a note saying so. If the count can't be read (for example, before 0013 is applied), the answer is rule-based too, so a missing migration never means uncapped spend. The read-outs on round and practice pages are not counted; they are cached and bounded by the rounds and practices a plan allows. Set a monthly spend limit on the Anthropic workspace as well, as a backstop.
 
 The database enforces the allowances with an insert trigger, so they hold even for requests that skip the app. Plan status lives in `subscriptions`, which players can read but only the server's service-role key can write. Profile → **Plan** shows usage, **Upgrade to Premium** (Stripe Checkout) and **Manage billing** (the Stripe customer portal: card, invoices, cancel). Cancelling keeps Premium until the paid period ends. Deleting an account deletes its Stripe customer first, which cancels the subscription immediately.
 

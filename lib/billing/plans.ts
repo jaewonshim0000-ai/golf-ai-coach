@@ -44,6 +44,20 @@ export function limitMessage(plan: Plan, kind: Metered): string {
     : `You have used your ${limit} free swing analyses this month. Upgrade to Premium for ${LIMITS.premium.swing} a month.`;
 }
 
+/**
+ * Ask Coach answers written by the model, per player per UTC day. Past these
+ * the answer is rule-based. claim_ai_answer in 0013_ask_limit.sql enforces the
+ * same numbers, and migrations.test.ts checks the two agree.
+ */
+export const ASK_PER_DAY = { free: 5, premium: 50 } as const satisfies Record<Plan, number>;
+
+/** The note under a rule-based answer once the day's model answers are used. */
+export function askLimitMessage(plan: Plan): string {
+  return plan === "premium"
+    ? `You've used today's ${ASK_PER_DAY.premium} AI coach answers; more tomorrow`
+    : `You've used today's ${ASK_PER_DAY.free} AI coach answers; Premium has ${ASK_PER_DAY.premium} a day`;
+}
+
 /** Start of the month the database counts in. */
 export function monthStart(now = new Date()): string {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();

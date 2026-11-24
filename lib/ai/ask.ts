@@ -448,7 +448,14 @@ export function searchIndex(query: string, entries: AskEntry[], limit = CANDIDAT
 
 // --------------------------------------------------------------- the agent
 
-export async function askCoach(rawQuestion: string, state: PlayerState): Promise<AskState> {
+/**
+ * A model answer costs money, so the caller can ration them: `use` takes one
+ * of the player's answers for today, and `limited` is the note shown when
+ * none are left. Without it every answer may use the model.
+ */
+export type AskAllowance = { use: () => Promise<boolean>; limited: () => Promise<string> };
+
+export async function askCoach(rawQuestion: string, state: PlayerState, allowance?: AskAllowance): Promise<AskState> {
   const parsed = askQuestionSchema.safeParse(rawQuestion);
   if (!parsed.success) {
     return { ...ASK_IDLE, message: "Ask a question of at least two characters." };
@@ -471,8 +478,18 @@ export async function askCoach(rawQuestion: string, state: PlayerState): Promise
   }
 
   const byId = new Map(hits.map((hit) => [hit.id, hit]));
+  const fallback = () => ({
+    answer: ruleBasedAnswer(question, hits),
+    result_ids: hits.slice(0, MAX_RESULTS).map((hit) => hit.id),
+    follow_up: [] as string[],
+  });
 
-  const result = await getProvider().generate({
+  // Only a real model call spends an answer; the rule-based provider is free.
+  const provider = getProvider();
+  const capped = provider.id !== "rules" && allowance !== undefined && !(await allowance.use());
+  const result = capped
+    ? { data: fallback(), source: "rules" as const, note: await allowance.limited() }
+    : await provider.generate({
     name: "ask",
     system: `${COACH_SYSTEM_PROMPT}
 
@@ -492,11 +509,7 @@ ${hits.map((hit) => `- id: ${hit.id}\n  name: ${hit.title}\n  facts: ${hit.detai
 Reply with JSON: {"answer": string, "result_ids": string[], "follow_up": string[]}`,
     schema: askAnswerSchema,
     maxTokens: 600,
-    fallback: () => ({
-      answer: ruleBasedAnswer(question, hits),
-      result_ids: hits.slice(0, MAX_RESULTS).map((hit) => hit.id),
-      follow_up: [],
-    }),
+    fallback,
   });
 
   // Ids the model made up are dropped rather than rendered as dead links.

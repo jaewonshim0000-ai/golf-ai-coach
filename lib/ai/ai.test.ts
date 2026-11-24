@@ -295,6 +295,26 @@ describe("ask agent", () => {
     assert.ok(result.results.every((entry) => entry.id.startsWith("segment:putt_distance")));
   });
 
+  it("answers from the data without the model once the day's answers are used", async () => {
+    let calls = 0;
+    setProvider({ id: "stub", model: "stub", async generate() { calls++; throw new Error("the model must not be called"); } } as never);
+    const capped = await askCoach("putting", askState(), { use: async () => false, limited: async () => "No answers left" });
+    let used = 0;
+    const allowed = await askCoach("putting", askState(), { use: async () => (used++, true), limited: async () => "unused" }).catch((error: Error) => error);
+    setProvider(null);
+    // The rules provider costs nothing, so it never spends an answer.
+    let spent = 0;
+    await askCoach("putting", askState(), { use: async () => (spent++, false), limited: async () => "unused" });
+
+    assert.equal(capped.source, "rules");
+    assert.equal(capped.note, "No answers left");
+    assert.match(capped.answer!, /Putts 10–20 ft/);
+    assert.equal(used, 1);
+    assert.equal(calls, 1);
+    assert.ok(allowed instanceof Error);
+    assert.equal(spent, 0);
+  });
+
   it("never answers without a real entry behind it", () => {
     const hits = searchIndex("putting", buildAskIndex(askState()));
     const answer = ruleBasedAnswer("putting", hits);

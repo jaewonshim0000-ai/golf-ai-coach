@@ -406,6 +406,33 @@ export async function getPracticeSession(
   return { session: session as PracticeSession, items, attempts };
 }
 
+/**
+ * The data export's whole-history reads, one paged query each: practice with
+ * its blocks embedded (not three requests per session), each swing's analysis
+ * without its body-point tracks, and the plan and usage history.
+ */
+export async function getExportExtras(userId: string) {
+  const sb = await client();
+  if (!sb) throw new Error("getExportExtras: the export needs a database.");
+  const mine = (q: Query) => q.eq("user_id", userId);
+  const [practice, swingAnalyses, subscription, usage] = await Promise.all([
+    selectAll<PracticeSession & { practice_items: PracticeItem[] }>(sb, "practice_sessions", "*,practice_items(*)", "export.practice", mine),
+    // ponytail: tracks left out, ~40 KB a swing would outgrow one response; stream the export if players need them.
+    selectAll<Record<string, unknown>>(
+      sb,
+      "swing_sessions",
+      "id,view:pose_model->cameraAngle,handedness:pose_model->handedness,ball_side:pose_model->ballSide,clip:pose_model->clip," +
+        "slow_motion:pose_model->slowMotion,phases:pose_model->phases,timing:pose_model->timingStatus,setup:pose_model->setup,reference:pose_model->reference",
+      "export.swings",
+      mine,
+    ),
+    sb.from("subscriptions").select("status,current_period_end,cancel_at_period_end,updated_at").eq("user_id", userId).maybeSingle(),
+    selectAll<Record<string, unknown>>(sb, "usage_events", "kind,created_at", "export.usage", mine),
+  ]);
+  if (subscription.error) throw new Error(`export.subscription: ${subscription.error.message}`);
+  return { practice, swingAnalyses, subscription: subscription.data, usage };
+}
+
 export async function createPracticeSession(
   session: Omit<PracticeSession, "id" | "created_at">,
   items: Omit<PracticeItem, "id" | "session_id">[],

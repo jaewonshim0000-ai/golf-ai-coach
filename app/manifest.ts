@@ -4,7 +4,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "Golf AI Coach",
     short_name: "Golf Coach",
-    description: "Strokes gained, measurable practice, and private swing video in one golf development system.",
+    description: "Reads your swing videos, practice tests and rounds, and tells you the one thing to fix first.",
     start_url: "/practice",
     display: "standalone",
     background_color: "#ece9e0",

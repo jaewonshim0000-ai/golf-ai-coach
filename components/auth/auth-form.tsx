@@ -27,7 +27,16 @@ export function AuthTabs({ active }: { active: "login" | "signup" }) {
  * Email + password auth against Supabase. Only rendered when Supabase is
  * configured - in demo mode the page shows the demo entry point instead.
  */
-export function AuthForm({ mode, initialError = null }: { mode: "login" | "signup"; initialError?: string | null }) {
+export function AuthForm({
+  mode,
+  initialError = null,
+  wantsPremium = false,
+}: {
+  mode: "login" | "signup";
+  initialError?: string | null;
+  /** Came from Premium on the pricing page: onboarding sends them back there. */
+  wantsPremium?: boolean;
+}) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(initialError);
@@ -63,7 +72,7 @@ export function AuthForm({ mode, initialError = null }: { mode: "login" | "signu
           password,
           options: {
             // When they agreed, kept with the account.
-            data: { name, terms_accepted_at: new Date().toISOString() },
+            data: { name, terms_accepted_at: new Date().toISOString(), ...(wantsPremium ? { wants_premium: true } : {}) },
             emailRedirectTo: `${window.location.origin}/auth/callback`,
           },
         });

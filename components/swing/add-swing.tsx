@@ -12,7 +12,7 @@ import { CLUBS, CLUB_LABELS, type Club } from "@/types/golf";
 import { ActionBar, Button, barButton } from "@/components/ui/primitives";
 import { cn } from "@/lib/utils";
 import { canRecordInApp, FilmingGuide, SwingCamera } from "@/components/swing/swing-camera";
-import { UpgradeButton } from "@/components/billing/plan";
+import { useUpgrade } from "@/components/billing/plan";
 import { limitMessage, type Plan } from "@/lib/billing/plans";
 
 /**
@@ -40,10 +40,17 @@ export function AddSwing({ reference = false, left = null, plan = "premium", aut
   const dialog = useRef<HTMLDialogElement>(null);
   const upload = useRef<HTMLInputElement>(null);
   const camera = useRef<HTMLInputElement>(null);
+  const upgrade = useUpgrade();
+
+  /** A Free player with no analyses left is offered Premium rather than a form that cannot save. */
+  const start = () => {
+    if (left === 0 && plan === "free") upgrade({ title: "No swing analyses left", message: limitMessage(plan, "swing") });
+    else setOpen(true);
+  };
 
   useEffect(() => {
-    if (autoOpen) setOpen(true);
-  }, [autoOpen]);
+    if (autoOpen) start();
+  }, [autoOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (open && !dialog.current?.open) dialog.current?.showModal();
@@ -107,13 +114,13 @@ export function AddSwing({ reference = false, left = null, plan = "premium", aut
 
   return <>
     {reference ? (
-      <button type="button" onClick={() => setOpen(true)}
+      <button type="button" onClick={start}
         className="press-lg flex aspect-[3/4] w-full flex-col items-center justify-center gap-3 rounded-[22px] border-[1.5px] border-dashed border-[#a9ad9f]">
         <span className="flex h-12 w-12 items-center justify-center rounded-full bg-accent text-white"><Plus className="h-5 w-5" strokeWidth={2.4} /></span>
         <span className="dsp text-[11px]">Add reference</span>
       </button>
     ) : (
-      <Button type="button" onClick={() => setOpen(true)} className="h-[50px] px-5 text-[13px]">
+      <Button type="button" onClick={start} className="h-[50px] px-5 text-[13px]">
         <Camera className="h-4 w-4" /> Record
       </Button>
     )}
@@ -135,7 +142,6 @@ export function AddSwing({ reference = false, left = null, plan = "premium", aut
         {left === 0 ? (
           <div className="flex flex-col gap-4 rounded-[22px] bg-surface p-5">
             <p className="text-[14px] leading-relaxed">{limitMessage(plan, "swing")}</p>
-            {plan === "free" ? <UpgradeButton /> : null}
           </div>
         ) : (
         <form id="new-swing" onSubmit={save} className="flex flex-col gap-4">

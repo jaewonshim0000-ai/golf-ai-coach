@@ -3,7 +3,7 @@ import Link from "next/link";
 import { X } from "lucide-react";
 
 import { NewRoundForm } from "@/components/rounds/new-round-form";
-import { UpgradePrompt } from "@/components/billing/plan";
+import { OpenUpgrade, UpgradePrompt } from "@/components/billing/plan";
 import { limitMessage, remaining } from "@/lib/billing/plans";
 import { ArtHero, RoundButton, Sheet } from "@/components/ui/primitives";
 import * as repo from "@/lib/db/repo";
@@ -42,13 +42,16 @@ export default async function NewRoundPage() {
       />
       <Sheet className="gap-3.5 pt-[22px]">
         {left === 0 ? (
-          <UpgradePrompt title="No rounds left this month" message={limitMessage(billing.plan, "round")} />
+          <>
+            <UpgradePrompt title="No rounds left this month" message={limitMessage(billing.plan, "round")} />
+            <OpenUpgrade title="No rounds left this month" message={limitMessage(billing.plan, "round")} />
+          </>
         ) : (
           <>
             {left !== null ? (
               <p className="text-[13px] text-fg-muted">
                 {left} of your free rounds left this month.{" "}
-                <Link href="/profile#plan" className="text-accent">
+                <Link href="/pricing" className="text-accent">
                   Premium is unlimited.
                 </Link>
               </p>

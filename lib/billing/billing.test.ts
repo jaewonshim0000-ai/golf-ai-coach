@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type Stripe from "stripe";
 
-import { monthStart, planFor, remaining } from "./plans";
+import { formatPrice, monthStart, planFor, remaining } from "./plans";
 import { subscriptionRow } from "./stripe";
 
 const sub = (id: string, status: string, extra: Partial<Stripe.Subscription> = {}) =>
@@ -38,4 +38,12 @@ test("billing: Stripe subscriptions map to the plan the app enforces", () => {
   assert.equal(remaining({ plan: "free", status: null, periodEnd: null, cancelAtPeriodEnd: false, used: { swing: 5, round: 1 } }, "swing"), 0);
   assert.equal(remaining({ plan: "premium", status: "active", periodEnd: null, cancelAtPeriodEnd: false, used: { swing: 5, round: 40 } }, "round"), null);
   assert.equal(monthStart(new Date("2026-11-30T23:59:00Z")), "2026-11-01T00:00:00.000Z");
+});
+
+test("billing: Stripe's smallest-unit amounts show as the price players pay", () => {
+  assert.equal(formatPrice(999, "usd"), "$9.99");
+  assert.equal(formatPrice(1000, "usd"), "$10");
+  assert.equal(formatPrice(1250, "eur"), "€12.50");
+  // Zero-decimal currencies are already whole units.
+  assert.equal(formatPrice(9900, "krw"), "₩9,900");
 });

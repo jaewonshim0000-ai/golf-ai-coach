@@ -5,6 +5,8 @@ import { useActionState, useEffect, useRef, useState } from "react";
 import { ArrowUp, Loader2, Sparkles, X } from "lucide-react";
 
 import { askAction } from "@/app/actions";
+import { useUpgrade } from "@/components/billing/plan";
+import { askLimitMessage, ASK_PER_DAY } from "@/lib/billing/plans";
 import { ASK_IDLE, type AskEntry } from "@/lib/ai/ask";
 import { cn } from "@/lib/utils";
 
@@ -68,6 +70,7 @@ export function AskCoachButton({ className }: { className?: string }) {
 
 export function AskAgent() {
   const [state, formAction, pending] = useActionState(askAction, ASK_IDLE);
+  const upgrade = useUpgrade();
   const [open, setOpen] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null);
   const form = useRef<HTMLFormElement>(null);
@@ -181,6 +184,15 @@ export function AskAgent() {
                   Based on your data · {state.source === "ai" ? "AI coach" : "rule-based"}
                   {state.note ? ` · ${state.note}` : ""}
                 </span>
+                {state.upgrade ? (
+                  <button
+                    type="button"
+                    onClick={() => upgrade({ title: "More AI coach answers", message: `${askLimitMessage("free")}.` })}
+                    className="press dsp inline-flex h-9 items-center gap-1.5 self-start rounded-full bg-accent-soft px-3.5 text-[11px] text-accent-strong"
+                  >
+                    <Sparkles className="h-3.5 w-3.5" /> {ASK_PER_DAY.premium} a day with Premium
+                  </button>
+                ) : null}
               </article>
             </>
           ) : null}

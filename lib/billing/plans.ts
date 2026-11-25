@@ -58,6 +58,37 @@ export function askLimitMessage(plan: Plan): string {
     : `You've used today's ${ASK_PER_DAY.free} AI coach answers; Premium has ${ASK_PER_DAY.premium} a day`;
 }
 
+const perMonth = (limit: number | null) => (limit === null ? "Unlimited" : `${limit} a month`);
+
+/** What each plan includes, row by row, for the pricing page and the upgrade popup. null: not included. */
+export const FEATURES: { label: string; free: string | null; premium: string }[] = [
+  { label: "Swing analyses", free: perMonth(LIMITS.free.swing), premium: perMonth(LIMITS.premium.swing) },
+  { label: "Rounds", free: perMonth(LIMITS.free.round), premium: perMonth(LIMITS.premium.round) },
+  { label: "AI coach answers", free: `${ASK_PER_DAY.free} a day`, premium: `${ASK_PER_DAY.premium} a day` },
+  { label: "Strokes-gained breakdown", free: null, premium: "Included" },
+  { label: "Practice plans and tests", free: "Unlimited", premium: "Unlimited" },
+];
+
+/** Premium's price as Stripe charges it, ready to show: amount "$9.99", interval "month". */
+export type Price = { amount: string; interval: string };
+
+/** "$9.99 a month"; before billing is set up there is no price to show. */
+export function priceText(price: Price | null): string {
+  return price ? `${price.amount} a ${price.interval}` : "Billed monthly";
+}
+
+/** Stripe amounts are in the currency's smallest unit: 999 usd is $9.99, 9900 krw is ₩9,900. */
+export function formatPrice(unitAmount: number, currency: string): string {
+  const code = currency.toUpperCase();
+  const digits = new Intl.NumberFormat("en-US", { style: "currency", currency: code }).resolvedOptions().maximumFractionDigits ?? 2;
+  const amount = unitAmount / 10 ** digits;
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: code,
+    minimumFractionDigits: Number.isInteger(amount) ? 0 : digits,
+  }).format(amount);
+}
+
 /** Start of the month the database counts in. */
 export function monthStart(now = new Date()): string {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();

@@ -56,6 +56,8 @@ export type AskState = {
   followUp: string[];
   source: AISource;
   note?: string;
+  /** The answer was rule-based because a Free player used the day's model answers; Premium has more. */
+  upgrade?: boolean;
   message?: string;
 };
 
@@ -450,10 +452,11 @@ export function searchIndex(query: string, entries: AskEntry[], limit = CANDIDAT
 
 /**
  * A model answer costs money, so the caller can ration them: `use` takes one
- * of the player's answers for today, and `limited` is the note shown when
- * none are left. Without it every answer may use the model.
+ * of the player's answers for today, and `limited` gives the note shown when
+ * none are left, and whether Premium would have more. Without it every answer
+ * may use the model.
  */
-export type AskAllowance = { use: () => Promise<boolean>; limited: () => Promise<string> };
+export type AskAllowance = { use: () => Promise<boolean>; limited: () => Promise<{ note: string; upgrade: boolean }> };
 
 export async function askCoach(rawQuestion: string, state: PlayerState, allowance?: AskAllowance): Promise<AskState> {
   const parsed = askQuestionSchema.safeParse(rawQuestion);
@@ -487,8 +490,9 @@ export async function askCoach(rawQuestion: string, state: PlayerState, allowanc
   // Only a real model call spends an answer; the rule-based provider is free.
   const provider = getProvider();
   const capped = provider.id !== "rules" && allowance !== undefined && !(await allowance.use());
-  const result = capped
-    ? { data: fallback(), source: "rules" as const, note: await allowance.limited() }
+  const limit = capped ? await allowance.limited() : null;
+  const result = limit
+    ? { data: fallback(), source: "rules" as const, note: limit.note }
     : await provider.generate({
     name: "ask",
     system: `${COACH_SYSTEM_PROMPT}
@@ -526,6 +530,7 @@ Reply with JSON: {"answer": string, "result_ids": string[], "follow_up": string[
     followUp: result.data.follow_up.slice(0, 3),
     source: result.source,
     ...(result.note ? { note: result.note } : {}),
+    ...(limit?.upgrade ? { upgrade: true } : {}),
   };
 }
 

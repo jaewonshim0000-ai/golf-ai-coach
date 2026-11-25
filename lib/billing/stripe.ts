@@ -1,7 +1,8 @@
 import Stripe from "stripe";
+import { unstable_cache } from "next/cache";
 import { createClient } from "@supabase/supabase-js";
 
-import { planFor } from "./plans";
+import { formatPrice, planFor, type Price } from "./plans";
 
 /**
  * Server-only Stripe wiring. The service-role key is used for one table,
@@ -28,6 +29,26 @@ export function stripe(): Stripe {
 function admin() {
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
     auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
+/** Read from Stripe so the price shown is always the one checkout charges. Throws so a failure is not cached. */
+const cachedPrice = unstable_cache(
+  async (id: string): Promise<Price | null> => {
+    const price = await stripe().prices.retrieve(id);
+    if (price.unit_amount === null) return null;
+    return { amount: formatPrice(price.unit_amount, price.currency), interval: price.recurring?.interval ?? "month" };
+  },
+  ["premium-price"],
+  { revalidate: 3600 },
+);
+
+/** Premium's price, cached for an hour; null when billing is not set up or Stripe cannot be reached. */
+export async function premiumPrice(): Promise<Price | null> {
+  if (!billingConfigured()) return null;
+  return cachedPrice(process.env.STRIPE_PRICE_ID!).catch((error) => {
+    console.error("premiumPrice", error);
+    return null;
   });
 }
 

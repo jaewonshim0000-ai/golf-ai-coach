@@ -801,7 +801,10 @@ export async function askAction(_prev: AskState, formData: FormData): Promise<As
   try {
     return await askCoach(question, await loadPlayerState(user.id), {
       use: repo.claimAiAnswer,
-      limited: async () => askLimitMessage((await repo.getBilling(user.id)).plan),
+      limited: async () => {
+        const { plan } = await repo.getBilling(user.id);
+        return { note: askLimitMessage(plan), upgrade: plan === "free" };
+      },
     });
   } catch (error) {
     return {

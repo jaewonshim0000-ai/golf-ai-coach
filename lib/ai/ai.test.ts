@@ -298,16 +298,17 @@ describe("ask agent", () => {
   it("answers from the data without the model once the day's answers are used", async () => {
     let calls = 0;
     setProvider({ id: "stub", model: "stub", async generate() { calls++; throw new Error("the model must not be called"); } } as never);
-    const capped = await askCoach("putting", askState(), { use: async () => false, limited: async () => "No answers left" });
+    const capped = await askCoach("putting", askState(), { use: async () => false, limited: async () => ({ note: "No answers left", upgrade: true }) });
     let used = 0;
-    const allowed = await askCoach("putting", askState(), { use: async () => (used++, true), limited: async () => "unused" }).catch((error: Error) => error);
+    const allowed = await askCoach("putting", askState(), { use: async () => (used++, true), limited: async () => ({ note: "unused", upgrade: false }) }).catch((error: Error) => error);
     setProvider(null);
     // The rules provider costs nothing, so it never spends an answer.
     let spent = 0;
-    await askCoach("putting", askState(), { use: async () => (spent++, false), limited: async () => "unused" });
+    await askCoach("putting", askState(), { use: async () => (spent++, false), limited: async () => ({ note: "unused", upgrade: false }) });
 
     assert.equal(capped.source, "rules");
     assert.equal(capped.note, "No answers left");
+    assert.equal(capped.upgrade, true);
     assert.match(capped.answer!, /Putts 10–20 ft/);
     assert.equal(used, 1);
     assert.equal(calls, 1);

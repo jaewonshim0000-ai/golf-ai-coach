@@ -29,6 +29,8 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       <div className="sheet-rise relative z-10 -mt-7 min-h-[calc(100svh-342px)] rounded-t-[28px] bg-surface px-5 pb-32 pt-6 md:mx-auto md:max-w-md md:rounded-[28px] md:pb-6">
         {children}
         <p className="mt-6 text-center text-[12px] text-fg-subtle">
+          <Link href="/pricing" className="underline underline-offset-2">Pricing</Link>
+          {" · "}
           <Link href="/privacy" className="underline underline-offset-2">Privacy</Link>
           {" · "}
           <Link href="/terms" className="underline underline-offset-2">Terms</Link>

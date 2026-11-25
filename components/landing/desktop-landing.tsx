@@ -61,6 +61,7 @@ export function DesktopLanding() {
 
       <aside className="hud hud-right">
         <nav className="account mono" aria-label="Account">
+          <Link className="chip" href="/pricing">Pricing</Link>
           <Link className="chip" href="/login">Sign in</Link>
           <Link className="chip join" href="/signup">Get started</Link>
         </nav>

@@ -168,6 +168,8 @@ Ask Coach answers count per UTC day and only when the model writes them. Past th
 
 The database enforces the allowances with an insert trigger, so they hold even for requests that skip the app. Plan status lives in `subscriptions`, which players can read but only the server's service-role key can write. Profile → **Plan** shows usage, **Upgrade to Premium** (Stripe Checkout) and **Manage billing** (the Stripe customer portal: card, invoices, cancel). Cancelling keeps Premium until the paid period ends. Deleting an account deletes its Stripe customer first, which cancels the subscription immediately.
 
+`/pricing` compares the plans for anyone, signed in or not. Its Premium price is read from the Stripe price in `STRIPE_PRICE_ID` and cached for an hour, so change the price in Stripe, not in the code. Without Stripe configured it says "Billed monthly" instead. When a Free player reaches a limit or a Premium-only section (Record with no analyses left, New round with no rounds left, a locked strokes-gained card, or Ask Coach past the day's AI answers), an upgrade popup opens with the same comparison, the price and **Upgrade to Premium**.
+
 Setup, in Stripe test mode first:
 
 1. Apply `0012_subscriptions.sql`.

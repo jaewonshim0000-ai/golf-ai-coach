@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { ActionBar, ButtonLink, StatCircle, barButton } from "@/components/ui/primitives";
 
 import { CHAPTERS } from "./copy";
@@ -33,6 +35,10 @@ export function MobileLanding() {
           </div>
         </section>
       ))}
+
+      <Link href="/pricing" className="self-center text-[14px] font-semibold text-accent underline underline-offset-2">
+        Free to start. See plans and pricing
+      </Link>
 
       <ActionBar className="[--bar-fade:var(--c-surface)]">
         <ButtonLink href="/login" variant="secondary" className={barButton}>

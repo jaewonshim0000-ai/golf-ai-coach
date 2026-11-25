@@ -22,13 +22,18 @@ const interTight = Inter_Tight({
   display: "swap",
 });
 
+/** What search results and link previews say; the landing page's own words. */
+const DESCRIPTION =
+  "Golf AI Coach reads your swing videos, practice tests and rounds, and tells you the one thing to fix first.";
+
 export const metadata: Metadata = {
   title: {
     default: "Golf AI Coach",
     template: "%s · Golf AI Coach",
   },
-  description:
-    "A persistent golf intelligence system: strokes gained, practice tracking and swing findings combined into one development priority.",
+  description: DESCRIPTION,
+  // The image is app/opengraph-image.png; on Vercel, Next resolves its URL against the production domain.
+  openGraph: { type: "website", siteName: "Golf AI Coach", title: "Golf AI Coach", description: DESCRIPTION },
   manifest: "/manifest.webmanifest",
   applicationName: "Golf AI Coach",
   appleWebApp: { capable: true, title: "Golf Coach", statusBarStyle: "black-translucent" },

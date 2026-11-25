@@ -97,8 +97,8 @@ export default async function PricingPage() {
           <div className="mt-auto flex flex-col gap-2.5">
             {plan === null ? (
               <>
-                <ButtonLink href="/signup" size="lg">Get started</ButtonLink>
-                <p className="text-center text-[12px] text-white/60">Create your free account, then upgrade from your profile.</p>
+                <ButtonLink href="/signup?plan=premium" size="lg">Get started</ButtonLink>
+                <p className="text-center text-[12px] text-white/60">Create your account and set up your profile, and you&apos;ll land back here to upgrade.</p>
               </>
             ) : plan === "free" ? (
               <UpgradeButton size="lg" />

@@ -150,7 +150,8 @@ export async function completeOnboardingAction(
 ): Promise<ActionState> {
   const result = await saveProfileAction(prev, formData);
   if (!result.ok) return result;
-  redirect("/practice");
+  // Someone who picked Premium before signing up goes back to finish upgrading.
+  redirect((await repo.currentUser())?.wantsPremium ? "/pricing" : "/practice");
 }
 
 // ------------------------------------------------------------------- rounds

@@ -100,14 +100,20 @@ export async function selectAll<T>(
 
 // ------------------------------------------------------------------- auth
 
-export type SessionUser = { id: string; email: string; name: string | null };
+export type SessionUser = {
+  id: string;
+  email: string;
+  name: string | null;
+  /** Chose Premium on the pricing page before signing up; only steers them back there after onboarding, never unlocks anything. */
+  wantsPremium: boolean;
+};
 
 export async function currentUser(): Promise<SessionUser | null> {
   if (mode() === "setup") return null;
   const sb = await client();
   if (!sb) {
     const demo = store().user;
-    return { id: demo.id, email: demo.email, name: demo.name };
+    return { id: demo.id, email: demo.email, name: demo.name, wantsPremium: false };
   }
   const { data } = await sb.auth.getUser();
   if (!data.user) return null;
@@ -115,6 +121,7 @@ export async function currentUser(): Promise<SessionUser | null> {
     id: data.user.id,
     email: data.user.email ?? "",
     name: (data.user.user_metadata?.name as string | undefined) ?? null,
+    wantsPremium: data.user.user_metadata?.wants_premium === true,
   };
 }
 

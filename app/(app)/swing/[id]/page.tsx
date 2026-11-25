@@ -1,5 +1,4 @@
 import { Suspense } from "react";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { ChevronLeft } from "lucide-react";
@@ -19,7 +18,7 @@ import { ComparisonAdvice } from "@/components/swing/comparison-advice";
 import { CLUB_LABELS, labelize } from "@/types/golf";
 import * as repo from "@/lib/db/repo";
 import { loadPlayerState } from "@/lib/player-state";
-import { formatDate } from "@/lib/utils";
+import { relativeDays } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Swing review" };
 export const dynamic = "force-dynamic";
@@ -60,28 +59,36 @@ export default async function SwingPage({ params, searchParams }: {
     : [];
   const fixGoal = result?.drills[0]?.id;
 
+  // The score against the player's previous swing from the same side.
+  const previous = [...state.swingSessions]
+    .filter((other) => other.camera_angle === session.camera_angle && other.created_at < session.created_at)
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+  let lastChange: number | null = null;
+  if (result?.score != null && previous && !current?.reference) {
+    const before = (await repo.getSwingModels(user.id, [previous.id])).get(previous.id) ?? null;
+    const fresh = currentSwingModel(before, previous) && before.golfPosePro?.version === GPP_VERSION && !before.reference;
+    const score = fresh ? swingResult(before).score : null;
+    if (score !== null) lastChange = Math.round((result.score - score) * 10) / 10;
+  }
+
   return (
     <div className="flex flex-col">
-      <div className="relative -mx-4 -mt-5 overflow-hidden bg-[linear-gradient(180deg,#2c3a20,#1f2a16_70%,#3e5426)] px-5 pb-12 pt-5 text-white md:-mx-8 md:-mt-8 md:px-8">
+      <div className="relative -mx-4 -mt-5 overflow-hidden bg-[#2a3820] px-5 pb-12 pt-5 text-white md:-mx-8 md:-mt-8 md:px-8">
         <div className="flex items-center justify-between gap-3">
           <RoundButton href="/swing" tone="hero" label="Back to Swing">
             <ChevronLeft className="h-[18px] w-[18px]" strokeWidth={2.2} />
           </RoundButton>
-          <Link
-            href={context?.comparison ? "#compare" : "/swing/references"}
-            className="press dsp inline-flex h-9 items-center rounded-full border-[1.5px] border-white/85 px-3.5 text-[11px] tracking-[0.1em]"
-          >
-            Compare to best
-          </Link>
-          <span className="w-11" aria-hidden />
-        </div>
-        <div className="mt-4 flex items-end justify-between gap-3">
-          <div className="min-w-0">
-            <p className="dsp text-[11px] tracking-[0.1em] text-white/75">
-              {labelize(session.camera_angle)} · {formatDate(session.created_at.slice(0, 10))}
-            </p>
-            <h1 className="dsp mt-1 text-[44px] leading-[0.98]">{CLUB_LABELS[session.club]}</h1>
-          </div>
+          <h1 className="inline-flex h-9 min-w-0 items-center rounded-full bg-[rgb(20_24_15_/_0.55)] px-3.5 text-[11px] font-bold uppercase tracking-[0.1em]">
+            <span className="truncate">
+              {CLUB_LABELS[session.club]} · {labelize(session.camera_angle)} · {relativeDays(session.created_at.slice(0, 10))}
+            </span>
+          </h1>
+          <RoundButton href={context?.comparison ? "#compare" : "/swing/references"} tone="hero" label="Compare with your best">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <rect x="3" y="5" width="8" height="14" rx="2" />
+              <rect x="13" y="5" width="8" height="14" rx="2" />
+            </svg>
+          </RoundButton>
         </div>
         <div className="mx-auto mt-4 w-full max-w-sm">
           <SwingVideo id={id} videoUrl={session.video_url} clipStart={session.clip_start} clipEnd={session.clip_end} analysable model={model} />
@@ -94,7 +101,7 @@ export default async function SwingPage({ params, searchParams }: {
         {editingReference && current ? (
           <SwingReferenceEditor sessionId={id} saved={current.reference} handedness={current.handedness} initiallyOpen />
         ) : result ? (
-          <SwingResultCard result={result} />
+          <SwingResultCard result={result} change={lastChange} />
         ) : (
           <section className="flex flex-col gap-2 rounded-[22px] bg-surface-2 p-5">
             <h2 className="dsp text-[22px] leading-none">Analysing your swing</h2>
@@ -105,6 +112,11 @@ export default async function SwingPage({ params, searchParams }: {
           </section>
         )}
 
+        {context?.comparison?.status === "ready" ? (
+          <Suspense fallback={<p role="status" className="text-[12px] text-fg-muted">Writing advice from the comparison…</p>}>
+            <ComparisonAdvice owner={user.id} comparison={context.comparison} club={session.club} />
+          </Suspense>
+        ) : null}
         {current && context ? (
           <div id="compare" className="scroll-mt-4">
             <SwingComparisonPanel
@@ -113,13 +125,6 @@ export default async function SwingPage({ params, searchParams }: {
               comparison={context.comparison}
               requested={requestedReference}
               message={context.message}
-              advice={
-                context.comparison ? (
-                  <Suspense fallback={<p role="status" className="text-[12px] text-fg-muted">Writing advice from the comparison…</p>}>
-                    <ComparisonAdvice owner={user.id} comparison={context.comparison} club={session.club} />
-                  </Suspense>
-                ) : null
-              }
               options={context.references.map((ref) => ({
                 id: ref.session.id,
                 label: `${ref.metadata.name} · ${CLUB_LABELS[ref.session.club]} · ${ref.session.camera_angle.replaceAll("_", " ")}`,
@@ -138,7 +143,7 @@ export default async function SwingPage({ params, searchParams }: {
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
                 <path d="M12 2.5l2.1 6.4 6.4 2.1-6.4 2.1L12 19.5l-2.1-6.4L3.5 11l6.4-2.1z" />
               </svg>
-              Build my fix session
+              Build a fix session
             </ButtonLink>
           </ActionBar>
         ) : null}

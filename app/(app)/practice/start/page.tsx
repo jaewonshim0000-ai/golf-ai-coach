@@ -2,13 +2,14 @@ import type { Metadata } from "next";
 import { ChevronLeft } from "lucide-react";
 
 import { SessionBuilder, type PlanPreview } from "@/components/practice/session-builder";
-import { RoundButton, ScreenTitle, TopBar } from "@/components/ui/primitives";
+import { ButtonLink, RoundButton, ScreenTitle, TopBar } from "@/components/ui/primitives";
 import * as repo from "@/lib/db/repo";
 import { loadPlayerState } from "@/lib/player-state";
 import { PRACTICE_GOALS, earnedTolerance, goalForWeakness, type GoalId } from "@/lib/practice/goals";
+import { planDefaults } from "@/lib/practice/plan-defaults";
 import { PLAN_LENGTHS, buildPlan, planLengthFor } from "@/lib/practice/plan";
 import { DRILLS_BY_ID } from "@/lib/seed/drills";
-import { goalsForDrill, rankPracticeDrills } from "@/lib/practice/drill-priorities";
+import { goalsForDrill } from "@/lib/practice/drill-priorities";
 
 export const metadata: Metadata = { title: "Build a session" };
 export const dynamic = "force-dynamic";
@@ -22,18 +23,7 @@ export default async function StartPracticePage({
   if (!user) return null;
   const [state, search] = await Promise.all([loadPlayerState(user.id), searchParams]);
 
-  // The last test per goal sets today's band.
-  const lastOffsets = (goal: GoalId) =>
-    state.drillAttempts
-      .filter((attempt) => attempt.drill_id === `drill_${goal}` && attempt.shot_offsets?.length)
-      .sort((a, b) => a.completed_at.localeCompare(b.completed_at))
-      .at(-1)?.shot_offsets;
-
-  const ranked = rankPracticeDrills(state.drills, state);
-  const priorities = ranked.filter(({ drill }) => state.practiceDrillPriorities.includes(drill.id));
-  const needed = ranked.find((entry) => entry.reason);
-  const recommended = needed ? goalsForDrill(needed.drill)[0]! : goalForWeakness(state.weaknesses[0] ?? null);
-  const preferredGoal = priorities[0] ? goalsForDrill(priorities[0].drill)[0] : undefined;
+  const { priorities, recommended, preferredGoal, lastOffsets } = planDefaults(state);
   // Links arrive with a goal, a drill id or a weakness id.
   const asked =
     PRACTICE_GOALS.find((goal) => goal.id === search.goal || `drill_${goal.id}` === search.goal)?.id ??
@@ -71,7 +61,11 @@ export default async function StartPracticePage({
             <ChevronLeft className="h-[18px] w-[18px]" strokeWidth={2.2} />
           </RoundButton>
         }
-        center="New session"
+        right={
+          <ButtonLink href="/practice/drills" variant="secondary" className="h-10 px-3.5 text-[11px]">
+            Drill library
+          </ButtonLink>
+        }
       />
       <ScreenTitle>
         Build a
@@ -82,6 +76,7 @@ export default async function StartPracticePage({
         goals={PRACTICE_GOALS.map((goal) => goal.id)}
         recommended={recommended}
         priorityGoal={state.weaknesses[0] ? goalForWeakness(state.weaknesses[0]) : null}
+        priorityLost={state.weaknesses[0]?.strokes_lost_per_round ?? null}
         initialGoal={asked ?? preferredGoal ?? recommended}
         initialMinutes={planLengthFor(state.profile?.typical_practice_duration)}
         previews={previews}

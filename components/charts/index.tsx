@@ -471,12 +471,12 @@ export function ColumnBars({ data, label }: { data: BarDatum[]; label: string })
             <div key={datum.label} className="relative h-full">
               <div className="absolute inset-x-0 border-t-[1.5px] border-fg" style={{ top: up + 22 }} aria-hidden />
               {isWorst ? (
-                <span className="font-display tabular absolute inset-x-0 text-center text-[16px] text-bad" style={{ top: 0 }}>
+                <span className="font-display tabular absolute inset-x-0 text-center text-[15px] text-bad" style={{ top: 0 }}>
                   {signedText(datum.value, 1)}
                 </span>
               ) : null}
               <div
-                className={cn("absolute inset-x-0", datum.value >= 0 ? "rounded-t-md" : "rounded-b-md")}
+                className={cn("absolute inset-x-[15%]", datum.value >= 0 ? "rounded-t-md" : "rounded-b-md")}
                 style={{
                   top: datum.value >= 0 ? up + 22 - height : up + 22,
                   height,
@@ -487,7 +487,7 @@ export function ColumnBars({ data, label }: { data: BarDatum[]; label: string })
           );
         })}
       </div>
-      <div className="grid gap-2 text-center text-[11px] font-semibold text-fg-subtle" style={{ gridTemplateColumns: `repeat(${data.length}, minmax(0, 1fr))` }}>
+      <div className="grid gap-2 text-center text-[10px] font-bold leading-tight text-fg-subtle" style={{ gridTemplateColumns: `repeat(${data.length}, minmax(0, 1fr))` }}>
         {data.map((datum) => (
           <span key={datum.label} className={cn(datum === worst && datum.value < -0.05 && "font-bold text-fg")}>
             {datum.label}
@@ -554,6 +554,54 @@ export function InkTrendLine({ points, label, dates = "month" }: { points: { dat
           </text>
         ))}
       </g>
+    </svg>
+  );
+}
+
+/** A small gold line with no axes: the shape of a trend on a stat card. */
+export function MiniSpark({ values, label, width = 130, height = 28 }: { values: number[]; label: string; width?: number; height?: number }) {
+  if (values.length < 2) return null;
+  const max = Math.max(...values);
+  const min = Math.min(...values);
+  const span = max - min || 1;
+  const points = values
+    .map((value, index) => `${((index / (values.length - 1)) * width).toFixed(1)},${(3 + ((max - value) / span) * (height - 6)).toFixed(1)}`)
+    .join(" ");
+  return (
+    <svg role="img" aria-label={label} width={width} height={height} viewBox={`0 0 ${width} ${height}`} className="block max-w-full">
+      <polyline className="spark-draw" points={points} fill="none" stroke="#E8C547" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/** The swing score over the latest swings: a gold line on a baseline, with the recent average dashed. */
+export function ScoreLine({ values, recent, label }: { values: number[]; recent: number; label: string }) {
+  const width = 314;
+  const top = 6;
+  const bottom = 50;
+  const max = Math.max(...values);
+  const min = Math.min(...values);
+  const span = max - min || 1;
+  const x = (index: number) => (values.length === 1 ? width / 2 : (index / (values.length - 1)) * width);
+  const y = (value: number) => top + ((max - value) / span) * (bottom - top);
+  const window = values.slice(-recent);
+  const average = window.reduce((sum, value) => sum + value, 0) / window.length;
+  const last = values.length - 1;
+  return (
+    <svg role="img" aria-label={label} viewBox={`0 0 ${width} 62`} className="block w-full">
+      <line x1="0" y1="56" x2={width} y2="56" stroke="#3A3F33" strokeWidth="1" />
+      <line x1={x(values.length - window.length)} y1={y(average)} x2={width} y2={y(average)} stroke="#E8C547" strokeWidth="1" strokeDasharray="3 4" opacity="0.6" />
+      <polyline
+        className="spark-draw"
+        style={{ "--line-length": 900 } as React.CSSProperties}
+        points={values.map((value, index) => `${x(index).toFixed(1)},${y(value).toFixed(1)}`).join(" ")}
+        fill="none"
+        stroke="#E8C547"
+        strokeWidth="2.5"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+      <circle cx={Math.min(x(last), width - 4)} cy={y(values[last]!)} r="4.5" fill="#E8C547" stroke="#23271F" strokeWidth="2" />
     </svg>
   );
 }

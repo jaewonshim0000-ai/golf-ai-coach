@@ -30,30 +30,35 @@ const SECTIONS = [
   {
     id: "player",
     title: "About you",
+    short: "Your handicap sets the benchmark your stats use",
     fields: ["display_name", "handicap_index", "experience_level", "dominant_hand"],
     uses: "Your handicap sets the benchmark your stats and strokes gained are compared with. Ask coach reads the rest.",
   },
   {
     id: "game",
-    title: "Your golf game",
+    title: "Your scores",
+    short: "Fits the coach's answers to your game",
     fields: ["typical_score", "average_driver_distance", "swing_pattern", "common_miss"],
     uses: "Ask coach reads these to fit its answers to your game.",
   },
   {
     id: "goals",
     title: "Goals",
+    short: "Decides which weakness comes first",
     fields: ["primary_goal", "secondary_goals"],
     uses: "Your goals decide which weaknesses rise to the top of your priorities.",
   },
   {
     id: "practice",
-    title: "Practice preferences",
+    title: "Practice",
+    short: "Where Build a session starts",
     fields: ["practice_days_per_week", "typical_practice_duration", "facilities"],
     uses: "Session length is where Build a session starts, and days a week is your target in Practice history. Ask coach knows where you can practise.",
   },
   {
     id: "bag",
     title: "What's in the bag",
+    short: "Record a swing offers just these",
     fields: ["bag"],
     uses: "Recording a swing offers just these clubs, and Ask coach knows what you carry.",
   },
@@ -220,7 +225,7 @@ export function ProfileForm({
     profile ? `${labelize(profile.experience_level)}` : "",
     profile?.typical_score ? `Shoots ${profile.typical_score}` : "",
     profile ? GOAL_LABELS[profile.primary_goal] : "",
-    profile ? `${profile.practice_days_per_week}× a week` : "",
+    profile ? `${profile.typical_practice_duration} min, ${profile.practice_days_per_week}× a week` : "",
     `${bagCount} clubs`,
   ];
 
@@ -476,9 +481,9 @@ export function ProfileForm({
         </>
       ) : (
         <>
-          <ul aria-label="Profile settings" className="overflow-hidden rounded-[22px] bg-surface">
+          <ul aria-label="Profile settings" className="rounded-[26px] bg-surface px-4 py-0.5 shadow-[var(--shadow-card)]">
             {SECTIONS.map((item, index) => (
-              <li key={item.id} className="border-b border-border last:border-0">
+              <li key={item.id} className="border-b border-surface-2 last:border-0">
                 <details
                   open={open === index}
                   onToggle={(event) => {
@@ -487,14 +492,17 @@ export function ProfileForm({
                   }}
                   className="group"
                 >
-                  <summary className="flex min-h-[52px] cursor-pointer list-none items-center justify-between gap-3 px-4">
-                    <span className="text-[16px] font-semibold">{item.title}</span>
-                    <span className="flex items-center gap-2 text-[13px] font-semibold text-fg-subtle">
-                      {summaries[index]}
-                      <ChevronRight className="h-[18px] w-[18px] transition-transform group-open:rotate-90" />
+                  <summary className="flex min-h-14 cursor-pointer list-none items-center gap-3 py-2 [&::-webkit-details-marker]:hidden">
+                    <span className="flex min-w-0 flex-1 flex-col gap-px">
+                      <span className="truncate text-[15px] font-semibold">
+                        {item.title}
+                        {summaries[index] ? ` · ${summaries[index]}` : ""}
+                      </span>
+                      <span className="truncate text-[12px] text-fg-subtle">{item.short}</span>
                     </span>
+                    <ChevronRight className="h-4 w-4 shrink-0 text-fg-subtle transition-transform group-open:rotate-90" strokeWidth={2.2} />
                   </summary>
-                  <fieldset disabled={pending} className="min-w-0 border-0 px-4 pb-5 pt-1">
+                  <fieldset disabled={pending} className="min-w-0 border-0 pb-5 pt-1">
                     {sections[index]}
                   </fieldset>
                 </details>

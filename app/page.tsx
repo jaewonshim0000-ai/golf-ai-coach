@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import AuthLayout from "./(auth)/layout";
+import { AuthShell } from "@/components/auth/auth-shell";
 import { DesktopLanding } from "@/components/landing/desktop-landing";
 import { MobileLanding } from "@/components/landing/mobile-landing";
 import * as repo from "@/lib/db/repo";
@@ -17,9 +17,9 @@ export default async function Home() {
   return (
     <>
       <div className="md:hidden">
-        <AuthLayout>
+        <AuthShell hero={{ kind: "landing" }}>
           <MobileLanding />
-        </AuthLayout>
+        </AuthShell>
       </div>
       <DesktopLanding />
     </>

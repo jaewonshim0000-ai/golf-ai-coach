@@ -120,8 +120,12 @@ export function AddSwing({ reference = false, left = null, plan = "premium", aut
         <span className="dsp text-[11px]">Add reference</span>
       </button>
     ) : (
-      <Button type="button" onClick={start} className="h-[50px] px-5 text-[13px]">
-        <Camera className="h-4 w-4" /> Record
+      <Button type="button" onClick={start} className="h-11 px-4 text-[12px]">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <path d="M4 8h3l2-3h6l2 3h3v11H4z" />
+          <circle cx="12" cy="13" r="3.5" />
+        </svg>
+        Record
       </Button>
     )}
     <dialog ref={dialog} aria-labelledby="new-swing-title" onClose={() => setOpen(false)} onCancel={(event) => { if (pending) event.preventDefault(); }}

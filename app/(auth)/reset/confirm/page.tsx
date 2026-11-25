@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 
 import { ResetForm } from "@/components/auth/reset-form";
+import { AuthShell } from "@/components/auth/auth-shell";
 import { mode } from "@/lib/db/repo";
 
 export const metadata: Metadata = { title: "New password" };
@@ -16,9 +17,11 @@ export default function ResetConfirmPage() {
   if (mode() === "demo") redirect("/practice");
 
   return (
-    <div className="flex flex-col gap-4">
-      <h1 className="dsp text-[30px] leading-none">Choose a new password</h1>
-      <ResetForm mode="confirm" />
-    </div>
+    <AuthShell hero={{ kind: "logo" }}>
+      <div className="flex flex-col gap-4">
+        <h1 className="dsp text-[30px] leading-none">Choose a new password</h1>
+        <ResetForm mode="confirm" />
+      </div>
+    </AuthShell>
   );
 }

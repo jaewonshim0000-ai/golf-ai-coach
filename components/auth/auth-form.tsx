@@ -8,6 +8,7 @@ import { Loader2 } from "lucide-react";
 import { browserClient } from "@/lib/db/supabase";
 import { LEGAL } from "@/lib/legal";
 import { ActionBar, Button, Field, GroupLabel, Input, barButton, chip } from "@/components/ui/primitives";
+import { cn } from "@/lib/utils";
 
 /** Sign in and Create account as the two chips at the top of the sheet. */
 export function AuthTabs({ active }: { active: "login" | "signup" }) {
@@ -141,8 +142,16 @@ export function AuthForm({
       ) : null}
 
       {mode === "signup" ? (
-        <label className="flex items-start gap-2.5 text-[13px] leading-snug text-fg-muted">
-          <input type="checkbox" name="terms" required className="mt-0.5 h-[18px] w-[18px] shrink-0 accent-[var(--c-accent)]" />
+        <label className="flex cursor-pointer items-start gap-3 rounded-[20px] border-[1.5px] border-track px-3.5 py-3 text-[13px] leading-[1.45] text-fg-muted has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent">
+          <input type="checkbox" name="terms" required className="peer sr-only" />
+          <span
+            aria-hidden
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border-2 border-[#a9ad9f] text-transparent peer-checked:border-accent peer-checked:bg-accent peer-checked:text-white"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+              <path d="m5 12.5 4.5 4.5L19 7.5" />
+            </svg>
+          </span>
           <span>
             I&apos;m {LEGAL.minAge} or older and agree to the{" "}
             <Link href="/terms" className="font-bold text-accent underline underline-offset-2">Terms</Link> and the{" "}
@@ -163,7 +172,7 @@ export function AuthForm({
       ) : null}
 
       <ActionBar className="[--bar-fade:var(--c-surface)] md:[&>*]:flex-1">
-        <Button type="submit" className={barButton} disabled={pending}>
+        <Button type="submit" className={cn(barButton, "shadow-[var(--shadow-accent)]")} disabled={pending}>
           {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
           {mode === "signup" ? "Create account" : "Sign in"}
         </Button>

@@ -120,7 +120,7 @@ export function practiceVolume(sessions: PracticeSession[], today = new Date()):
 }
 
 /** ISO date of the Monday that starts this date's week. */
-function weekStart(dateString: string): string {
+export function weekStart(dateString: string): string {
   const date = new Date(`${dateString.slice(0, 10)}T00:00:00.000Z`);
   const offset = (date.getUTCDay() + 6) % 7;
   date.setUTCDate(date.getUTCDate() - offset);

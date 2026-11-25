@@ -8,7 +8,7 @@ import { UpgradePrompt } from "@/components/billing/plan";
 import { ChartCard, toFilters, type Search } from "@/components/rounds/play-stats";
 import { BaselineSelect } from "@/components/stats/baseline-picker";
 import { StatsFilters } from "@/components/stats/filters";
-import { Card, CardContent, ChipNav, RoundButton, ScreenTitle, Skeleton, Stat, TopBar } from "@/components/ui/primitives";
+import { Card, CardContent, ChipNav, RoundButton, ScreenTitle, Skeleton, Sparkle, Stat, TopBar } from "@/components/ui/primitives";
 import { applyFilters, buildSegments, missBreakdown, summarizeStrokesGained } from "@/lib/analytics/aggregate";
 import { getBaseline, rebaseSegment, rebaseSummary } from "@/lib/golf/baselines";
 import * as repo from "@/lib/db/repo";
@@ -35,27 +35,33 @@ function MissTarget({ counts }: { counts: { short: number; long: number; left: n
     <svg
       role="img"
       aria-label={`Misses: ${counts.short} short, ${counts.long} long, ${counts.left} left, ${counts.right} right`}
-      width="124"
-      height="124"
-      viewBox="0 0 124 124"
+      width="132"
+      height="132"
+      viewBox="0 0 132 132"
       className="shrink-0"
     >
-      <circle cx="62" cy="62" r="60" fill="#3a3f33" />
-      <circle cx="62" cy="62" r="40" fill="#4a5042" />
-      <line x1="2" y1="62" x2="122" y2="62" stroke="rgb(255 255 255 / 0.12)" />
-      <line x1="62" y1="2" x2="62" y2="122" stroke="rgb(255 255 255 / 0.12)" />
-      <circle cx="62" cy="62" r="16" fill="#5C7A2A" />
-      <g fontFamily="var(--font-anton), Anton, sans-serif" fontSize="18" textAnchor="middle">
-        <text x="62" y="24" fill={tone(counts.long)}>{counts.long}</text>
-        <text x="62" y="114" fill={tone(counts.short)}>{counts.short}</text>
-        <text x="20" y="68" fill={tone(counts.left)}>{counts.left}</text>
-        <text x="104" y="68" fill={tone(counts.right)}>{counts.right}</text>
+      <circle cx="66" cy="66" r="62" fill="#2F352A" />
+      <circle cx="66" cy="66" r="40" fill="#3A4232" />
+      <circle cx="66" cy="66" r="16" fill="#5C7A2A" />
+      <path d="M4 66h124M66 4v124" stroke="#4A5042" strokeWidth="1" />
+      <g fontFamily="var(--font-anton), Anton, sans-serif" fontSize="16" textAnchor="middle">
+        <text x="66" y="28" fill={tone(counts.long)}>{counts.long}</text>
+        <text x="66" y="118" fill={tone(counts.short)}>{counts.short}</text>
+        <text x="24" y="72" fill={tone(counts.left)}>{counts.left}</text>
+        <text x="108" y="72" fill={tone(counts.right)}>{counts.right}</text>
       </g>
     </svg>
   );
 }
 
-export default async function InsightsPage({ searchParams }: { searchParams: Promise<Search> }) {
+/* The main chart's three readings, as the design's tabs. */
+const VIEWS = [
+  { id: "distance", label: "Distance", unit: "yards" },
+  { id: "club", label: "Club", unit: "by club" },
+  { id: "lie", label: "Lie", unit: "by lie" },
+] as const;
+
+export default async function InsightsPage({ searchParams }: { searchParams: Promise<Search & { by?: string }> }) {
   const user = await repo.currentUser();
   if (!user) return null;
   const [state, search, billing] = await Promise.all([loadPlayerState(user.id), searchParams, repo.getBilling(user.id)]);
@@ -89,13 +95,28 @@ export default async function InsightsPage({ searchParams }: { searchParams: Pro
   const counts = { short: count("short"), long: count("long"), left: count("left", "pull"), right: count("right", "push") };
   const dominant = (Object.entries(counts) as [keyof typeof counts, number][]).sort((a, b) => b[1] - a[1])[0];
 
-  const query = (range: string) => {
-    const next = new URLSearchParams();
-    if (search.baseline) next.set("baseline", search.baseline);
-    if (range) next.set("range", range);
+  // Tabs keep every other filter; the date range lives with the full breakdown's filters.
+  const view = VIEWS.find((item) => item.id === search.by) ?? VIEWS[0];
+  const query = (by: string) => {
+    const next = new URLSearchParams(Object.entries(search).filter((entry): entry is [string, string] => typeof entry[1] === "string"));
+    next.delete("by");
+    if (by !== "distance") next.set("by", by);
     const text = next.toString();
     return text ? `/rounds/insights?${text}` : "/rounds/insights";
   };
+  const columns =
+    view.id === "distance"
+      ? approach.map((segment) => ({
+          label: segment.key.endsWith("+") ? segment.key : String(bandStart(segment.key)),
+          value: segment.sg_per_round,
+          name: segment.label,
+        }))
+      : segments
+          .filter((segment) => segment.kind === view.id)
+          .sort((a, b) => a.sg_per_round - b.sg_per_round)
+          .slice(0, 7)
+          .map((segment) => ({ label: segment.label, value: segment.sg_per_round, name: segment.label }));
+  const range = search.range ? `last ${search.range} days` : "all rounds";
 
   return (
     <div className="flex flex-col gap-4">
@@ -107,18 +128,22 @@ export default async function InsightsPage({ searchParams }: { searchParams: Pro
         }
         right={<BaselineSelect current={baseline.id} />}
       />
-      <ScreenTitle>
-        Approach
-        <br />
-        by distance
-      </ScreenTitle>
+      <div className="flex flex-col gap-2">
+        <span className="dsp inline-flex h-[26px] items-center gap-1.5 self-start rounded-full bg-ink pl-1 pr-2.5 text-[10px] tracking-[0.1em] text-white">
+          <span className="flex h-[18px] w-[18px] items-center justify-center rounded-full bg-[#3a3f33] text-gold">
+            <Sparkle className="h-2.5 w-2.5" />
+          </span>
+          Premium
+        </span>
+        <ScreenTitle>
+          Strokes
+          <br />
+          gained
+        </ScreenTitle>
+      </div>
       <ChipNav
-        label="Date range"
-        items={[
-          { href: query("30"), label: "30 days", active: search.range === "30" },
-          { href: query("90"), label: "90 days", active: search.range === "90" },
-          { href: query(""), label: "All", active: !search.range },
-        ]}
+        label="Break it down by"
+        items={VIEWS.map((item) => ({ href: query(item.id), label: item.label, active: item.id === view.id }))}
       />
 
       {!premium ? (
@@ -128,26 +153,25 @@ export default async function InsightsPage({ searchParams }: { searchParams: Pro
         />
       ) : (
         <>
-          <section className="flex flex-col gap-3 rounded-[28px] bg-surface p-4">
-            <div className="flex items-baseline justify-between">
+          <section className="flex flex-col gap-2.5 rounded-[28px] bg-surface px-4 pb-3.5 pt-4 shadow-[var(--shadow-card)]">
+            <div className="flex items-baseline justify-between gap-3">
               <h2 className="dsp text-[20px] leading-none">Strokes per round</h2>
-              <span className="text-[12px] font-semibold text-fg-subtle">yards</span>
+              <span className="text-[12px] font-semibold text-fg-subtle">
+                {view.unit} · {range}
+              </span>
             </div>
             <ColumnBars
-              data={approach.map((segment) => ({
-                label: segment.key.endsWith("+") ? segment.key : String(bandStart(segment.key)),
-                value: segment.sg_per_round,
-              }))}
-              label={`Strokes gained per round by distance: ${approach.map((segment) => `${segment.label} ${signed(segment.sg_per_round, 1)}`).join(", ")}`}
+              data={columns}
+              label={`Strokes gained per round ${view.unit === "yards" ? "by distance" : view.unit}: ${columns.map((column) => `${column.name} ${signed(column.value, 1)}`).join(", ")}`}
             />
           </section>
 
           {band && dominant && dominant[1] > 0 ? (
-            <section className="flex items-center gap-4 rounded-[28px] bg-ink p-5 text-white">
+            <section className="flex items-center gap-3.5 rounded-[28px] bg-ink p-4 text-white">
               <MissTarget counts={counts} />
-              <div className="flex min-w-0 flex-col gap-2">
-                <h2 className="dsp text-[22px] leading-none">Miss pattern</h2>
-                <p className="text-[14px] leading-[1.45] text-[#c9ccbf]">
+              <div className="flex min-w-0 flex-col gap-1.5">
+                <h2 className="dsp text-[20px] leading-none">Miss pattern</h2>
+                <p className="text-[13px] leading-[1.45] text-[#c9ccbf]">
                   From {band.label}, most misses finish <strong className="font-bold text-[#f2b59b]">{dominant[0]}</strong>.{" "}
                   {ADVICE[dominant[0]]}
                 </p>

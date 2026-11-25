@@ -157,6 +157,22 @@ export async function getBilling(userId: string): Promise<Billing> {
   };
 }
 
+/** Ask Coach model answers the player has had today (UTC), for the plan card's meter. */
+export async function getAskedToday(userId: string): Promise<number> {
+  const sb = await client();
+  if (!sb) return 0;
+  const today = new Date().toISOString().slice(0, 10);
+  const { count, error } = await sb
+    .from("usage_events")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("kind", "ask")
+    .gte("created_at", `${today}T00:00:00.000Z`);
+  // A meter is not worth failing the page over.
+  if (error) console.error(`getAskedToday: ${error.message}`);
+  return count ?? 0;
+}
+
 /**
  * Takes one of today's Ask Coach model answers for the signed-in player.
  * False when they are used up, and also when the count fails: a missing

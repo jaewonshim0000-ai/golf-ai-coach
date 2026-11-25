@@ -8,6 +8,7 @@ import { askAction } from "@/app/actions";
 import { useUpgrade } from "@/components/billing/plan";
 import { askLimitMessage, ASK_PER_DAY } from "@/lib/billing/plans";
 import { ASK_IDLE, type AskEntry } from "@/lib/ai/ask";
+import { Sparkle } from "@/components/ui/primitives";
 import { cn } from "@/lib/utils";
 
 /**
@@ -41,14 +42,6 @@ const KIND_LABEL: Record<AskEntry["kind"], string> = {
   screen: "Screen",
 };
 
-function Star({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden className={className}>
-      <path d="M12 2.5l2.1 6.4 6.4 2.1-6.4 2.1L12 19.5l-2.1-6.4L3.5 11l6.4-2.1z" />
-    </svg>
-  );
-}
-
 /** The Ask coach pill from the Practice header. */
 export function AskCoachButton({ className }: { className?: string }) {
   return (
@@ -56,12 +49,12 @@ export function AskCoachButton({ className }: { className?: string }) {
       type="button"
       onClick={() => window.dispatchEvent(new Event(OPEN_EVENT))}
       className={cn(
-        "press dsp inline-flex h-11 items-center gap-2 rounded-full bg-ink pl-1.5 pr-3.5 text-[11px] text-white",
+        "press dsp inline-flex h-11 items-center gap-2 rounded-full bg-ink pl-1.5 pr-3.5 text-[11px] text-white shadow-[0_10px_20px_-12px_rgb(30_33_27_/_0.6)]",
         className,
       )}
     >
       <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#3a3f33] text-gold">
-        <Star className="h-3.5 w-3.5" />
+        <Sparkle className="h-3.5 w-3.5" />
       </span>
       Ask coach
     </button>
@@ -128,7 +121,7 @@ export function AskAgent() {
           <header className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2.5">
               <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-ink text-gold" aria-hidden>
-                <Star className="h-[18px] w-[18px]" />
+                <Sparkle className="h-[18px] w-[18px]" />
               </span>
               <h2 className="dsp text-[26px] leading-none">Ask your coach</h2>
             </div>

@@ -7,8 +7,9 @@ import { createPracticeSessionAction } from "@/app/actions";
 import { IDLE } from "@/lib/action-state";
 import { GOAL_SHORT, type GoalId } from "@/lib/practice/goals";
 import { PLAN_LENGTHS, type PlanLength } from "@/lib/practice/plan";
-import { PRACTICE_BLOCK_LABELS, type PracticeBlock } from "@/types/practice";
+import type { PracticeBlock } from "@/types/practice";
 import { cn } from "@/lib/utils";
+import { BlockBar } from "@/components/practice/block-bar";
 import { ActionBar, Badge, Button, GroupLabel, Input, barButton } from "@/components/ui/primitives";
 
 export type PlanPreview = {
@@ -16,24 +17,12 @@ export type PlanPreview = {
   blocks: { block: PracticeBlock; duration: number; name: string; objective: string; prioritized?: boolean }[];
 };
 
-/* Short names for the block bar, where a full label would not fit. */
-const BLOCK_SHORT: Record<PracticeBlock, string> = {
-  warm_up: "Warm-up",
-  technical: "Technique",
-  skill: "Test",
-  variable: "Random",
-  pressure: "Pressure",
-  reflection: "Reflect",
-};
-
-/* The bar's colours run olive, ink, white, then round again. */
-const BLOCK_FILL = ["bg-accent text-white", "bg-ink text-white", "bg-surface text-fg"];
-
 /** Goal and length in, the whole plan shown before it starts. */
 export function SessionBuilder({
   goals,
   recommended,
   priorityGoal,
+  priorityLost,
   initialGoal,
   initialMinutes,
   previews,
@@ -44,6 +33,8 @@ export function SessionBuilder({
   recommended: GoalId;
   /** The goal behind the player's #1 priority, if they have one. */
   priorityGoal: GoalId | null;
+  /** Strokes a round the #1 priority costs, shown beside it. */
+  priorityLost: number | null;
   initialGoal: GoalId;
   /** Where the length starts: the player's usual session, from their profile. */
   initialMinutes: PlanLength;
@@ -82,7 +73,7 @@ export function SessionBuilder({
               key={id}
               className={cn(
                 "press-lg flex cursor-pointer items-center gap-3 rounded-[22px] px-3.5 py-3 transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent",
-                checked ? "bg-ink text-white" : "bg-surface",
+                checked ? "bg-ink text-white shadow-[0_14px_26px_-18px_rgb(30_33_27_/_0.7)]" : "bg-surface",
               )}
             >
               <input
@@ -106,13 +97,18 @@ export function SessionBuilder({
                 </span>
                 <span className="text-[15px] font-semibold">{GOAL_SHORT[id]}</span>
               </span>
+              {id === priorityGoal && priorityLost !== null ? (
+                <span className={cn("font-display tabular shrink-0 text-[16px]", checked ? "text-[#f2b59b]" : "text-bad")}>
+                  −{priorityLost.toFixed(1)}
+                </span>
+              ) : null}
             </label>
           );
         })}
       </fieldset>
 
       <fieldset>
-        <legend className="dsp pb-2 text-[12px] tracking-[0.1em] text-fg-muted">Time</legend>
+        <legend className="dsp pb-2 text-[12px] tracking-[0.1em] text-fg-muted">Time · from your profile</legend>
         <div role="radiogroup" aria-label="Session length" className="grid gap-2" style={{ gridTemplateColumns: `repeat(${PLAN_LENGTHS.length}, minmax(0, 1fr))` }}>
           {PLAN_LENGTHS.map((length) => (
             <label key={length}>
@@ -126,48 +122,24 @@ export function SessionBuilder({
               />
               <span
                 className={cn(
-                  "press font-display flex h-11 cursor-pointer items-center justify-center rounded-full text-[16px] peer-focus-visible:ring-2 peer-focus-visible:ring-accent",
+                  "press font-display flex h-12 cursor-pointer items-center justify-center rounded-full text-[17px] uppercase peer-focus-visible:ring-2 peer-focus-visible:ring-accent",
                   minutes === length ? "bg-accent text-white" : "border-[1.5px] border-fg",
                 )}
               >
-                {length}
+                {length} min
               </span>
             </label>
           ))}
         </div>
       </fieldset>
 
-      <label className="flex flex-col gap-2">
-        <GroupLabel>Location (optional)</GroupLabel>
-        <Input name="location" maxLength={90} placeholder="Range or practice green" className="tabular-nums" />
-      </label>
-
       {preview ? (
-        <div className="flex flex-col gap-2">
-          <GroupLabel>
+        <section aria-labelledby="blocks" className="flex flex-col gap-2.5 rounded-[24px] bg-surface p-3.5 shadow-[var(--shadow-card)]">
+          <h2 id="blocks" className="text-[12px] font-bold uppercase tracking-[0.1em] text-fg-muted">
             Your {preview.blocks.length} blocks · {total} min
-          </GroupLabel>
-          <div
-            role="img"
-            aria-label={preview.blocks.map((block) => `${PRACTICE_BLOCK_LABELS[block.block]} ${block.duration} minutes`).join(", ")}
-            className="flex h-9 gap-1"
-          >
-            {preview.blocks.map((block, index) => (
-              <div
-                key={index}
-                className={cn(
-                  "flex min-w-0 items-center overflow-hidden whitespace-nowrap rounded-md pl-2.5 text-[11px] font-bold uppercase first:rounded-l-full first:pl-3 last:rounded-r-full",
-                  BLOCK_FILL[index % BLOCK_FILL.length],
-                )}
-                style={{ flex: block.duration }}
-              >
-                <span className="truncate">
-                  {BLOCK_SHORT[block.block]} {block.duration}
-                </span>
-              </div>
-            ))}
-          </div>
-          <ol className="mt-1 flex flex-col gap-1.5">
+          </h2>
+          <BlockBar blocks={preview.blocks} minutes legend className="h-[34px]" />
+          <ol className="mt-1 flex flex-col gap-1.5 border-t border-border pt-3">
             {preview.blocks.map((block, index) => (
               <li key={index} className="flex gap-2.5 text-[13px] leading-snug text-fg-muted">
                 <span className="font-display tabular w-4 shrink-0 text-fg">{index + 1}</span>
@@ -188,8 +160,13 @@ export function SessionBuilder({
               {priorityNames.length > 3 ? ` and ${priorityNames.length - 3} more` : ""}.
             </p>
           ) : null}
-        </div>
+        </section>
       ) : null}
+
+      <label className="flex flex-col gap-2">
+        <GroupLabel>Location (optional)</GroupLabel>
+        <Input name="location" maxLength={90} placeholder="Range or practice green" className="tabular-nums" />
+      </label>
 
       {state.message ? (
         <p role="alert" className="text-sm text-bad">
@@ -198,8 +175,14 @@ export function SessionBuilder({
       ) : null}
 
       <ActionBar>
-        <Button type="submit" disabled={pending} className={barButton}>
-          {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+        <Button type="submit" disabled={pending} className={cn(barButton, "shadow-[var(--shadow-accent)]")}>
+          {pending ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden>
+              <path d="M7 4.5v15l12.5-7.5z" fill="currentColor" />
+            </svg>
+          )}
           Start {minutes}-min session
         </Button>
       </ActionBar>

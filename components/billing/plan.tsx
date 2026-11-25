@@ -3,19 +3,29 @@
 import Link from "next/link";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { Loader2, Sparkles, X } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 
 import { manageBillingAction, upgradeAction } from "@/app/billing-actions";
-import { Badge, Button, type ButtonProps, Card, CardContent, CardHeader, CardTitle, Progress } from "@/components/ui/primitives";
+import { Badge, Button, type ButtonProps, Card, CardContent, Sparkle } from "@/components/ui/primitives";
 import { ASK_PER_DAY, FEATURES, LIMITS, priceText, type Billing, type Metered, type Price } from "@/lib/billing/plans";
 import { cn, formatDate } from "@/lib/utils";
 
 type Size = "sm" | "lg";
 
-function Submit({ children, variant, size = "sm" }: { children: React.ReactNode; variant?: ButtonProps["variant"]; size?: Size }) {
+function Submit({
+  children,
+  variant,
+  size = "sm",
+  className,
+}: {
+  children: React.ReactNode;
+  variant?: ButtonProps["variant"];
+  size?: Size;
+  className?: string;
+}) {
   const { pending } = useFormStatus();
   return (
-    <Button type="submit" size={size} variant={variant} disabled={pending}>
+    <Button type="submit" size={size} variant={variant} disabled={pending} className={className}>
       {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
       {children}
     </Button>
@@ -23,10 +33,12 @@ function Submit({ children, variant, size = "sm" }: { children: React.ReactNode;
 }
 
 /** Opens Stripe Checkout; a player who already pays lands in the billing portal instead. */
-export function UpgradeButton({ size }: { size?: Size }) {
+export function UpgradeButton({ size, variant, className }: { size?: Size; variant?: "primary" | "gold"; className?: string }) {
   return (
     <form action={upgradeAction}>
-      <Submit size={size}><Sparkles className="h-3.5 w-3.5" /> Upgrade to Premium</Submit>
+      <Submit size={size} variant={variant} className={className}>
+        <Sparkle className={cn("h-3.5 w-3.5", variant !== "gold" && "text-gold")} /> Upgrade to Premium
+      </Submit>
     </form>
   );
 }
@@ -40,22 +52,26 @@ export function ManageBillingButton({ size, variant = "secondary" }: { size?: Si
   );
 }
 
-/** Free and Premium side by side, row by row from FEATURES. */
-export function PlanTable({ className }: { className?: string }) {
+/**
+ * Free and Premium side by side, row by row from FEATURES. `compact` leaves out
+ * the rows both plans share, for the popup.
+ */
+export function PlanTable({ className, compact = false }: { className?: string; compact?: boolean }) {
+  const rows = compact ? FEATURES.filter((feature) => feature.free !== feature.premium) : FEATURES;
   return (
-    <table className={cn("w-full text-left text-[14px]", className)}>
+    <table className={cn("w-full text-left text-[13.5px]", className)}>
       <thead>
-        <tr className="dsp text-[11px] tracking-[0.1em]">
-          <th scope="col" className="pb-2.5 font-normal"><span className="sr-only">Feature</span></th>
-          <th scope="col" className="w-[27%] pb-2.5 font-normal text-fg-muted">Free</th>
-          <th scope="col" className="w-[27%] pb-2.5 font-normal text-accent">Premium</th>
+        <tr className={cn("font-bold uppercase tracking-[0.1em]", compact ? "text-[10px]" : "text-[11px]")}>
+          <th scope="col" className="py-2"><span className="sr-only">Feature</span></th>
+          <th scope="col" className="w-[26%] py-2 text-fg-subtle">Free</th>
+          <th scope="col" className="w-[28%] py-2 text-accent">Premium</th>
         </tr>
       </thead>
       <tbody>
-        {FEATURES.map((feature) => (
-          <tr key={feature.label} className="border-t border-border">
-            <th scope="row" className="py-3 pr-3 font-semibold leading-snug">{feature.label}</th>
-            <td className="py-3 pr-3 leading-snug text-fg-muted">
+        {rows.map((feature) => (
+          <tr key={feature.label} className="border-t border-surface-2">
+            <th scope="row" className={cn("pr-2 font-semibold leading-snug", compact ? "py-2.5" : "py-[11px]")}>{feature.label}</th>
+            <td className="pr-2 leading-snug text-fg-subtle">
               {feature.free ?? (
                 <>
                   <span aria-hidden>—</span>
@@ -63,7 +79,7 @@ export function PlanTable({ className }: { className?: string }) {
                 </>
               )}
             </td>
-            <td className="py-3 font-semibold leading-snug">{feature.premium}</td>
+            <td className="font-bold leading-snug">{feature.premium}</td>
           </tr>
         ))}
       </tbody>
@@ -106,40 +122,43 @@ export function UpgradeProvider({ price, children }: { price: Price | null; chil
         onClick={(event) => {
           if (event.target === dialog.current) setReason(null);
         }}
-        className="m-0 mt-auto max-h-[92svh] w-full max-w-none overflow-y-auto rounded-t-[28px] bg-bg p-0 text-fg backdrop:bg-[rgb(20_24_15_/_0.55)] sm:m-auto sm:max-w-[440px] sm:rounded-[28px]"
+        className="menu-sheet m-0 mt-auto max-h-[92svh] w-full max-w-none overflow-y-auto rounded-t-[30px] bg-bg p-0 text-fg backdrop:bg-[rgb(20_24_15_/_0.55)] sm:m-auto sm:max-w-[440px] sm:rounded-[30px]"
       >
-        <div className="flex flex-col gap-4 px-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-5">
-          <div className="flex items-center justify-between">
-            <span className="dsp inline-flex h-9 items-center gap-2 rounded-full bg-ink pl-1 pr-3.5 text-[11px] text-white">
-              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#3a3f33] text-gold">
-                <Sparkles className="h-3.5 w-3.5" fill="currentColor" />
+        <div className="flex flex-col gap-3.5 px-5 pb-[calc(1.875rem+env(safe-area-inset-bottom))] pt-3">
+          <div className="flex flex-col items-center gap-3">
+            <span aria-hidden className="h-[5px] w-10 rounded-full bg-border-strong" />
+            <div className="flex items-center justify-between self-stretch">
+              <span className="dsp inline-flex h-9 items-center gap-2 rounded-full bg-ink pl-1 pr-3.5 text-[11px] tracking-[0.1em] text-white">
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#3a3f33] text-gold">
+                  <Sparkle className="h-[13px] w-[13px]" />
+                </span>
+                Premium
               </span>
-              Premium
-            </span>
-            <button
-              type="button"
-              onClick={() => setReason(null)}
-              aria-label="Close"
-              className="press flex h-11 w-11 items-center justify-center rounded-full bg-surface"
-            >
-              <X className="h-[18px] w-[18px]" strokeWidth={2.2} />
-            </button>
+              <button
+                type="button"
+                onClick={() => setReason(null)}
+                aria-label="Close"
+                className="press flex h-11 w-11 items-center justify-center rounded-full bg-surface"
+              >
+                <X className="h-[18px] w-[18px]" strokeWidth={2.2} />
+              </button>
+            </div>
           </div>
           <div className="flex flex-col gap-2">
             <h2 id="upgrade-title" className="dsp text-[34px] leading-[0.98]">{reason?.title}</h2>
-            <p className="text-[14px] leading-relaxed text-fg-muted">{reason?.message}</p>
+            <p className="text-[14px] leading-normal text-fg-muted">{reason?.message}</p>
           </div>
-          <div className="rounded-[22px] bg-surface px-4 pb-1 pt-4">
-            <PlanTable />
+          <div className="rounded-[22px] bg-surface px-4 py-1.5">
+            <PlanTable compact />
           </div>
-          <div className="flex flex-col gap-2.5">
-            <UpgradeButton size="lg" />
-            <p className="text-center text-[13px] text-fg-muted">{priceText(price)} · cancel any time</p>
+          <div className="flex flex-col gap-2">
+            <UpgradeButton size="lg" className="shadow-[var(--shadow-accent)]" />
+            <p className="text-center text-[13px] text-fg-subtle">{priceText(price)} · cancel any time</p>
           </div>
           <Link
             href="/pricing"
             onClick={() => setReason(null)}
-            className="self-center text-[13px] font-semibold text-accent underline underline-offset-2"
+            className="self-center text-[13px] font-bold text-accent underline underline-offset-[3px]"
           >
             Compare plans
           </Link>
@@ -169,7 +188,7 @@ export function UpgradePrompt({ title, message }: UpgradeReason) {
           <p className="mt-1 text-[13px] leading-relaxed text-fg-muted">{message}</p>
         </div>
         <Button type="button" size="sm" onClick={() => upgrade({ title, message })}>
-          <Sparkles className="h-3.5 w-3.5" /> Unlock with Premium
+          <Sparkle className="h-3.5 w-3.5 text-gold" /> Unlock with Premium
         </Button>
       </CardContent>
     </Card>
@@ -181,58 +200,107 @@ const METERS: { kind: Metered; label: string }[] = [
   { kind: "round", label: "Rounds" },
 ];
 
-export function PlanCard({ billing, notice }: { billing: Billing; notice: string | null }) {
+/** One allowance on the plan card: what is left, and a bar of what is used. */
+function Meter({ label, used, limit, gold = false }: { label: string; used: number; limit: number | null; gold?: boolean }) {
+  const left = limit === null ? null : Math.max(0, limit - used);
+  return (
+    <div className="flex flex-col gap-[5px]">
+      <div className="flex justify-between gap-3 text-[13px]">
+        <span className="font-semibold">{label}</span>
+        <span className="tabular text-[#c9ccbf]">
+          {limit === null ? (
+            <>
+              <strong className="text-white">{used}</strong> used · unlimited
+            </>
+          ) : (
+            <>
+              <strong className="text-white">{left}</strong> of {limit} left
+            </>
+          )}
+        </span>
+      </div>
+      <div
+        role="progressbar"
+        aria-label={`${label} used`}
+        aria-valuenow={used}
+        aria-valuemin={0}
+        aria-valuemax={limit ?? undefined}
+        className="h-2 overflow-hidden rounded-full bg-[#3a3f33]"
+      >
+        <span
+          className={cn(
+            "glide-left block h-full rounded-full",
+            left === 0 ? "bg-[#f2b59b]" : gold ? "bg-gold" : "bg-[#a6c266]",
+          )}
+          style={{ width: `${limit === null ? 0 : Math.min(100, (used / limit) * 100)}%`, animationDelay: "400ms" }}
+        />
+      </div>
+    </div>
+  );
+}
+
+/** The plan on the dark card: what is left this month, and the way up. */
+export function PlanCard({ billing, askedToday, notice }: { billing: Billing; askedToday: number; notice: string | null }) {
   const premium = billing.plan === "premium";
   const end = billing.periodEnd ? formatDate(billing.periodEnd) : null;
   return (
-    <Card id="plan" className="scroll-mt-6">
-      <CardHeader className="flex-row items-center justify-between gap-3">
-        <CardTitle>Plan</CardTitle>
-        <Badge tone={premium ? "accent" : "neutral"}>{premium ? "Premium" : "Free"}</Badge>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {notice ? <p role="status" className="rounded-lg bg-surface-2 p-3 text-sm">{notice}</p> : null}
-        {billing.status === "past_due" || billing.status === "unpaid" ? (
-          <p role="alert" className="rounded-lg bg-bad-soft p-3 text-sm text-bad">
-            Your last payment did not go through. Update your card in billing to get Premium back.
-          </p>
-        ) : null}
-        <div className="space-y-3">
-          {METERS.map(({ kind, label }) => {
-            const limit = LIMITS[billing.plan][kind];
-            const used = billing.used[kind];
-            return (
-              <div key={kind} className="space-y-1.5">
-                <div className="flex justify-between text-[13px]">
-                  <span>{label}</span>
-                  <span className="tabular text-fg-muted">
-                    {limit === null ? `${used} this month · unlimited` : `${used} of ${limit} this month`}
-                  </span>
-                </div>
-                <Progress
-                  value={limit === null ? 0 : used / limit}
-                  tone={limit !== null && used >= limit ? "bad" : "accent"}
-                  label={`${label} used this month`}
-                />
-              </div>
-            );
-          })}
-          <p className="text-[11px] text-fg-subtle">Allowances reset on the 1st of each month (UTC).</p>
-        </div>
-        {premium ? (
-          end ? <p className="text-[13px] text-fg-muted">{billing.cancelAtPeriodEnd ? `Premium ends ${end}.` : `Renews ${end}.`}</p> : null
-        ) : (
-          <p className="text-[13px] leading-relaxed text-fg-muted">
-            Premium gives you {LIMITS.premium.swing} swing analyses a month, unlimited rounds, the full strokes-gained
-            breakdown and {ASK_PER_DAY.premium} AI coach answers a day.{" "}
-            <Link href="/pricing" className="font-semibold text-accent underline underline-offset-2">Compare plans</Link>
-          </p>
-        )}
-        <div className="flex flex-wrap gap-2">
-          {premium ? null : <UpgradeButton />}
-          {billing.status ? <ManageBillingButton /> : null}
-        </div>
-      </CardContent>
-    </Card>
+    <section
+      id="plan"
+      aria-labelledby="plan-title"
+      className="scroll-mt-6 flex flex-col gap-3 rounded-[28px] bg-ink p-4 text-white shadow-[0_18px_32px_-20px_rgb(30_33_27_/_0.7)]"
+    >
+      <div className="flex items-center justify-between gap-3">
+        <h2 id="plan-title" className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#c9ccbf]">
+          {premium ? "Premium" : "Free plan"} · this month
+        </h2>
+        <Link href="/pricing" className="text-[12px] font-bold text-gold underline underline-offset-2">
+          Compare plans
+        </Link>
+      </div>
+      {notice ? <p role="status" className="rounded-2xl bg-white/10 px-3.5 py-2.5 text-[13px]">{notice}</p> : null}
+      {billing.status === "past_due" || billing.status === "unpaid" ? (
+        <p role="alert" className="rounded-2xl bg-[#3a3f33] px-3.5 py-2.5 text-[13px] text-[#f2b59b]">
+          Your last payment did not go through. Update your card in billing to get Premium back.
+        </p>
+      ) : null}
+      <div className="flex flex-col gap-2.5">
+        {METERS.map(({ kind, label }) => (
+          <Meter key={kind} label={label} used={billing.used[kind]} limit={LIMITS[billing.plan][kind]} />
+        ))}
+        <Meter label="AI coach answers today" used={askedToday} limit={ASK_PER_DAY[billing.plan]} gold />
+      </div>
+      <p className="text-[11px] text-[#a9ad9f]">
+        Allowances reset on the 1st of each month, answers every day (UTC).
+        {premium && end ? ` ${billing.cancelAtPeriodEnd ? `Premium ends ${end}.` : `Renews ${end}.`}` : ""}
+      </p>
+      {premium ? (
+        billing.status ? (
+          <form action={manageBillingAction}>
+            <InkSubmit className="border-[1.5px] border-white/60 bg-transparent">Manage billing</InkSubmit>
+          </form>
+        ) : null
+      ) : (
+        <form action={upgradeAction}>
+          <InkSubmit className="bg-accent">
+            <Sparkle className="h-[13px] w-[13px] text-gold" /> Upgrade to Premium
+          </InkSubmit>
+        </form>
+      )}
+    </section>
+  );
+}
+
+/** The plan card's full-width button. */
+function InkSubmit({ className, children }: { className?: string; children: React.ReactNode }) {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      className={cn("press dsp flex h-11 w-full items-center justify-center gap-2 rounded-full text-[12px] text-white disabled:opacity-60", className)}
+    >
+      {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+      {children}
+    </button>
   );
 }

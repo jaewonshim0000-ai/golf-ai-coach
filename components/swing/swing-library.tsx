@@ -30,38 +30,35 @@ const BADGE = {
   neutral: "bg-white/90 text-[#1e211b]",
 };
 
-/** The golfer at the top of the backswing, in flag yellow, for the latest-swing card. */
-function TopOfSwing() {
+/** The golfer swinging, in flag yellow, for the latest-swing card. */
+function Swinging() {
   return (
-    <svg viewBox="0 0 350 280" preserveAspectRatio="xMidYMid slice" aria-hidden className="absolute inset-0 h-full w-full">
-      <rect width="350" height="280" fill="#2b3a1f" />
-      <path d="M0 110 Q60 88 120 104 T240 96 T350 104 V280 H0Z" fill="#33461f" />
-      <path d="M0 200 Q175 182 350 204 V280 H0Z" fill="#3e5426" />
-      <g fill="none" stroke="#E8C547" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="178" cy="78" r="12" />
-        <path d="M178 90 V140" />
-        <path d="M160 102 L196 104 L214 86" />
-        <path d="M160 102 L198 98" />
-        <path d="M214 86 L236 64" strokeWidth="3" />
-        <path d="M164 140 L194 140" />
-        <path d="M166 140 L162 194" />
-        <path d="M192 140 L194 194" />
-      </g>
-      <g fill="#E8C547">
-        <circle cx="178" cy="78" r="0" />
-        <circle cx="160" cy="102" r="3.5" />
-        <circle cx="196" cy="104" r="3.5" />
-        <circle cx="164" cy="140" r="3.5" />
-        <circle cx="194" cy="140" r="3.5" />
-        <circle cx="188" cy="118" r="3.5" />
+    <svg viewBox="0 0 350 200" preserveAspectRatio="xMidYMid slice" aria-hidden className="absolute inset-0 h-full w-full">
+      <rect width="350" height="200" fill="#2B3A1F" />
+      <path d="M0 80 Q60 62 120 76 T240 68 T350 76 V200 H0Z" fill="#33461F" />
+      <path d="M0 150 Q175 134 350 154 V200 H0Z" fill="#3E5426" />
+      <g fill="none" stroke="#E8C547" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" transform="translate(120 10) scale(0.9)">
+        <circle cx="66" cy="42" r="11" />
+        <path d="M66 53v46M50 66h32M54 99h24M54 99l-5 50M78 99l3 50" />
+        <path d="M50 66l14 50M82 66l-16 50M64 116l14 40">
+          <animate
+            attributeName="d"
+            dur="3.2s"
+            repeatCount="indefinite"
+            keyTimes="0;.4;.55;.75;1"
+            calcMode="spline"
+            keySplines=".45 0 .25 1;.6 0 .4 1;.3 0 .2 1;.45 0 .3 1"
+            values="M50 66l14 50M82 66l-16 50M64 116l14 40;M50 66l30 6M82 66l-2 6M80 72l24 -34;M50 66l14 50M82 66l-16 50M64 116l14 40;M50 66l-12 -18M82 66l-40 -14M40 50l-20 20;M50 66l14 50M82 66l-16 50M64 116l14 40"
+          />
+        </path>
       </g>
     </svg>
   );
 }
 
 /**
- * The swing library from the design: club chips, the latest swing as a big
- * card with its score, then every recording as a tile.
+ * The swing library from the design: club chips, the latest swing as a card
+ * with its score, the score trend, then the recordings as tiles.
  */
 export function SwingLibrary({
   swings,
@@ -74,6 +71,7 @@ export function SwingLibrary({
   trend?: ReactNode;
 }) {
   const [filter, setFilter] = useState<(typeof FILTERS)[number][0]>("all");
+  const [all, setAll] = useState(false);
   const shown = swings.filter((swing) => filter === "all" || swing.group === filter);
   const present = new Set(swings.map((swing) => swing.group));
   return (
@@ -85,7 +83,7 @@ export function SwingLibrary({
             type="button"
             aria-pressed={filter === key}
             onClick={() => setFilter(key)}
-            className={chip(filter === key, "min-w-[80px]")}
+            className={chip(filter === key, "min-w-[66px] flex-1")}
           >
             {label}
           </button>
@@ -96,9 +94,9 @@ export function SwingLibrary({
         <Link
           href={`/swing/${latest.id}`}
           aria-label={`Latest swing: ${latest.title}, ${latest.when}.${latest.score !== null ? ` Score ${latest.score.toFixed(1)} out of 10.` : ""}`}
-          className="press-lg relative block h-[260px] overflow-hidden rounded-[28px] text-white"
+          className="press-lg relative block h-[200px] overflow-hidden rounded-[28px] text-white"
         >
-          <TopOfSwing />
+          <Swinging />
           <span className="dsp absolute left-4 top-4 inline-flex h-[30px] items-center rounded-full bg-white/90 px-3 text-[10px] text-[#1e211b]">
             Latest · {latest.when}
           </span>
@@ -121,12 +119,24 @@ export function SwingLibrary({
       ) : null}
       {filter === "all" ? trend : null}
 
-      <h2 className="dsp text-[26px] leading-none">Recordings · {shown.length}</h2>
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="dsp text-[24px] leading-none">Recordings · {shown.length}</h2>
+        {shown.length > 4 ? (
+          <button
+            type="button"
+            aria-expanded={all}
+            onClick={() => setAll(!all)}
+            className="press text-[13px] font-bold text-accent underline underline-offset-2"
+          >
+            {all ? "Show fewer" : "Show all"}
+          </button>
+        ) : null}
+      </div>
       {shown.length === 0 ? (
         <p className="rounded-[22px] bg-surface px-4 py-5 text-[14px] text-fg-muted">No recordings with this club yet.</p>
       ) : (
         <ul className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          {shown.map((swing) => (
+          {(all ? shown : shown.slice(0, 4)).map((swing) => (
             <li key={swing.id}>
               <Link href={`/swing/${swing.id}`} className="press-lg relative block overflow-hidden rounded-[22px] bg-[#2b3a1f]">
                 <SwingVideo id={swing.id} videoUrl={swing.videoUrl} className="aspect-[3/4] rounded-none bg-[#2b3a1f]" />

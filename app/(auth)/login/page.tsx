@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 
 import { AuthForm, AuthTabs } from "@/components/auth/auth-form";
+import { AuthShell } from "@/components/auth/auth-shell";
 import { ConfirmationForm } from "@/components/auth/confirmation-form";
 import { mode } from "@/lib/db/repo";
 
@@ -17,10 +18,12 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
     : null;
 
   return (
-    <div className="flex flex-col gap-5">
-      <AuthTabs active="login" />
-      <AuthForm mode="login" initialError={initialError} />
-      <ConfirmationForm />
-    </div>
+    <AuthShell hero={{ kind: "logo" }}>
+      <div className="flex flex-col gap-3.5">
+        <AuthTabs active="login" />
+        <AuthForm mode="login" initialError={initialError} />
+        <ConfirmationForm />
+      </div>
+    </AuthShell>
   );
 }

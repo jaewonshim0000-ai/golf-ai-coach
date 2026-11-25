@@ -14,6 +14,17 @@ import { cn } from "@/lib/utils";
  * controls, and one olive fill reserved for the primary action on a screen.
  */
 
+// ------------------------------------------------------------------- icons
+
+/** The design's four-point sparkle: the mark of the AI coach and of Premium. */
+export function Sparkle({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden className={className}>
+      <path d="M12 2.5l2.1 6.4 6.4 2.1-6.4 2.1L12 19.5l-2.1-6.4L3.5 11l6.4-2.1z" />
+    </svg>
+  );
+}
+
 // ------------------------------------------------------------------ button
 
 const buttonStyles = cva(
@@ -26,6 +37,8 @@ const buttonStyles = cva(
         ghost: "text-fg-muted hover:bg-fg/5 hover:text-fg",
         danger: "bg-bad text-white hover:opacity-90",
         subtle: "bg-accent-soft text-accent-strong hover:opacity-90",
+        /* Premium's own button, on the dark plan card. */
+        gold: "bg-gold text-[#1e211b] hover:opacity-90",
         /* For use on top of hero artwork; `.hero-plain` re-inks them. */
         onHero: "on-hero border border-white/60 bg-white/20 text-white hover:bg-white/30",
         onHeroSolid: "on-hero-solid bg-white/90 text-[#1e211b] hover:bg-white",
@@ -252,8 +265,8 @@ export function Field({
   className?: string;
 }) {
   return (
-    <label className={cn("flex flex-col gap-2", className)}>
-      <Eyebrow>{label}</Eyebrow>
+    <label className={cn("flex flex-col gap-1.5", className)}>
+      <GroupLabel>{label}</GroupLabel>
       {children}
       {error ? (
         <span className="text-xs text-bad">{error}</span>

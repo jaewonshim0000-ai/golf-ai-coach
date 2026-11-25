@@ -27,7 +27,8 @@
 
   /* Kept as a gradient so `bg-[image:var(--grad-accent)]` still works: flat now. */
   --grad-accent: linear-gradient(#5c7a2a, #5c7a2a);
-  --shadow-accent: none;
+  /* The glow under a primary button pinned to the bottom of a screen. */
+  --shadow-accent: 0 16px 26px -14px rgb(92 122 42 / 0.8);
 
   /* The dark card and the tab bar. */
   --c-ink: #23271f;
@@ -49,11 +50,16 @@
   --c-chart-4: #8659b5;
   --c-chart-5: #b4442a;
 
-  /* The redesign is flat: cards sit on the page by colour, not by shadow. */
-  --shadow-card: 0 0 #0000;
+  /*
+    Most cards sit on the page by colour alone. The ones the design lifts - the
+    home cards, the plan cards, the game profile - get a soft shadow: a hairline
+    under the edge and a wide, faint fall below it.
+  */
+  --shadow-card: 0 1px 2px rgb(30 33 27 / 0.05), 0 14px 30px -18px rgb(30 33 27 / 0.35);
   --shadow-soft: 0 0 #0000;
-  --shadow-raised: 0 18px 40px -18px rgb(30 33 27 / 0.45);
-  --shadow-ink: 0 0 #0000;
+  /* The floating tab bar and the sheets. */
+  --shadow-raised: 0 18px 30px -14px rgb(30 33 27 / 0.7);
+  --shadow-ink: 0 14px 30px -18px rgb(30 33 27 / 0.6);
 
   /*
     Two curves, no more. The first is critically damped: it covers most of the
@@ -106,7 +112,10 @@
     --c-chart-4: #b18ce0;
     --c-chart-5: #e9876f;
 
+    --shadow-card: 0 1px 2px rgb(0 0 0 / 0.2), 0 14px 30px -18px rgb(0 0 0 / 0.7);
     --shadow-raised: 0 18px 40px -16px rgb(0 0 0 / 0.75);
+    --shadow-ink: 0 14px 30px -18px rgb(0 0 0 / 0.8);
+    --shadow-accent: 0 16px 26px -14px rgb(0 0 0 / 0.7);
   }
 }
 
@@ -278,6 +287,32 @@ body {
    buttons would scroll away instead of staying pinned to the screen. */
 .sheet-rise {
   animation: sheet-rise 0.75s var(--ease) backwards;
+}
+
+/* A sparkline draws itself in; a progress ring winds round to its value. */
+@keyframes draw-line {
+  from {
+    stroke-dashoffset: var(--line-length, 300);
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* --line-length must be at least the line's own length, or part of it never draws. */
+.spark-draw {
+  stroke-dasharray: var(--line-length, 300);
+  animation: draw-line 1.4s var(--ease) 0.5s both;
+}
+
+@keyframes ring-wind {
+  from {
+    stroke-dashoffset: var(--ring-full);
+  }
+}
+
+.ring-wind {
+  animation: ring-wind 1.2s var(--ease) 0.5s both;
 }
 
 /* Numbers in tables and stat blocks must not jitter between renders. */
@@ -507,4 +542,41 @@ body {
 .hero-art-green :focus-visible,
 .hero-art-dusk :focus-visible {
   outline-color: #ffffff;
+}
+
+/* The menu sheet slides up over a dimmed screen; its groups follow it in. */
+@keyframes menu-sheet {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes menu-dim {
+  from {
+    opacity: 0;
+  }
+}
+
+.menu-sheet[open] {
+  animation: menu-sheet 0.6s var(--ease) both;
+}
+
+.menu-sheet[open]::backdrop {
+  animation: menu-dim 0.35s ease both;
+}
+
+.menu-sheet[open] .menu-section {
+  animation: rise-in 0.45s var(--ease) both;
+}
+
+.menu-sheet[open] .menu-section:nth-of-type(2) {
+  animation-delay: 0.3s;
+}
+
+.menu-sheet[open] .menu-section:nth-of-type(3) {
+  animation-delay: 0.38s;
+}
+
+.menu-sheet[open] .menu-section:nth-of-type(4) {
+  animation-delay: 0.46s;
 }

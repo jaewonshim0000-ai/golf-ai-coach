@@ -6,11 +6,16 @@ import { resetDemoAction } from "@/app/actions";
 import { AskCoachButton } from "@/components/ask/ask-agent";
 import { DemoNotice } from "@/components/dashboard/sections";
 import { Avatar } from "@/components/layout/screen-header";
-import { Flag } from "@/components/layout/nav";
 import { PracticeDrillPriorities } from "@/components/practice/drill-priorities";
-import { BaselineCard, GetStarted, PriorityHero, TodayCard } from "@/components/practice/home";
+import { BaselineCard, GetStarted, PriorityHero, SwingScoreCard, TodayCard, WeekCard } from "@/components/practice/home";
+import { TodayDate } from "@/components/practice/today-date";
 import { Badge, ScreenTitle, SectionHeading, TopBar } from "@/components/ui/primitives";
+import { weekStart } from "@/lib/analytics/practice-progress";
 import { benchmarkFor, benchmarkNote } from "@/lib/practice/benchmark";
+import { defaultPlan } from "@/lib/practice/plan-defaults";
+import { DRILLS_BY_ID } from "@/lib/seed/drills";
+import { scoreTrend } from "@/lib/swing/result";
+import { swingScores } from "@/lib/swing/score-trend";
 import { rankPracticeDrills } from "@/lib/practice/drill-priorities";
 import { practiceTest } from "@/lib/practice/tests";
 import * as repo from "@/lib/db/repo";
@@ -36,12 +41,18 @@ export default async function PracticePage() {
 
   const name = state.profile?.display_name ?? "";
   const firstName = name.split(/\s+/)[0] ?? "";
-  const handicap = state.profile?.handicap_index;
-  const course = state.rounds[0]?.course_name;
-  const subline = [course, handicap !== null && handicap !== undefined ? `HCP ${handicap.toFixed(1)}` : null]
-    .filter(Boolean)
-    .join(" · ");
   const priority = state.weaknesses[0] ?? null;
+
+  // Today's session previews the plan Build a session opens on.
+  const { minutes, plan } = defaultPlan(state);
+  const firstUp = plan.items.find((item) => item.block !== "warm_up") ?? plan.items[0];
+  const today = (
+    <TodayCard
+      minutes={minutes}
+      blocks={plan.items}
+      firstUp={firstUp ? (DRILLS_BY_ID.get(firstUp.drill_id)?.name ?? null) : null}
+    />
+  );
 
   // A new player: no priority to name yet, so the screen says how to get one.
   if (!priority) {
@@ -65,38 +76,36 @@ export default async function PracticePage() {
         </ScreenTitle>
         <BaselineCard done={steps.filter((step) => step.done).length} total={steps.length} />
         <GetStarted steps={steps} />
-        <TodayCard session={state.session} />
+        {today}
         {repo.mode() === "demo" ? <DemoNotice onReset={resetDemoAction} /> : null}
       </div>
     );
   }
 
+  // This week against the player's weekly target, and the swing score beside it.
+  const monday = weekStart(new Date().toISOString());
+  const week = state.practiceSessions.filter(
+    (session) => session.status === "complete" && weekStart(session.completed_at ?? session.scheduled_for) === monday,
+  );
+  const weekMinutes = week.reduce((sum, session) => sum + (session.actual_duration ?? session.planned_duration), 0);
+  const { trend } = await swingScores(user.id, state.swingSessions);
+  const swing = scoreTrend(trend);
+
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-3.5">
       <TopBar left={<AskCoachButton />} right={<Avatar name={name} />} />
 
-      <div className="flex flex-col gap-2.5">
-        <ScreenTitle>
-          {name ? (
-            <>
-              Hello
-              <br />
-              {name}!
-            </>
-          ) : (
-            "Practice"
-          )}
-        </ScreenTitle>
-        {subline ? (
-          <p className="flex items-center gap-2 text-[14px] font-semibold text-fg-muted">
-            <Flag className="h-4 w-4" />
-            {subline}
-          </p>
-        ) : null}
+      <div className="flex flex-col gap-1">
+        <TodayDate className="dsp text-[12px] tracking-[0.12em] text-fg-subtle" />
+        <ScreenTitle className="text-[42px] leading-none">{firstName ? `Hello, ${firstName}!` : "Practice"}</ScreenTitle>
       </div>
 
       <PriorityHero weakness={priority} />
-      <TodayCard session={state.session} />
+      <div className="grid grid-cols-2 gap-3">
+        <WeekCard done={week.length} target={state.profile?.practice_days_per_week ?? 3} minutes={weekMinutes} />
+        <SwingScoreCard average={swing.average} change={swing.change} values={trend.slice(-10).map((point) => point.value)} />
+      </div>
+      {today}
 
       <section className="mt-4 flex flex-col gap-3">
         <SectionHeading title="Your benchmarks" description="The numbers you are working to beat." />

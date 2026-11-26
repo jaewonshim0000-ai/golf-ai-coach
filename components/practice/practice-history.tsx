@@ -5,7 +5,7 @@ import { useActionState, useCallback, useEffect, useRef, useState, type PointerE
 import { Loader2, MoreHorizontal, Trash2 } from "lucide-react";
 import { deletePracticeSessionFromListAction } from "@/app/actions";
 import { IDLE } from "@/lib/action-state";
-import { relativeDays } from "@/lib/utils";
+import { cn, relativeDays } from "@/lib/utils";
 import { SWIPE_REVEAL, swipeIntent, swipeOffset } from "@/lib/practice/swipe";
 import type { PracticeSession } from "@/types/practice";
 import { Badge, Button, chip } from "@/components/ui/primitives";
@@ -137,7 +137,8 @@ function SwipePracticeRow({ session, onDeleted }: { session: PracticeSession; on
       event.preventDefault(); setConfirming(false); setOffset(0); requestAnimationFrame(() => actions.current?.focus());
     }
   }}>
-    <div className="relative overflow-hidden rounded-[22px] bg-bad">
+    {/* Red only while the row is moved: at rest it would fringe the white row's rounded edge. */}
+    <div className={cn("relative overflow-hidden rounded-[22px]", offset !== 0 || dragging ? "bg-bad" : "bg-surface")}>
       <button ref={deleteTrigger} type="button" aria-label={`Delete ${session.title}`} aria-hidden={!revealed} tabIndex={revealed ? 0 : -1}
         disabled={!revealed || pending} onClick={() => setConfirming(true)}
         className="absolute inset-y-0 left-0 flex w-[88px] flex-col items-center justify-center gap-1 text-[12px] font-medium text-white">

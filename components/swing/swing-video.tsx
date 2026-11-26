@@ -7,6 +7,8 @@ import { packFrames, slowMotionOf, unpackFrames, type PoseModel } from "@/lib/go
 import { trustworthyFrames } from "@/lib/golf/motion-analysis";
 import { detectView } from "@/lib/golf/framing";
 import { BodyOverlay } from "@/components/swing/body-overlay";
+import { ANALYSIS_EVENT, AnalysisOverlay, type AnalysisEventDetail } from "@/components/swing/analysis-progress";
+import type { AnalysisStep } from "@/lib/swing/analysis-progress";
 import { captureGolfPosePro } from "@/lib/golfposepro/capture";
 import { GPP_VERSION, frameTime } from "@/lib/golfposepro/result";
 import { clipWindow, getClip } from "@/lib/video-store";
@@ -49,6 +51,8 @@ export function SwingVideo({
   const [analysis, setAnalysis] = useState<PoseState | null>(null);
   const [analysing, setAnalysing] = useState(false);
   const [progress, setProgress] = useState<string | null>(null);
+  /** The same run as `progress`, as a stage the percent is worked out from. */
+  const [step, setStep] = useState<AnalysisStep | null>(null);
   const [time, setTime] = useState(0);
   const [aspect, setAspect] = useState(3 / 4);
   const [overlay, setOverlay] = useState(true);
@@ -128,6 +132,8 @@ export function SwingVideo({
     setAnalysis(null);
     setLoop(false);
     setProgress("Preparing GolfPosePro");
+    setStep({ stage: "preparing" });
+    let finished = false;
     // Frame callbacks depend on presenting the video. A button below a tall
     // player can scroll it offscreen, causing the browser to skip callbacks.
     element.scrollIntoView({ block: "center", behavior: "instant" });
@@ -137,10 +143,14 @@ export function SwingVideo({
       if (!element.videoWidth || !element.videoHeight) throw new Error("The video has not loaded yet.");
       const span: [number, number] = end > start ? [start, end] : [0, element.duration];
       const { analysed } = await captureGolfPosePro(element, span[0], span[1],
-        (done, total) => setProgress(`GolfPosePro is reading frame ${done} of ${total}`), run.signal);
+        (done, total) => {
+          setProgress(`GolfPosePro is reading frame ${done} of ${total}`);
+          setStep({ stage: "reading", done, total });
+        }, run.signal);
       run.signal.throwIfAborted();
       if (!analysed || analysed.track.length < 8) throw new Error("GolfPosePro could not find a swing in this video. Keep your whole body and hands in view from setup through the finish.");
       setProgress("Saving your video review");
+      setStep({ stage: "saving" });
       const packed = packFrames(analysed.track);
       const address = analysed.result.keyFrames[0]!.pose?.map(([x, y, visibility]) => ({ x, y, z: 0, visibility }));
       const saved = await savePoseModelAction({
@@ -157,7 +167,7 @@ export function SwingVideo({
       });
       run.signal.throwIfAborted();
       setAnalysis(saved);
-      if (saved.ok) { setOverlay(true); router.refresh(); }
+      if (saved.ok) { finished = true; setStep({ stage: "done" }); setOverlay(true); router.refresh(); }
     } catch (error) {
       if (run.signal.aborted) return;
       setAnalysis({
@@ -170,10 +180,16 @@ export function SwingVideo({
       if (analysisRun.current === run) analysisRun.current = null;
       if (!run.signal.aborted) element.currentTime = wasTime;
       setProgress(null);
+      // A finished run stays at 100% until the result replaces it; anything else clears.
+      if (!finished) setStep(null);
       setAnalysing(false);
     }
   }
   analyseCurrent.current = analyse;
+  // The review sheet shows the same progress further down the page.
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent<AnalysisEventDetail>(ANALYSIS_EVENT, { detail: { id, step } }));
+  }, [id, step]);
   useEffect(() => {
     if (!analysable || !src || !Number.isFinite(duration) || duration <= 0 || !crossOrigin || trackedModel || analysing) return;
     const key = `${id}:${src}:${start}:${end}`;
@@ -264,7 +280,7 @@ export function SwingVideo({
       />
       {trackedModel && tracked.length > 0 && overlay && !analysing ? <BodyOverlay frames={tracked} time={time} view={view} aspect={aspect}
         plane={view === "down_the_line" ? trackedModel.setup : undefined} /> : null}
-      {analysing ? <div role="status" className="pointer-events-none absolute inset-x-3 bottom-3 rounded-lg bg-black/75 px-3 py-2 text-center text-[12px] text-white">{progress}</div> : null}
+      {analysing && step ? <AnalysisOverlay step={step} /> : null}
       </div>
       {trackedModel ? <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-fg-muted">
         <label className="flex min-h-10 cursor-pointer items-center gap-2"><input type="checkbox" checked={overlay} onChange={(event) => setOverlay(event.target.checked)} className="accent-accent" /> Show setup guides</label>

@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import { ChevronLeft } from "lucide-react";
 import { SwingVideo } from "@/components/swing/swing-video";
 import { SwingResultCard } from "@/components/swing/swing-result";
+import { AnalysisProgress } from "@/components/swing/analysis-progress";
 import { DeleteSwingButton } from "@/components/swing/delete-swing";
 import { PhaseStrip } from "@/components/swing/phase-strip";
 import { ActionBar, ButtonLink, RoundButton, Sheet, barButton } from "@/components/ui/primitives";
@@ -100,16 +101,20 @@ export default async function SwingPage({ params, searchParams }: {
 
         {editingReference && current ? (
           <SwingReferenceEditor sessionId={id} saved={current.reference} handedness={current.handedness} initiallyOpen />
-        ) : result ? (
-          <SwingResultCard result={result} change={lastChange} />
         ) : (
-          <section className="flex flex-col gap-2 rounded-[22px] bg-surface-2 p-5">
-            <h2 className="dsp text-[22px] leading-none">Analysing your swing</h2>
-            <p className="text-[14px] leading-relaxed text-fg-muted">
-              We read every frame of your video, then give your swing a score out of 10, your main weakness and drills to fix it.
-            </p>
-            <p className="text-[12.5px] text-fg-subtle">The review starts as soon as the video loads.</p>
-          </section>
+          <AnalysisProgress id={id} hasResult={Boolean(result)}>
+            {result ? (
+              <SwingResultCard result={result} change={lastChange} />
+            ) : (
+              <section className="flex flex-col gap-2 rounded-[22px] bg-surface-2 p-5">
+                <h2 className="dsp text-[22px] leading-none">Analysing your swing</h2>
+                <p className="text-[14px] leading-relaxed text-fg-muted">
+                  We read every frame of your video, then give your swing a score out of 10, your main weakness and drills to fix it.
+                </p>
+                <p className="text-[12.5px] text-fg-subtle">The review starts as soon as the video loads.</p>
+              </section>
+            )}
+          </AnalysisProgress>
         )}
 
         {context?.comparison?.status === "ready" ? (

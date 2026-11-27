@@ -1,8 +1,9 @@
 name: iOS shell
 
-# Proves the Capacitor iOS project in mobile/ios still compiles. Unsigned
-# simulator build only: a signed .ipa needs an Apple Developer account (see
-# mobile/README.md). Runs when mobile/ios changes, or by hand from Actions.
+# Builds the Capacitor iOS project in mobile/ios for real iPhones, unsigned,
+# and keeps it as a downloadable .ipa. Sideloadly (free Apple ID) or Xcode
+# signs it at install time; see mobile/README.md. Runs when mobile/ios
+# changes, or by hand from Actions.
 on:
   pull_request:
     paths: ["mobile/ios/**", ".github/workflows/ios.yml"]
@@ -22,6 +23,11 @@ jobs:
       - run: npm ci
       - run: npx cap sync ios
       - run: >
-          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug
-          -sdk iphonesimulator -destination "generic/platform=iOS Simulator"
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Release
+          -sdk iphoneos -destination "generic/platform=iOS" -derivedDataPath build
           CODE_SIGNING_ALLOWED=NO build
+      - run: mkdir Payload && cp -R build/Build/Products/Release-iphoneos/App.app Payload/ && zip -qr golf-ai-coach-unsigned.ipa Payload
+      - uses: actions/upload-artifact@v4
+        with:
+          name: golf-ai-coach-unsigned-ipa
+          path: mobile/ios/golf-ai-coach-unsigned.ipa

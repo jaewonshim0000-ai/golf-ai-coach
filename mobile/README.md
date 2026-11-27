@@ -94,7 +94,7 @@ Camera recording, uploads and MediaPipe work there as they do in Safari.
 `mobile/ios` holds a Capacitor 8 project. It loads `/practice` on the live site and keeps
 the site and `*.stripe.com` inside the app. It has camera, microphone and photo-library
 permission text, the app icon and a launch screen, and it uses Swift Package Manager, so
-no CocoaPods are needed. CI builds it for the simulator whenever `mobile/ios` changes
+no CocoaPods are needed. CI builds an unsigned iPhone `.ipa` whenever `mobile/ios` changes
 (`.github/workflows/ios.yml`).
 
 On a Mac with Xcode 16 or newer:
@@ -115,6 +115,25 @@ In Xcode, select the **App** target → Signing & Capabilities, and choose your 
 No Mac? A cloud Mac service such as Codemagic, Ionic Appflow, or a GitHub Actions
 `macos` runner with your signing certificate and provisioning profile stored as secrets
 can run the same steps. Either way you need the developer account to sign.
+
+### Your own iPhone from Windows, with a free Apple ID
+
+CI builds an unsigned `golf-ai-coach-unsigned.ipa`. Find it in GitHub → Actions → **iOS
+shell** → the latest run → Artifacts. To build a fresh one, use **Run workflow** on the
+same page. [Sideloadly](https://sideloadly.io) signs it with your Apple ID as it
+installs it:
+
+1. On the PC, install iTunes and iCloud from apple.com (not the Microsoft Store
+   versions), then Sideloadly.
+2. Plug in the iPhone, unlock it and tap **Trust**.
+3. In Sideloadly, pick the `.ipa`, enter your Apple ID and press Start. Sideloadly is a
+   third-party tool, so a spare Apple ID is the safer choice.
+4. On the iPhone, open Settings → General → VPN & Device Management and trust your
+   Apple ID. On iOS 16+, also turn on Settings → Privacy & Security → Developer Mode
+   (the phone restarts).
+
+A free Apple ID's install stops opening after **7 days**. Re-run Sideloadly to renew
+it; nothing in the app is lost. A free ID can hold 3 such apps at a time.
 
 ### Before submitting to the App Store
 

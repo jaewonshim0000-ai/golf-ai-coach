@@ -36,12 +36,16 @@ export function scoreSwing(report: MotionReport, ballSide?: "left" | "right", ru
   // Patchy tracking or a moved camera withholds only the checks it affects, inside
   // swingScoreChecks; every swing with at least one measured check gets a score.
   Object.assign(result, swingScoreChecks(report, ballSide, rubric));
-  const weight = result.components.reduce((sum, item) => sum + item.weight, 0);
-  // Weights come from the calibrated rubric.
+  // Weights come from the calibrated rubric. Missing evidence is never 100: a
+  // check this view should have but could not measure counts at its `missing` score.
+  const unmeasured = (report.view === "face_on" ? ["head", "height", "tempo"] as const : ["posture", "hip_depth", "tempo"] as const)
+    .filter((id) => !result.components.some((item) => item.id === id)).map((id) => rubric[id]);
+  const weight = [...result.components, ...unmeasured].reduce((sum, item) => sum + item.weight, 0);
+  const filler = unmeasured.reduce((sum, item) => sum + item.missing * item.weight, 0);
   if (result.components.length) {
-    result.total = Math.round(result.components.reduce((sum, item) => sum + item.score * item.weight, 0) / weight);
+    result.total = Math.round((result.components.reduce((sum, item) => sum + item.score * item.weight, 0) + filler) / weight);
     if (result.components.some((item) => item.scoreRange)) {
-      result.totalRange = [result.total, Math.round(result.components.reduce((sum, item) => sum + (item.scoreRange?.[1] ?? item.score) * item.weight, 0) / weight)];
+      result.totalRange = [result.total, Math.round((result.components.reduce((sum, item) => sum + (item.scoreRange?.[1] ?? item.score) * item.weight, 0) + filler) / weight)];
     }
   } else result.reason = `None of the swing checks could be measured in this video.${
     report.quality.cameraStable ? " Re-record with your whole body and hands visible." : " The camera moved, so body movement could not be measured; rest the phone on a stand."}`;
@@ -108,6 +112,7 @@ export function swingScoreChecks(report: MotionReport, ballSide?: "left" | "righ
         Math.max(0, (setup.range?.[1] ?? setup.value) - (impact.range?.[0] ?? impact.value))] : loss);
     } else result.missing.push("Posture needs the same visible shoulder and hip at setup and impact.");
     const hip = reading("hips_impact", "% body height", true);
+    ballSide ??= report.ballSide;
     if (hip && ballSide && report.quality.cameraStable) {
       const direction = ballSide === "right" ? 1 : -1;
       const toward = Math.max(0, hip.value * direction);
@@ -117,7 +122,8 @@ export function swingScoreChecks(report: MotionReport, ballSide?: "left" | "righ
           `The tracked hip moved ${Math.abs(hip.value)}% of visible body height ${toward > 0 ? "toward" : "away from"} the ball side at estimated impact. This is a projected hip landmark, not the rear edge of the pelvis.`,
         cue: "Rehearse five slow turns without a ball, maintaining space between your hips and the ball line. Confirm the movement visually before trying to change it at speed.",
         check: "Review the green address guide and the tracked hip at impact. Movement toward the ball is a review signal, not a confirmed early-extension diagnosis." }, range ?? toward);
-    } else result.missing.push(ballSide ? "Hip space needs the same hip visible at setup and impact." : "Select which side of your body the ball appears on, then analyze again to score hip space.");
+    } else result.missing.push(!report.quality.cameraStable ? "Hip space was not scored because the feet or camera moved; rest the phone on a stand." :
+      ballSide ? "Hip space needs the same hip visible at setup and impact." : "Hip space needs a clear side view of your setup posture to tell which side the ball is on.");
   }
   const topTime = report.readings.find((row) => row.phase === "top" && Number.isFinite(row.time))?.time;
   if (report.tempo && Number.isFinite(report.tempo.ratio) && report.tempo.ratio > 0 && topTime !== undefined) {

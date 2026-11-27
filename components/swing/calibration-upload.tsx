@@ -11,7 +11,7 @@ import { VIDEO_ACCEPT } from "@/lib/video-upload";
 import { cn } from "@/lib/utils";
 import { Button, Input, Select } from "@/components/ui/primitives";
 
-type Row = { id: string; file: File; score: string; note: string; handedness: "right" | "left"; status: string | null; saved: boolean };
+type Row = { id: string; file: File; score: string; note: string; handedness: "right" | "left"; view: "auto" | "face_on" | "down_the_line"; status: string | null; saved: boolean };
 
 /** Pick many clips, score each out of 10 (like 9.8), then read and save them one by one
  * with the same GolfPosePro analysis a swing upload gets. */
@@ -44,7 +44,7 @@ export function CalibrationUpload() {
       const saved = await saveCalibrationSwingAction({
         name: row.file.name, score: Number(row.score), note: row.note.trim() || undefined, handedness: row.handedness,
         t: packed.t, imageFrames: packed.imageFrames, aspect,
-        cameraAngle: (address && detectView([address], aspect)) ?? "face_on",
+        cameraAngle: row.view !== "auto" ? row.view : (address && detectView([address], aspect)) ?? "face_on",
         clip: [0, element.duration], golfPosePro: analysed.result,
       });
       update(row.id, { status: `${saved.message} Read at ${fps} fps.`, saved: saved.ok });
@@ -73,10 +73,10 @@ export function CalibrationUpload() {
     </div>
     <input ref={picker} aria-label="Choose swing clips" type="file" multiple accept={VIDEO_ACCEPT} hidden onChange={(event) => {
       const files = [...(event.target.files ?? [])];
-      setRows((all) => [...all, ...files.map((file): Row => ({ id: crypto.randomUUID(), file, score: "", note: "", handedness: "right", status: null, saved: false }))]);
+      setRows((all) => [...all, ...files.map((file): Row => ({ id: crypto.randomUUID(), file, score: "", note: "", handedness: "right", view: "auto", status: null, saved: false }))]);
       event.target.value = "";
     }} />
-    {rows.length ? <ul className="divide-y divide-border">{rows.map((row) => <li key={row.id} className="grid gap-2 py-3 sm:grid-cols-[minmax(0,1fr)_96px_140px_36px] sm:items-center">
+    {rows.length ? <ul className="divide-y divide-border">{rows.map((row) => <li key={row.id} className="grid gap-2 py-3 sm:grid-cols-[minmax(0,1fr)_96px_140px_140px_36px] sm:items-center">
       <p className="break-words text-[13px] font-medium">{row.file.name}</p>
       <Input type="number" inputMode="decimal" min={0} max={10} step={0.1} required placeholder="0–10" aria-label={`Your score for ${row.file.name}`}
         value={row.score} disabled={running || row.saved} onChange={(event) => update(row.id, { score: event.target.value })} />
@@ -84,11 +84,15 @@ export function CalibrationUpload() {
         onChange={(event) => update(row.id, { handedness: event.target.value as Row["handedness"] })}>
         <option value="right">Right-handed</option><option value="left">Left-handed</option>
       </Select>
+      <Select aria-label={`Camera view in ${row.file.name}`} value={row.view} disabled={running || row.saved}
+        onChange={(event) => update(row.id, { view: event.target.value as Row["view"] })}>
+        <option value="auto">Detect view</option><option value="face_on">Face on</option><option value="down_the_line">Down the line</option>
+      </Select>
       <Button type="button" variant="ghost" size="icon" disabled={running} aria-label={`Remove ${row.file.name}`}
         onClick={() => setRows((all) => all.filter((item) => item.id !== row.id))}><X className="h-4 w-4" /></Button>
-      <Input className="sm:col-span-4" maxLength={1000} placeholder="Why this score? (optional)" aria-label={`Why you gave ${row.file.name} this score`}
+      <Input className="sm:col-span-5" maxLength={1000} placeholder="Why this score? (optional)" aria-label={`Why you gave ${row.file.name} this score`}
         value={row.note} disabled={running || row.saved} onChange={(event) => update(row.id, { note: event.target.value })} />
-      {row.status ? <p role="status" className={cn("text-[12px] sm:col-span-4", row.saved ? "text-fg-muted" : "text-fg")}>{row.status}</p> : null}
+      {row.status ? <p role="status" className={cn("text-[12px] sm:col-span-5", row.saved ? "text-fg-muted" : "text-fg")}>{row.status}</p> : null}
     </li>)}</ul> : <p className="text-[13px] text-fg-muted">Choose one or more swing videos, each with one full swing and the whole body in view.</p>}
     {/* Visible while reading: browsers only report frames for a player on screen. */}
     <video ref={video} muted playsInline preload="auto" className={cn("w-full max-w-sm rounded-xl bg-black", !running && "hidden")} />

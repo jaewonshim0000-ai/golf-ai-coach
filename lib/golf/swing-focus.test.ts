@@ -1,3 +1,4 @@
+import "./test-rubric";
 import assert from "node:assert/strict";
 import { it } from "node:test";
 import type { MotionReading, MotionReport } from "./motion-analysis";

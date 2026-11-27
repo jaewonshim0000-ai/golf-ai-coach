@@ -31,7 +31,7 @@ console.log(`\nAverage difference: now ${points(now)}, fitted ${points(after)} o
 for (const id of Object.keys(fitted) as ScoreCheckId[]) {
   const [a, b] = [SCORE_RUBRIC[id], fitted[id]];
   if (JSON.stringify(a) !== JSON.stringify(b))
-    console.log(`  ${id}: weight ${a.weight} → ${b.weight}, full marks through ${a.free} → ${b.free}, zero at ${a.severe} → ${b.severe}`);
+    console.log(`  ${id}: weight ${a.weight} → ${b.weight}, full marks through ${a.free} → ${b.free}, zero at ${a.severe} → ${b.severe}, unmeasured counts as ${tenPoint(a.missing)} → ${tenPoint(b.missing)}`);
 }
 
 if (process.argv.includes("--write")) {
@@ -41,7 +41,7 @@ if (process.argv.includes("--write")) {
   } else {
     const file = new URL("../lib/golf/score-rubric.ts", import.meta.url);
     const body = (Object.entries(fitted) as [ScoreCheckId, ScoreRubric[ScoreCheckId]][])
-      .map(([id, { weight, free, severe }]) => `  "${id}": { "weight": ${weight}, "free": ${free}, "severe": ${severe} }`).join(",\n");
+      .map(([id, { weight, free, severe, missing }]) => `  "${id}": { "weight": ${weight}, "free": ${free}, "severe": ${severe}, "missing": ${missing} }`).join(",\n");
     writeFileSync(file, readFileSync(file, "utf8").replace(/export const SCORE_RUBRIC: ScoreRubric = \{[\s\S]*?\n\};/,
       `export const SCORE_RUBRIC: ScoreRubric = {\n${body}\n};`));
     console.log("\nWrote lib/golf/score-rubric.ts. Run npm test, then review the diff.");

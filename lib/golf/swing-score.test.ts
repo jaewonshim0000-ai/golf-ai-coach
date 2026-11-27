@@ -1,3 +1,4 @@
+import "./test-rubric";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { scoreSwing } from "./swing-score";
@@ -38,21 +39,21 @@ describe("visible swing coaching score", () => {
     const behind = report("down_the_line"); behind.quality.cameraStable = false;
     const score = scoreSwing(behind, "right");
     assert.deepEqual(score.components.map((item) => item.id), ["posture", "tempo"]); // hip space is a displacement
-    assert.equal(score.total, 100);
+    assert.equal(score.total, 90); // (100*35 + 100*30 + 70*35) / 100: unmeasured hip space counts at its missing score
     // Face on, head and height are displacements; rhythm alone still scores.
     const faceOn = report(); faceOn.quality.cameraStable = false;
     assert.deepEqual(scoreSwing(faceOn).components.map((item) => item.id), ["tempo"]);
-    assert.equal(scoreSwing(faceOn).total, 100);
+    assert.equal(scoreSwing(faceOn).total, 79); // (100*30 + 70*40 + 70*30) / 100
     assert.equal(scoreSwing(faceOn).reason, null);
   });
   it("uses observed height bounds, shows partial coverage, and never treats omissions as perfect", () => {
     const motion = report(); motion.tempo = null;
     motion.readings.find((row) => row.id === "head_impact")!.value = 40;
-    assert.equal(scoreSwing(motion).total, 43); // (0*40 + 100*30) / 70
+    assert.equal(scoreSwing(motion).total, 51); // (0*40 + 100*30 + 70*30 unmeasured rhythm) / 100
     assert.equal(scoreSwing(motion).missing.length, 1);
     motion.readings.find((row) => row.id === "lift_top")!.range = [0, 10];
-    assert.equal(scoreSwing(motion).total, 19);
-    assert.deepEqual(scoreSwing(motion).totalRange, [19, 43]);
+    assert.equal(scoreSwing(motion).total, 35);
+    assert.deepEqual(scoreSwing(motion).totalRange, [35, 51]);
     assert.deepEqual(scoreSwing(motion).components.find((item) => item.id === "height")?.scoreRange, [45, 100]);
     assert.equal(scoreSwing(motion).reviews[0]?.id, "height");
     assert.equal(scoreSwing(motion).priorities.some((item) => item.id === "height"), false);
@@ -63,8 +64,8 @@ describe("visible swing coaching score", () => {
     motion.tempo = null;
     motion.readings.find((row) => row.id === "lift_top")!.range = [1, 3];
     const score = scoreSwing(motion);
-    assert.equal(score.total, 100);
-    assert.deepEqual(score.totalRange, [100, 100]);
+    assert.equal(score.total, 91); // perfect head and height, unmeasured rhythm at 70
+    assert.deepEqual(score.totalRange, [91, 91]);
     assert.deepEqual(score.components.map((item) => item.id), ["head", "height"]);
     assert.equal(score.missing.length, 1);
     assert.match(score.missing[0]!, /hands are hidden/);
@@ -75,12 +76,12 @@ describe("visible swing coaching score", () => {
     const lift = motion.readings.find((row) => row.id === "lift_top")!;
     lift.range = [-8, 8];
     let score = scoreSwing(motion);
-    assert.deepEqual(score.totalRange, [85, 100]);
+    assert.deepEqual(score.totalRange, [80, 91]);
     assert.equal(score.reviews[0]?.id, "height");
     assert.equal(score.priorities.length, 0);
     lift.range = [-15, -12]; lift.value = -13;
     score = scoreSwing(motion);
-    assert.deepEqual(score.totalRange, [57, 69]);
+    assert.deepEqual(score.totalRange, [61, 69]);
     assert.equal(score.priorities[0]?.id, "height");
     assert.equal(score.reviews.length, 0);
     for (const range of [[NaN, 3], [8, 2], [-Infinity, 8]] as [number, number][]) {
@@ -93,7 +94,7 @@ describe("visible swing coaching score", () => {
     motion.readings = motion.readings.filter((row) => row.id !== "lift_top");
     motion.readings.find((row) => row.id === "head_impact")!.value = 40;
     const score = scoreSwing(motion);
-    assert.equal(score.total, 0);
+    assert.equal(score.total, 42); // one failed check, two unmeasured at 70: never a perfect or empty score
     assert.equal(score.priorities[0]?.id, "head");
     assert.equal(score.reason, null);
   });
@@ -108,7 +109,9 @@ describe("visible swing coaching score", () => {
     motion.readings.find((row) => row.id === "hips_impact")!.value = -12;
     assert.equal(scoreSwing(motion, "left").total, right.total);
     assert.equal(scoreSwing(motion).components.some((item) => item.id === "hip_depth"), false); // no guessing the ball side
-    assert.equal(scoreSwing(motion).total, 46); // (0*35 + 100*30) / 65: posture and rhythm still score
+    assert.equal(scoreSwing(motion).total, 55); // (0*35 + 100*30 + 70*35) / 100: posture and rhythm still score
+    motion.ballSide = "left"; // read from the setup posture
+    assert.equal(scoreSwing(motion).total, scoreSwing(motion, "left").total);
   });
   it("uses view-specific checks and continuous bounded deductions", () => {
     assert.equal(scoreSwing(report()).total, 100);

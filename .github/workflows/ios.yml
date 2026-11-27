@@ -1,0 +1,27 @@
+name: iOS shell
+
+# Proves the Capacitor iOS project in mobile/ios still compiles. Unsigned
+# simulator build only: a signed .ipa needs an Apple Developer account (see
+# mobile/README.md). Runs when mobile/ios changes, or by hand from Actions.
+on:
+  pull_request:
+    paths: ["mobile/ios/**", ".github/workflows/ios.yml"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: mobile/ios
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npx cap sync ios
+      - run: >
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug
+          -sdk iphonesimulator -destination "generic/platform=iOS Simulator"
+          CODE_SIGNING_ALLOWED=NO build

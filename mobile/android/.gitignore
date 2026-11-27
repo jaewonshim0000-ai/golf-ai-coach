@@ -1,0 +1,10 @@
+# Build output and signing material never go in git (the key lives outside the repo).
+.gradle/
+build/
+app/build/
+local.properties
+*.apk
+*.aab
+*.idsig
+*.keystore
+*.jks

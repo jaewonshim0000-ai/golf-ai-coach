@@ -38,6 +38,9 @@ export const metadata: Metadata = {
   applicationName: "Golf AI Coach",
   appleWebApp: { capable: true, title: "Golf Coach", statusBarStyle: "black-translucent" },
   formatDetection: { telephone: false },
+  // Next only emits mobile-web-app-capable; older iOS needs Apple's name for
+  // Add to Home Screen to open full screen with the status bar style above.
+  other: { "apple-mobile-web-app-capable": "yes" },
 };
 
 export const viewport: Viewport = {

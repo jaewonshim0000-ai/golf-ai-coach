@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.golfaicoach.app",
+      "sha256_cert_fingerprints": [
+        "99:E4:56:DD:0A:84:0C:B5:3C:7E:2E:58:DA:FF:B6:A6:D8:11:DF:73:14:F4:43:DD:F0:2C:F0:76:68:83:24:A8"
+      ]
+    }
+  }
+]

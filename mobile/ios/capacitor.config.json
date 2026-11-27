@@ -1,0 +1,10 @@
+{
+  "appId": "com.golfaicoach.app",
+  "appName": "Golf AI Coach",
+  "webDir": "www",
+  "backgroundColor": "#ece9e0",
+  "server": {
+    "url": "https://golf-ai-coach-alpha.vercel.app/practice",
+    "allowNavigation": ["golf-ai-coach-alpha.vercel.app", "*.stripe.com"]
+  }
+}

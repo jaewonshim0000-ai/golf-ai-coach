@@ -1,0 +1,52 @@
+{
+  "packageId": "com.golfaicoach.app",
+  "host": "golf-ai-coach-alpha.vercel.app",
+  "name": "Golf AI Coach",
+  "launcherName": "Golf Coach",
+  "display": "standalone",
+  "themeColor": "#ECE9E0",
+  "themeColorDark": "#12140F",
+  "navigationColor": "#ECE9E0",
+  "navigationColorDark": "#12140F",
+  "navigationDividerColor": "#ECE9E0",
+  "navigationDividerColorDark": "#12140F",
+  "backgroundColor": "#ECE9E0",
+  "enableNotifications": false,
+  "startUrl": "/practice",
+  "iconUrl": "https://golf-ai-coach-alpha.vercel.app/icon-512.png",
+  "maskableIconUrl": "https://golf-ai-coach-alpha.vercel.app/icon-maskable-512.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "./android.keystore",
+    "alias": "golf-ai-coach"
+  },
+  "appVersionName": "1.0.0",
+  "appVersionCode": 1,
+  "shortcuts": [],
+  "generatorApp": "unknown",
+  "webManifestUrl": "https://golf-ai-coach-alpha.vercel.app/manifest.webmanifest",
+  "fallbackType": "customtabs",
+  "features": {},
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://golf-ai-coach-alpha.vercel.app/",
+  "minSdkVersion": 24,
+  "orientation": "default",
+  "fingerprints": [
+    {
+      "name": "Golf AI Coach signing key",
+      "value": "99:E4:56:DD:0A:84:0C:B5:3C:7E:2E:58:DA:FF:B6:A6:D8:11:DF:73:14:F4:43:DD:F0:2C:F0:76:68:83:24:A8"
+    }
+  ],
+  "additionalTrustedOrigins": [],
+  "retainedBundles": [],
+  "protocolHandlers": [],
+  "fileHandlers": [],
+  "launchHandlerClientMode": "",
+  "displayOverride": [],
+  "appVersion": "1.0.0"
+}

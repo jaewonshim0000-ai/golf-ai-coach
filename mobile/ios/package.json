@@ -1,0 +1,10 @@
+{
+  "name": "golf-ai-coach-ios",
+  "private": true,
+  "description": "Capacitor shell that opens https://golf-ai-coach-alpha.vercel.app in an iOS app. Build on a Mac; see mobile/README.md.",
+  "dependencies": {
+    "@capacitor/cli": "^8.6.3",
+    "@capacitor/core": "^8.6.3",
+    "@capacitor/ios": "^8.6.3"
+  }
+}

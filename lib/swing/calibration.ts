@@ -7,8 +7,9 @@ import { scoreSwing } from "../golf/swing-score";
 import { SCORE_RUBRIC, type CheckRubric, type ScoreCheckId, type ScoreRubric } from "../golf/score-rubric";
 import { reviewSwing } from "./review";
 
-/** Coach-scored clips, one JSON file each, written by the local /swing/calibrate page. */
-export const CALIBRATION_DIR = path.join("calibration", "swings");
+/** Coach-scored clips, one JSON file each, written by the local /swing/calibrate page.
+ * Set CALIBRATION_DIR to keep them in one place when the dev server runs from a worktree. */
+export const CALIBRATION_DIR = process.env.CALIBRATION_DIR || path.join("calibration", "swings");
 
 export const calibrationLabelSchema = z.object({
   name: z.string().trim().min(1).max(160),

@@ -8,10 +8,8 @@ import { createSwingDetector } from "@/lib/pose-worker-client";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/primitives";
 
-/** Seconds to walk from the phone to address. */
-const COUNTDOWN = 5;
-/** Setup, swing and finish fit easily; it also keeps the file far under the upload limit. */
-const MAX_SECONDS = 12;
+/** Walk from the phone to the ball, set up, swing and finish; still far under the upload limit. */
+const MAX_SECONDS = 17;
 /** Below this the browser's video is too coarse to call slow motion. */
 const SLOW_MOTION_FPS = 60;
 /** MP4 plays everywhere; WebM is Chrome's fallback. */
@@ -75,7 +73,7 @@ function GolferOutline({ view, ok }: { view: Exclude<MotionView, "other">; ok: b
   </svg>;
 }
 
-type Stage = "starting" | "ready" | "countdown" | "recording" | "review" | "error";
+type Stage = "starting" | "ready" | "recording" | "review" | "error";
 
 /**
  * Records a swing at the highest frame rate the phone's browser offers, and
@@ -194,35 +192,29 @@ export function SwingCamera({ open, onUse, onClose, onUpload }: {
     const media = stream.current;
     if (!media) return;
     // Created on the tap, because phones only allow sound that starts from a gesture.
-    try { sound.current ??= new AudioContext(); void sound.current.resume(); } catch { /* Silent countdown. */ }
-    setStage("countdown");
-    for (let left = COUNTDOWN; left > 0; left--) {
-      later((COUNTDOWN - left) * 1000, () => { setCount(left); beep(660); });
-    }
-    later(COUNTDOWN * 1000, () => {
-      const mimeType = RECORDER_TYPES.find((type) => MediaRecorder.isTypeSupported(type));
-      const chunks: Blob[] = [];
-      let next: MediaRecorder;
-      try { next = new MediaRecorder(media, { ...(mimeType ? { mimeType } : {}), videoBitsPerSecond: 8_000_000 }); }
-      catch { setError("This browser cannot record video. Upload a video instead."); setStage("error"); return; }
-      next.ondataavailable = (event) => { if (event.data.size) chunks.push(event.data); };
-      next.onstop = () => {
-        const type = (next.mimeType || mimeType || "video/webm").split(";")[0]!;
-        const blob = new Blob(chunks, { type });
-        if (!blob.size) { setError("Nothing was recorded. Try again."); setStage("ready"); return; }
-        const file = new File([blob], `swing-${new Date().toISOString().replace(/[:.]/g, "-")}.${type === "video/mp4" ? "mp4" : "webm"}`, { type });
-        setTake({ file, url: URL.createObjectURL(file) });
-        setStage("review");
-        beep(440, 0.25);
-      };
-      recorder.current = next;
-      next.start(1000);
-      setCount(0);
-      setStage("recording");
-      beep(990, 0.3);
-      for (let second = 1; second <= MAX_SECONDS; second++) later(second * 1000, () => setCount(second));
-      later(MAX_SECONDS * 1000, stop);
-    });
+    try { sound.current ??= new AudioContext(); void sound.current.resume(); } catch { /* Record without beeps. */ }
+    const mimeType = RECORDER_TYPES.find((type) => MediaRecorder.isTypeSupported(type));
+    const chunks: Blob[] = [];
+    let next: MediaRecorder;
+    try { next = new MediaRecorder(media, { ...(mimeType ? { mimeType } : {}), videoBitsPerSecond: 8_000_000 }); }
+    catch { setError("This browser cannot record video. Upload a video instead."); setStage("error"); return; }
+    next.ondataavailable = (event) => { if (event.data.size) chunks.push(event.data); };
+    next.onstop = () => {
+      const type = (next.mimeType || mimeType || "video/webm").split(";")[0]!;
+      const blob = new Blob(chunks, { type });
+      if (!blob.size) { setError("Nothing was recorded. Try again."); setStage("ready"); return; }
+      const file = new File([blob], `swing-${new Date().toISOString().replace(/[:.]/g, "-")}.${type === "video/mp4" ? "mp4" : "webm"}`, { type });
+      setTake({ file, url: URL.createObjectURL(file) });
+      setStage("review");
+      beep(440, 0.25);
+    };
+    recorder.current = next;
+    next.start(1000);
+    setCount(0);
+    setStage("recording");
+    beep(990, 0.3);
+    for (let second = 1; second <= MAX_SECONDS; second++) later(second * 1000, () => setCount(second));
+    later(MAX_SECONDS * 1000, stop);
   }
 
   function stop() {
@@ -249,7 +241,7 @@ export function SwingCamera({ open, onUse, onClose, onUpload }: {
           </button>
           <div role="radiogroup" aria-label="Camera angle" className="flex rounded-full bg-white/[0.12] p-1">
             {(["face_on", "down_the_line"] as const).map((option) => (
-              <button key={option} type="button" role="radio" aria-checked={view === option} disabled={stage === "recording" || stage === "countdown"}
+              <button key={option} type="button" role="radio" aria-checked={view === option} disabled={stage === "recording"}
                 onClick={() => setView(option)}
                 className={cn("dsp h-9 rounded-full px-3.5 text-[10px]", view === option ? "bg-accent text-white" : "text-white/85")}>
                 {option === "face_on" ? "Face on" : "Down the line"}
@@ -281,7 +273,6 @@ export function SwingCamera({ open, onUse, onClose, onUpload }: {
               <p role="status" className={cn("max-w-[260px] rounded-xl px-2.5 py-1.5 text-[12px] leading-snug", framing.ok ? "bg-accent text-white" : "bg-black/60")}>{framing.message}</p>
             ) : null}
           </div>
-          {stage === "countdown" ? <p role="status" className="font-display absolute inset-0 flex items-center justify-center text-[110px] drop-shadow">{count}</p> : null}
           {stage === "starting" ? <p role="status" className="absolute inset-0 flex items-center justify-center gap-2 text-[13px]"><Loader2 className="h-4 w-4 animate-spin" /> Starting the camera</p> : null}
           {stage === "error" ? <p role="alert" className="absolute inset-x-5 top-1/3 rounded-2xl bg-black/60 p-4 text-center text-[13px] leading-relaxed">{error}</p> : null}
         </div>
@@ -296,7 +287,7 @@ export function SwingCamera({ open, onUse, onClose, onUpload }: {
           ) : stage === "review" ? (
             <p className="text-center text-[12px] text-white/75">Playing at quarter speed. Check the whole swing is in the clip.</p>
           ) : null}
-          {stage === "ready" ? <p className="text-center text-[12px] leading-relaxed text-white/70">{TIPS[view]} Tap record, walk to the ball and swing after the beeps. It stops after {MAX_SECONDS} seconds.</p> : null}
+          {stage === "ready" ? <p className="text-center text-[12px] leading-relaxed text-white/70">{TIPS[view]} Recording starts as soon as you tap: walk to the ball and swing. It stops after {MAX_SECONDS} seconds.</p> : null}
 
           {stage === "review" && take ? (
             <div className="flex gap-2.5">
@@ -306,7 +297,7 @@ export function SwingCamera({ open, onUse, onClose, onUpload }: {
           ) : (
             <div className="grid grid-cols-[1fr_auto_1fr] items-center">
               <div>
-                {onUpload && stage !== "recording" && stage !== "countdown" ? (
+                {onUpload && stage !== "recording" ? (
                   <button type="button" aria-label="Upload a video instead" onClick={() => { dialog.current?.close(); onUpload(); }}
                     className="press flex h-[52px] w-[52px] items-center justify-center rounded-2xl bg-white/[0.12]">
                     <Upload className="h-5 w-5" />
@@ -318,11 +309,6 @@ export function SwingCamera({ open, onUse, onClose, onUpload }: {
                   <button type="button" aria-label="Stop recording" onClick={stop}
                     className="press flex h-[84px] w-[84px] items-center justify-center rounded-full border-4 border-white">
                     <span className="h-8 w-8 rounded-lg bg-[#d9442b]" />
-                  </button>
-                ) : stage === "countdown" ? (
-                  <button type="button" aria-label="Cancel" onClick={() => { clearTimers(); setStage("ready"); }}
-                    className="press flex h-[84px] w-[84px] items-center justify-center rounded-full border-4 border-white text-[12px] font-bold">
-                    Cancel
                   </button>
                 ) : (
                   <button type="button" aria-label="Start recording" disabled={stage !== "ready"} onClick={record}

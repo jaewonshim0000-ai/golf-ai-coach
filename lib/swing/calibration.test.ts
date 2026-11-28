@@ -20,7 +20,7 @@ function faceOn(head: number, lift: number, ratio: number): MotionReport {
 
 describe("score calibration", () => {
   it("fits the rubric toward a coach who is stricter about head movement than the app", () => {
-    const coach = { ...SCORE_RUBRIC, head: { weight: 60, free: 5, severe: 25 } };
+    const coach = { ...SCORE_RUBRIC, head: { ...SCORE_RUBRIC.head, weight: 60, free: 5, severe: 25 } };
     const samples: CalibrationSample[] = Array.from({ length: 40 }, (_, n) => {
       const report = faceOn((n * 7) % 35, (n * 3) % 12, 2 + (n % 5) * 0.6);
       const sample: CalibrationSample = { file: `${n}.json`, name: `clip ${n}`, coach: 0, report, reason: null };

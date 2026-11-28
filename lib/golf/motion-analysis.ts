@@ -363,6 +363,8 @@ export type MotionReport = {
   warnings: string[];
   tempo: { backswing: number; downswing: number; ratio: number; uncertainty: number; ratioRange?: [number, number] } | null;
   summary: string;
+  /** Down the line: the picture side the ball is on, from the forward bend at address. */
+  ballSide?: "left" | "right";
 };
 
 export function motionCriteria(view: MotionView) {
@@ -457,6 +459,10 @@ export function analyseMotion(
   const stance = leftFoot && rightFoot ? Math.abs(leftFoot.x - rightFoot.x) : 0;
   const direction = leftFoot && rightFoot ? Math.sign((handedness === "right" ? leftFoot.x - rightFoot.x : rightFoot.x - leftFoot.x)) : 0;
   const referenceHip = hips(address, aspect), referenceHead = head(address);
+  // Down the line, a golfer at address bends toward the ball, so the shoulders sit on its side of the hips.
+  const addressShoulders = shoulders(address, aspect);
+  if (view === "down_the_line" && referenceHip && addressShoulders && Math.abs(addressShoulders.x - referenceHip.x) > body * 0.05)
+    report.ballSide = addressShoulders.x > referenceHip.x ? "right" : "left";
   let unstablePosition = false;
   function record(id: string, label: string, phase: keyof SwingPhases, value: number | null, unit: MotionReading["unit"], note: string) {
     if (value !== null && Number.isFinite(value)) report.readings.push({ id, label, phase, value: rounded(value), unit, note, time: frames[phases![phase]]!.t });

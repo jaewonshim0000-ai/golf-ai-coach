@@ -1,3 +1,4 @@
+import "./test-rubric";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { analyseMotion, describeMotionReading, findAutomaticTiming, findMotionPhases, frameAtTime, motionCriteria, overlayFrameAtTime, trustworthyFrames, visibleHands } from "./motion-analysis";
@@ -88,6 +89,18 @@ describe("projected swing movement", () => {
     assert.deepEqual(frames, before);
   });
 
+  it("reads the ball side down the line from the forward bend at setup", () => {
+    const bent = (lean: number) => swing().map((frame) => {
+      // Each shoulder sits `lean` to the side of the hip below it.
+      const points = frame.imageLandmarks!.map((point, joint, all) => joint === 11 || joint === 12 ? { ...point, x: all[joint + 12]!.x + lean } : point);
+      return { ...frame, landmarks: points, imageLandmarks: points };
+    });
+    assert.equal(analyseMotion(bent(0.1), 1, "down_the_line", "right", phases).ballSide, "right");
+    assert.equal(analyseMotion(bent(-0.1), 1, "down_the_line", "left", phases).ballSide, "left");
+    assert.equal(analyseMotion(bent(0), 1, "down_the_line", "right", phases).ballSide, undefined); // upright: no guess
+    assert.equal(analyseMotion(bent(0.1), 1, "face_on", "right", phases).ballSide, undefined);
+  });
+
   it("does not silently switch body sides or head landmarks across profile occlusions", () => {
     const frames = swing();
     for (const frame of frames) for (const joint of [12, 24, 28]) frame.imageLandmarks![joint]!.visibility = 0.1;
@@ -113,8 +126,8 @@ describe("projected swing movement", () => {
     assert.ok(!report.readings.some((row) => row.id === "arm_top"));
     assert.equal(report.tempo, null);
     const score = scoreSwing(report);
-    assert.equal(score.total, 100);
-    assert.deepEqual(score.totalRange, [100, 100]);
+    assert.equal(score.total, 91); // unmeasured rhythm counts at 70
+    assert.deepEqual(score.totalRange, [91, 91]);
     assert.deepEqual(score.components.map((component) => component.id), ["head", "height"]);
     assert.equal(score.missing.length, 1);
     // Existing saved joint samples receive the fix on reload, without a new read.

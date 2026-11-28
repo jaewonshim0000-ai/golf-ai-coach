@@ -141,9 +141,13 @@ export default async function SwingLibraryPage({ searchParams }: { searchParams:
         <SwingLibrary swings={swings} latest={latest} trend={<ScoreTrend view={labelize(newest!.camera_angle)} points={trend} />} />
       )}
 
-      <ButtonLink href="/swing/references" variant="secondary" className="self-start">
-        Reference library
-      </ButtonLink>
+      <div className="flex flex-wrap gap-2">
+        <ButtonLink href="/swing/references" variant="secondary">
+          Reference library
+        </ButtonLink>
+        {/* The calibration page writes into this project, so it exists only under npm run dev. */}
+        {process.env.NODE_ENV === "development" ? <ButtonLink href="/swing/calibrate" variant="secondary">Score calibration</ButtonLink> : null}
+      </div>
     </div>
   );
 }

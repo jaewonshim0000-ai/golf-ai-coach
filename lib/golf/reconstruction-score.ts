@@ -70,7 +70,7 @@ export function scoreReconstruction(model: PoseModel, report: MotionReport): Swi
   }
   if (!result.components.some((component) => component.id === "head" || component.id === "hip_depth")) {
     const missingBodyCheck = observed.missing.find((message) =>
-      message.startsWith(report.view === "face_on" ? "Head control" : "Hip space") || message.startsWith("Select which side"));
+      message.startsWith(report.view === "face_on" ? "Head control" : "Hip space"));
     result.missing.push(report.quality.cameraStable ? missingBodyCheck ?? "Head or hip movement could not be scored clearly from this view." :
       "Body displacement was excluded because the feet, camera or image scale moved.");
   }

@@ -7,8 +7,9 @@ import { scoreSwing } from "../golf/swing-score";
 import { SCORE_RUBRIC, type CheckRubric, type ScoreCheckId, type ScoreRubric } from "../golf/score-rubric";
 import { reviewSwing } from "./review";
 
-/** Coach-scored clips, one JSON file each, written by the local /swing/calibrate page. */
-export const CALIBRATION_DIR = path.join("calibration", "swings");
+/** Coach-scored clips, one JSON file each, written by the local /swing/calibrate page.
+ * Set CALIBRATION_DIR to keep them in one place when the dev server runs from a worktree. */
+export const CALIBRATION_DIR = process.env.CALIBRATION_DIR || path.join("calibration", "swings");
 
 export const calibrationLabelSchema = z.object({
   name: z.string().trim().min(1).max(160),
@@ -84,7 +85,7 @@ export function meanError(samples: CalibrationSample[], rubric: ScoreRubric = SC
   return errors.length ? mean(errors) : null;
 }
 
-const valid = ({ weight, free, severe }: CheckRubric) => weight >= 1 && weight <= 100 && free >= 0 && severe > free;
+const valid = ({ weight, free, severe, missing }: CheckRubric) => weight >= 1 && weight <= 100 && free >= 0 && severe > free && missing >= 0 && missing <= 100;
 
 /**
  * Each check's weight and thresholds, nudged one at a time while the mean error
@@ -95,10 +96,11 @@ export function fitRubric(samples: CalibrationSample[], start: ScoreRubric = SCO
   let best = start, bestError = meanError(samples, best) ?? Infinity;
   for (let round = 0; round < 40; round++) {
     let improved = false;
-    for (const id of Object.keys(best) as ScoreCheckId[]) for (const key of ["weight", "free", "severe"] as const) {
-      const value = best[id][key], step = key === "weight" ? 5 : best[id].severe / 10;
+    for (const id of Object.keys(best) as ScoreCheckId[]) for (const key of ["weight", "free", "severe", "missing"] as const) {
+      const whole = key === "weight" || key === "missing";
+      const value = best[id][key], step = whole ? 5 : best[id].severe / 10;
       for (const next of [value * 0.5, value * 0.8, value * 1.25, value * 2, value - 2 * step, value - step, value + step, value + 2 * step]) {
-        const candidate = { ...best, [id]: { ...best[id], [key]: key === "weight" ? Math.round(next) : Math.round(next * 10) / 10 } };
+        const candidate = { ...best, [id]: { ...best[id], [key]: whole ? Math.round(next) : Math.round(next * 10) / 10 } };
         if (!valid(candidate[id])) continue;
         const error = meanError(samples, candidate) ?? Infinity;
         if (error < bestError - 1e-9) { best = candidate; bestError = error; improved = true; }

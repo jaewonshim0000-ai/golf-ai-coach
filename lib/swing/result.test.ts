@@ -1,3 +1,4 @@
+import "../golf/test-rubric";
 import assert from "node:assert/strict";
 import { it } from "node:test";
 import { faceOnSwing } from "../golf/__fixtures__/face-on";
